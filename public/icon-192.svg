@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+# This script generates placeholder icons - not needed manually, icons can be added later
+print("Icons should be placed in /public as icon-192.png and icon-512.png")
