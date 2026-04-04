@@ -20,7 +20,7 @@ const SEED_LECTURES = [
   { id:"l2", date:TODAY, title:"Quadratic Equations – Full Walkthrough", subject:"Mathematics", type:"notes", content:"# Quadratic Equations\n\n## Standard Form\n**ax squared + bx + c = 0** where a is not equal to 0\n\n## Method 1: Factorisation\nFind two numbers that multiply to c and add to b.\n\n**Example:** x squared minus 5x + 6 = 0\n- Numbers: minus 2 and minus 3\n- (x minus 2)(x minus 3) = 0\n- **x = 2 or x = 3**\n\n## Method 2: Quadratic Formula\n**x = (minus b plus or minus root of (b squared minus 4ac)) divided by 2a**\n\n**Example:** 2x squared + 3x minus 2 = 0\na=2, b=3, c=minus 2\nD = 9 + 16 = 25\nx = (minus 3 + 5) divided by 4 = **0.5** or x = (minus 3 minus 5) divided by 4 = **minus 2**\n\n## Discriminant (D = b squared minus 4ac)\n- D greater than 0: Two distinct real roots\n- D equals 0: One repeated root\n- D less than 0: No real roots\n\n## Exam Tips\n- Rearrange to standard form first\n- Check discriminant before solving\n- Verify by substituting back", postedBy:"coach1", class:"Class 10" },
 ];
 const SEED_ANNOUNCEMENTS = [
-  { id:"n1", date:TODAY, title:"Welcome to Conceptual Learning!", message:"Hello everyone! Your complete learning portal is live. Check daily assignments, study lectures, submit homework for AI feedback, and discuss doubts in our community forum. Let us build strong concepts together!", pinned:true, postedBy:"coach1" },
+  { id:"n1", date:TODAY, title:"Welcome to Conceptual Learning!", message:"Hello everyone! Your complete learning portal is live. Check daily assignments, study lectures, submit homework for detailed feedback, and discuss doubts in our community forum. Let us build strong concepts together!", pinned:true, postedBy:"coach1" },
 ];
 const CLASSES = ["Class 6","Class 7","Class 8","Class 9","Class 10","Class 11 (Science)","Class 12 (Science)","Dropper / Repeater","Other"];
 const SUBJECTS = ["Mathematics","Physics","Chemistry","Biology","All Subjects"];
@@ -66,26 +66,55 @@ async function claudeGenerateLecture(title, subject, cls) {
 
 function Logo({ size = 36 }) {
   const s = size;
+  const uid = "u" + s;
   return (
-    <svg width={s} height={s} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width={s} height={s} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="lg1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#1A56DB"/>
-          <stop offset="100%" stopColor="#7C3AED"/>
+        <linearGradient id={"bg"+uid} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#1340B0"/>
+          <stop offset="100%" stopColor="#6D28D9"/>
+        </linearGradient>
+        <linearGradient id={"yl"+uid} x1="24" y1="6" x2="24" y2="22" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FEF08A"/>
+          <stop offset="100%" stopColor="#F59E0B"/>
+        </linearGradient>
+        <linearGradient id={"sh"+uid} x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.18)"/>
+          <stop offset="100%" stopColor="rgba(255,255,255,0)"/>
         </linearGradient>
       </defs>
-      <rect width="40" height="40" rx="11" fill="url(#lg1)"/>
-      <path d="M8 28 L8 16 Q8 14 10 13 L20 10 L30 13 Q32 14 32 16 L32 28 Q28 26 20 26 Q12 26 8 28Z" fill="white" opacity="0.12"/>
-      <path d="M20 11 L10 14.5 L10 26.5 Q15 25 20 25 Q25 25 30 26.5 L30 14.5 Z" fill="white" opacity="0.95"/>
-      <line x1="20" y1="11" x2="20" y2="25" stroke="#c7d2fe" strokeWidth="1"/>
-      <line x1="12" y1="17" x2="19" y2="16" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <line x1="12" y1="19.5" x2="19" y2="18.5" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <line x1="12" y1="22" x2="19" y2="21" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <line x1="21" y1="16" x2="28" y2="17" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <line x1="21" y1="18.5" x2="28" y2="19.5" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <line x1="21" y1="21" x2="28" y2="22" stroke="#93c5fd" strokeWidth="0.9" strokeLinecap="round"/>
-      <circle cx="20" cy="32" r="1.5" fill="white" opacity="0.9"/>
-      <ellipse cx="20" cy="32" rx="5.5" ry="2.2" stroke="white" strokeWidth="1" fill="none" opacity="0.7"/>
+      {/* Deep blue-violet rounded square background */}
+      <rect width="48" height="48" rx="13" fill={"url(#bg"+uid+")"}/>
+      {/* Subtle top sheen */}
+      <rect x="0" y="0" width="48" height="24" rx="13" fill={"url(#sh"+uid+")"} opacity="0.6"/>
+      {/* === GRADUATION CAP === */}
+      {/* Cap brim - wide flat board */}
+      <rect x="9" y="19" width="30" height="4" rx="2" fill="white" opacity="0.96"/>
+      {/* Diamond on top of brim */}
+      <rect x="21" y="12" width="6" height="6" rx="1.2" fill="white" opacity="0.96" transform="rotate(45 24 15)"/>
+      {/* Cap crown / dome */}
+      <path d="M16 23 L16 30 Q16 32 18.5 32.5 L24 34 L29.5 32.5 Q32 32 32 30 L32 23" fill="white" opacity="0.93"/>
+      {/* Tassel cord */}
+      <path d="M37 21 Q38.5 21 38.5 24 L38.5 31" stroke="white" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.8"/>
+      {/* Tassel end */}
+      <ellipse cx="38.5" cy="33" rx="2.2" ry="1.5" fill={"url(#yl"+uid+")"} opacity="0.95"/>
+      <line x1="37" y1="33" x2="36" y2="37" stroke={"url(#yl"+uid+")"} strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="38.5" y1="34.5" x2="38" y2="38" stroke={"url(#yl"+uid+")"} strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="40" y1="33" x2="41" y2="37" stroke={"url(#yl"+uid+")"} strokeWidth="1.2" strokeLinecap="round"/>
+      {/* === OPEN BOOK at bottom === */}
+      <path d="M10 37 Q10 35 12 34.5 L24 36.5 L36 34.5 Q38 35 38 37 L38 41 Q36 40 24 40 Q12 40 10 41 Z" fill="white" opacity="0.15"/>
+      <path d="M11 37 L11 40.5 Q17.5 39 24 39 L24 36 Q17.5 35 11 37Z" fill="white" opacity="0.72"/>
+      <path d="M37 37 L37 40.5 Q30.5 39 24 39 L24 36 Q30.5 35 37 37Z" fill="white" opacity="0.72"/>
+      <line x1="24" y1="36" x2="24" y2="39" stroke="#818cf8" strokeWidth="0.8" opacity="0.5"/>
+      {/* Tiny lines as text on book pages */}
+      <line x1="13.5" y1="37.5" x2="21" y2="37" stroke="rgba(99,102,241,0.4)" strokeWidth="0.7" strokeLinecap="round"/>
+      <line x1="13.5" y1="38.8" x2="20" y2="38.3" stroke="rgba(99,102,241,0.3)" strokeWidth="0.7" strokeLinecap="round"/>
+      <line x1="27" y1="37" x2="34.5" y2="37.5" stroke="rgba(99,102,241,0.4)" strokeWidth="0.7" strokeLinecap="round"/>
+      <line x1="28" y1="38.3" x2="34.5" y2="38.8" stroke="rgba(99,102,241,0.3)" strokeWidth="0.7" strokeLinecap="round"/>
+      {/* Gold star sparkle top-left */}
+      <circle cx="10" cy="10" r="1.4" fill={"url(#yl"+uid+")"} opacity="0.9"/>
+      <circle cx="7" cy="14" r="0.7" fill="white" opacity="0.5"/>
+      <circle cx="14" cy="7" r="0.7" fill="white" opacity="0.5"/>
     </svg>
   );
 }
@@ -188,7 +217,7 @@ function AuthPage({ appData, save, setUser, toast$ }) {
           <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:40,fontWeight:700,marginTop:22,lineHeight:1.15}}>Conceptual<br/>Learning</h1>
           <p style={{fontSize:16,opacity:0.85,marginTop:12,lineHeight:1.6}}>Your complete Math and Science coaching hub</p>
           <div style={{marginTop:40,display:"flex",flexDirection:"column",gap:14,textAlign:"left"}}>
-            {["Daily Assignments with AI Feedback","Video and Notes Lectures","Community Doubt Forum","Class-wise Student Management"].map((feat,i)=>(
+            {["Daily Assignments with Feedback","Video and Notes Lectures","Community Doubt Forum","Class-wise Student Management"].map((feat,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:12,fontSize:14,opacity:0.9}}>
                 <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11}}>✓</div>
                 <span>{feat}</span>
@@ -226,7 +255,7 @@ function AuthPage({ appData, save, setUser, toast$ }) {
               {tab==="login"?"Sign In →":"Request Access →"}
             </button>
           </div>
-          <p style={{textAlign:"center",color:T.textFaint,fontSize:11,marginTop:18}}>Coach login: coach@conceptual.com / coach123</p>
+
         </div>
       </div>
     </div>
@@ -369,7 +398,7 @@ function LecturesPage({ appData, user }) {
               <div style={{display:"flex",gap:8,marginBottom:6,flexWrap:"wrap",alignItems:"center"}}>
                 <Tg label={l.subject} color={sc(l.subject)}/>
                 <Tg label={l.type==="video"?"Video":"Notes"} color={l.type==="video"?T.warning:T.success}/>
-                {l.generatedByAI&&<Tg label="AI Generated" color={T.accent}/>}
+                {l.generatedByAI&&<Tg label="Auto-Prepared" color={T.accent}/>}
                 <span style={{fontSize:11,color:T.textSub}}>{l.date}</span>
               </div>
               <h3 style={{color:T.text,fontSize:15,fontWeight:600}}>{l.title}</h3>
@@ -426,13 +455,13 @@ function SubmitHW({ appData, save, user, toast$ }) {
     const reader=new FileReader();
     reader.onload=async e=>{
       const base64=e.target.result.split(",")[1];
-      toast$("Claude is reviewing your homework...","warn");
+      toast$("Your homework is being reviewed...","warn");
       try {
         const feedback=await claudeGradeHomework(base64,file.type,assignment.title,assignment.subject);
         const grade=feedback.match(/GRADE:\s*([A-F][+-]?)\s*[-]\s*(\d+)/i);
         const sub={id:"sub"+Date.now(),userId:user.id,userName:user.name,assignmentId:selA,assignmentTitle:assignment.title,subject:assignment.subject,fileName:file.name,fileType:file.type,notes,submittedAt:new Date().toISOString(),feedback,grade:grade?grade[1]+" ("+grade[2]+"/100)":null};
         await save("submissions",[...appData.submissions,sub]);
-        toast$("Homework submitted and graded by AI!");
+        toast$("Homework submitted! Feedback ready.");
         setFile(null);setPreview(null);setNotes("");setSelA("");
       } catch(err) { toast$("Error grading. Please try again.","err"); }
       setBusy(false);
@@ -469,7 +498,7 @@ function SubmitHW({ appData, save, user, toast$ }) {
               <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Any comments about your submission..." rows={3} style={{...IS,resize:"vertical"}}/>
             </FF>
             <button className="hb" onClick={submit} disabled={busy} style={{...BS,display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:busy?0.7:1}}>
-              {busy?<>Grading with AI...</>:"Submit and Get AI Feedback"}
+              {busy?<>Reviewing...</>:"Submit and Get Feedback"}
             </button>
           </div>
         )}
@@ -482,14 +511,14 @@ function MyFeedback({ appData, user }) {
   const subs=[...appData.submissions].filter(s=>s.userId===user.id).sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
-      {subs.length===0&&<Empty icon="🎯" msg="No submissions yet. Submit homework to get AI feedback!"/>}
+      {subs.length===0&&<Empty icon="🎯" msg="No submissions yet. Submit homework to get feedback!"/>}
       {subs.map(s=>(
         <div key={s.id} style={{background:T.bgCard,border:"1px solid "+T.border,borderRadius:14,padding:"18px 22px",boxShadow:T.shadow}}>
           <div style={{display:"flex",gap:8,marginBottom:6,flexWrap:"wrap"}}><Tg label={s.subject} color={sc(s.subject)}/>{s.grade&&<Tg label={s.grade} color={T.accent}/>}</div>
           <h3 style={{color:T.text,fontSize:15,fontWeight:600}}>{s.assignmentTitle}</h3>
           <p style={{color:T.textSub,fontSize:11,marginTop:2,marginBottom:12}}>{new Date(s.submittedAt).toLocaleString()} - {s.fileName}</p>
           <div style={{background:T.primaryLight,border:"1px solid #bfdbfe",borderRadius:10,padding:"14px 16px"}}>
-            <div style={{color:T.primary,fontSize:11,fontWeight:700,marginBottom:8}}>AI FEEDBACK</div>
+            <div style={{color:T.primary,fontSize:11,fontWeight:700,marginBottom:8}}>FEEDBACK</div>
             <div style={{color:T.textMid,fontSize:13,lineHeight:1.8}}><MD text={s.feedback}/></div>
           </div>
         </div>
@@ -787,12 +816,12 @@ function PostLecture({ appData, save, user, toast$ }) {
   const generate=async()=>{
     if(!f.title.trim()) return toast$("Enter a lecture title first","err");
     setGenBusy(true);
-    toast$("Claude is writing your lecture notes...","warn");
+    toast$("Generating your lecture notes...","warn");
     try {
       const content=await claudeGenerateLecture(f.title,f.subject,f.class);
       setF(p=>({...p,content}));
-      toast$("Notes generated! Review and edit before posting.");
-    } catch { toast$("Generation failed. Try again.","err"); }
+      toast$("Notes ready! Review and edit before posting.");
+    } catch { toast$("Could not generate notes. Try again.","err"); }
     setGenBusy(false);
   };
 
@@ -818,16 +847,16 @@ function PostLecture({ appData, save, user, toast$ }) {
           </div>
           {f.type==="video"&&<FF label="YOUTUBE EMBED URL"><input value={f.videoUrl} onChange={s("videoUrl")} placeholder="https://www.youtube.com/embed/VIDEO_ID" style={IS}/></FF>}
           <FF label={f.type==="notes"?"LECTURE NOTES (Markdown supported)":"VIDEO DESCRIPTION"}>
-            <textarea value={f.content} onChange={s("content")} placeholder={f.type==="notes"?"Write your notes here, or click Generate with AI below...":"Describe what students should focus on..."} rows={8} style={{...IS,resize:"vertical"}}/>
+            <textarea value={f.content} onChange={s("content")} placeholder={f.type==="notes"?"Write your notes here, or click Auto-Generate below...":"Describe what students should focus on..."} rows={8} style={{...IS,resize:"vertical"}}/>
           </FF>
           {f.type==="notes"&&(
             <div style={{background:T.accentLight,border:"1px solid #ddd6fe",borderRadius:12,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
               <div>
-                <p style={{color:T.accent,fontWeight:700,fontSize:13}}>Generate Notes with Claude AI</p>
-                <p style={{color:T.textSub,fontSize:12,marginTop:2}}>Enter a title above then click to auto-generate detailed lecture notes for your class.</p>
+                <p style={{color:T.accent,fontWeight:700,fontSize:13}}>Auto-Generate Notes</p>
+                <p style={{color:T.textSub,fontSize:12,marginTop:2}}>Enter a title above then click to automatically prepare detailed lecture notes for your class.</p>
               </div>
               <button className="hb" onClick={generate} disabled={genBusy} style={{padding:"10px 20px",borderRadius:10,background:T.accent,color:"#fff",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                {genBusy?"Generating...":"Generate with AI"}
+                {genBusy?"Generating notes...":"Auto-Generate"}
               </button>
             </div>
           )}
@@ -849,7 +878,7 @@ function AllSubmissions({ appData }) {
           <p style={{color:T.text,fontWeight:600,fontSize:14}}>{s.userName} - {s.assignmentTitle}</p>
           <p style={{color:T.textSub,fontSize:11,marginBottom:10}}>{new Date(s.submittedAt).toLocaleString()} - {s.fileName}</p>
           <div style={{background:T.primaryLight,border:"1px solid #bfdbfe",borderRadius:10,padding:"12px 14px"}}>
-            <div style={{color:T.primary,fontSize:11,fontWeight:700,marginBottom:6}}>AI FEEDBACK</div>
+            <div style={{color:T.primary,fontSize:11,fontWeight:700,marginBottom:6}}>FEEDBACK</div>
             <div style={{color:T.textMid,fontSize:12,lineHeight:1.7}}><MD text={s.feedback}/></div>
           </div>
         </div>
