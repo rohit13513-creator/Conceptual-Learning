@@ -145,8 +145,7 @@ function mapInviteRow(row: any): InviteCode {
   };
 }
 
-// In-memory OTP storage
-const pendingOtps = new Map<string, { emailOtp: string; phoneOtp: string; expiresAt: number; phone: string }>();
+// OTP storage lives in Supabase (not in-memory) so it survives across serverless invocations.
 
 // Helper to send real emails via nodemailer SMTP
 async function sendRealEmail(to: string, subject: string, bodyText: string, bodyHtml?: string) {
@@ -210,9 +209,8 @@ function sendSimulatedEmail(to: string, subject: string, body: string, type: 'in
   });
 }
 
-async function startServer() {
+function buildApp(): express.Express {
   const app = express();
-  const PORT = 3000;
 
   // JSON and URL-encoded parsers
   app.use(express.json());
@@ -6006,12 +6004,12 @@ async function startServer() {
     // Generate random 4-digit mobile verification code
     const phoneOtp = String(Math.floor(1000 + Math.random() * 9000));
 
-    // Store in-memory for 10-minutes duration
-    pendingOtps.set(emailNormalized, {
-      emailOtp: "", // unused
-      phoneOtp,
-      expiresAt: Date.now() + 10 * 60 * 1000,
-      phone: phoneTrimmed
+    // Store for 10 minutes, keyed by email (overwrites any earlier pending OTP for this email)
+    await supabase.from("pending_otps").upsert({
+      email: emailNormalized,
+      phone: phoneTrimmed,
+      phone_otp: phoneOtp,
+      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     });
 
     sendSimulatedEmail(
@@ -6051,22 +6049,22 @@ async function startServer() {
     }
 
     // Verify OTP tokens
-    const pending = pendingOtps.get(emailNormalized);
+    const { data: pending } = await supabase.from("pending_otps").select("*").eq("email", emailNormalized).maybeSingle();
     if (!pending) {
       return res.status(400).json({ error: "OTP sessions have expired or been misplaced. Please click 'Send Verification OTP' to dispatch codes again." });
     }
 
-    if (Date.now() > pending.expiresAt) {
-      pendingOtps.delete(emailNormalized);
+    if (Date.now() > new Date(pending.expires_at).getTime()) {
+      await supabase.from("pending_otps").delete().eq("email", emailNormalized);
       return res.status(400).json({ error: "Your OTP verification code has expired. Please request a new one." });
     }
 
-    if (pending.phoneOtp !== String(phoneOtp).trim()) {
+    if (pending.phone_otp !== String(phoneOtp).trim()) {
       return res.status(400).json({ error: "Invalid Phone OTP. Please double-check your mobile simulation code and enter again." });
     }
 
     // OTP keys are valid! Discard pending session.
-    pendingOtps.delete(emailNormalized);
+    await supabase.from("pending_otps").delete().eq("email", emailNormalized);
 
     const targetPhone = phone.trim();
     const passwordHash = await bcrypt.hash(password, 10);
@@ -6717,6 +6715,17 @@ async function startServer() {
     return res.json({ success: true, message: `Successfully revoked code: ${targetCode}` });
   });
 
+  return app;
+}
+
+// Single shared app instance: used both by the traditional dev/prod server below
+// and exported directly for Vercel's serverless runtime (which imports `app` and
+// never calls startServer/listen -- Vercel serves the built frontend separately).
+const app = buildApp();
+
+async function startServer() {
+  const PORT = 3000;
+
   // ── VITE MIDDLEWARE OR STATIC SERVER ──
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -6737,4 +6746,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// On Vercel, requests are routed directly to the exported `app` as a serverless
+// function -- there's no long-running process to start.
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
