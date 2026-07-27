@@ -8,3 +8,6 @@ coverage/
 !.env.example
 data/
 .claude/settings.local.json
+
+.vercel
+.env*
