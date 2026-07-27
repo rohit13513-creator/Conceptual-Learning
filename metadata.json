@@ -1,0 +1,8 @@
+{
+  "name": "Conceptual Learning Online",
+  "description": "Ray Optica: An interactive ray-tracing physics simulator and an interactive Conceptual Learning Chemistry Lab (Concept Lab / Online Chemistry Lab) powered by Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

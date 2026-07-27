@@ -1,0 +1,6740 @@
+import "dotenv/config";
+import express from "express";
+import path from "path";
+import { createServer as createViteServer } from "vite";
+import nodemailer from "nodemailer";
+import { GoogleGenAI, Type } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
+import bcrypt from "bcryptjs";
+import multer from "multer";
+import sharp from "sharp";
+import { PDFDocument } from "pdf-lib";
+
+interface DeviceSession {
+  deviceId: string;
+  deviceName: string;
+  lastUsed: string;
+}
+
+interface User {
+  name: string;
+  email: string;
+  phone?: string;
+  status: "pending" | "approved" | "rejected";
+  devices: DeviceSession[];
+  createdAt: string;
+  role: "admin" | "student";
+  studentClass?: string;
+}
+
+interface InviteCode {
+  code: string;
+  createdFor: string;
+  createdAt: string;
+}
+
+interface HomeworkSubmission {
+  id: string;
+  studentEmail: string;
+  subject: string | null;
+  assignmentId: string | null;
+  submittedAt: string;
+  status: "pending" | "checked" | "reviewed";
+  aiScore: number | null;
+  aiFeedback: string | null;
+  adminNotes: string | null;
+  fileUrl: string | null;
+}
+
+interface HomeworkAssignment {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: string | null;
+  targetClass: string;
+  fileUrl: string | null;
+  createdAt: string;
+}
+
+const supabase = createClient(
+  process.env.SUPABASE_URL as string,
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+);
+
+const HOMEWORK_BUCKET = "homework";
+const homeworkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file, matches the Storage bucket limit
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WEBP, HEIC, or PDF files are allowed."));
+  },
+});
+
+// Combines multiple photos (e.g. several notebook pages) into a single PDF, one image per page.
+async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.create();
+  const PAGE_WIDTH = 595.28; // A4 at 72dpi
+  const PAGE_HEIGHT = 841.89;
+
+  for (const img of images) {
+    const jpegBuffer = await sharp(img.buffer).rotate().jpeg({ quality: 85 }).toBuffer();
+    const embedded = await pdfDoc.embedJpg(jpegBuffer);
+    const scale = Math.min(PAGE_WIDTH / embedded.width, PAGE_HEIGHT / embedded.height) * 0.95;
+    const drawWidth = embedded.width * scale;
+    const drawHeight = embedded.height * scale;
+    const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    page.drawImage(embedded, {
+      x: (PAGE_WIDTH - drawWidth) / 2,
+      y: (PAGE_HEIGHT - drawHeight) / 2,
+      width: drawWidth,
+      height: drawHeight,
+    });
+  }
+
+  return Buffer.from(await pdfDoc.save());
+}
+
+function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
+  return {
+    id: row.id,
+    studentEmail: row.student_email,
+    subject: row.subject,
+    assignmentId: row.assignment_id,
+    submittedAt: row.submitted_at,
+    status: row.status,
+    aiScore: row.ai_score,
+    aiFeedback: row.ai_feedback,
+    adminNotes: row.admin_notes,
+    fileUrl: fileUrl ?? null,
+  };
+}
+
+function mapAssignmentRow(row: any, fileUrl?: string | null): HomeworkAssignment {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    subject: row.subject,
+    targetClass: row.target_class,
+    fileUrl: fileUrl ?? null,
+    createdAt: row.created_at,
+  };
+}
+
+// Maps a raw Supabase `users` row (snake_case) to the camelCase shape the frontend expects.
+function mapUserRow(row: any): User {
+  return {
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    status: row.status,
+    devices: row.devices || [],
+    createdAt: row.created_at,
+    role: row.role,
+    studentClass: row.student_class,
+  };
+}
+
+function mapInviteRow(row: any): InviteCode {
+  return {
+    code: row.code,
+    createdFor: row.created_for,
+    createdAt: row.created_at,
+  };
+}
+
+// In-memory OTP storage
+const pendingOtps = new Map<string, { emailOtp: string; phoneOtp: string; expiresAt: number; phone: string }>();
+
+// Helper to send real emails via nodemailer SMTP
+async function sendRealEmail(to: string, subject: string, bodyText: string, bodyHtml?: string) {
+  try {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || smtpUser || "noreply@rayoptica.com";
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      console.warn(`[SMTP Info] Real email to ${to} is pending SMTP credentials. Logged simulated email to DB. Missing check keys: Host=${!!smtpHost}, User=${!!smtpUser}, Pass=${!!smtpPass}`);
+      return false;
+    }
+
+    console.log(`[SMTP Attempt] Sending email to ${to} via SMTP: Host=${smtpHost}, Port=${smtpPort}, User=${smtpUser}, From=${smtpFrom}`);
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465, // true for port 465, false for 587
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+      tls: {
+        // Do not fail on invalid / self-signed certs which are common in private SMTP servers
+        rejectUnauthorized: false
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: smtpFrom,
+      to,
+      subject,
+      text: bodyText,
+      html: bodyHtml || bodyText.replace(/\n/g, "<br/>"),
+    });
+
+    console.log(`[SMTP Success] Real email sent to ${to}. MessageId: ${info.messageId}`);
+    return true;
+  } catch (err) {
+    console.error(`[SMTP Error] Failed to dispatch real email to ${to}:`, err);
+    return false;
+  }
+}
+
+// Helper to log and record simulated email dispatches instantly
+function sendSimulatedEmail(to: string, subject: string, body: string, type: 'incoming' | 'outgoing' | 'otp', htmlBody?: string) {
+  const id = "EML-" + Math.random().toString(36).substr(2, 9).toUpperCase();
+  supabase
+    .from("email_logs")
+    .insert({ id, to_email: to, subject, body: htmlBody || body, type })
+    .then(({ error }) => {
+      if (error) console.error("Error logging simulated email:", error.message);
+    });
+
+  // Dispatch real email in background
+  sendRealEmail(to, subject, body, htmlBody).catch(err => {
+    console.error("Background real email send failed:", err);
+  });
+}
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  // JSON and URL-encoded parsers
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // ── API ROUTES ──
+
+  // System status check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "alive", timestamp: new Date().toISOString() });
+  });
+
+  function isAcid(formula: string, label: string = ""): boolean {
+    const f = formula.trim().toUpperCase();
+    // BUG FIX: this used to be `Math.max(0, indexOf(...))`, which clamps the "not found" sentinel
+    // (-1) up to 0 -- making `l >= 0` true unconditionally, for every formula/label, found or not.
+    // That silently made isAcid() return true for every single reactant (including salts, bases,
+    // and plain metals), which broke the salt/base/solid/gas classification below it and is why
+    // compounds like KOH were showing up mislabeled as "Diluted/Concentrated" instead of "Aqueous".
+    const l = label.trim().toUpperCase().indexOf("ACID");
+    const acids = ["HCL", "H2SO4", "HNO3", "CH3COOH", "HBR", "ACID", "ETHANOIC", "H2C2O4", "C18H36O2"];
+    return acids.some(a => f.includes(a)) || l >= 0;
+  }
+
+  function isSalt(formula: string): boolean {
+    const f = formula.trim().toUpperCase();
+    const salts = [
+      "CUSO4", "ZNSO4", "BACL2", "NA2SO4", "NACL", "ZNCO3", "MGCO3", "MGSO4", "NH4CL",
+      "KI", "PB(NO3)2", "PBI2", "AGNO3", "AGCL", "NA2CO3", "NAHCO3", "FESO4", "FECL3", "CUCL2"
+    ];
+    return salts.some(s => f.includes(s));
+  }
+
+  // Common laboratory bases. These are used dissolved in water in virtually every school/college
+  // reaction context, so (like isSalt above) they must be labeled "Aqueous ___" rather than left
+  // with no state descriptor at all, which previously made them read as if reacting dry/crystalline.
+  // Bare "NH3" is intentionally excluded since ammonia is also commonly used as a gas-phase reactant
+  // (e.g. combustion), where labeling it "Aqueous" would be incorrect.
+  function isBase(formula: string): boolean {
+    const f = formula.trim().toUpperCase();
+    const bases = ["NAOH", "KOH", "CA(OH)2", "MG(OH)2", "NH4OH", "AMMONIUM HYDROXIDE"];
+    return bases.some(b => f.includes(b));
+  }
+
+  // Chemistry Reaction Helper Normalizer and Algorithmic Simulator Engine Fallback
+  function normalizeFormula(name: string): { formula: string; label: string } {
+    const clean = name.trim().toUpperCase();
+    if (clean === "H2O" || clean === "WATER") return { formula: "H2O", label: "Water" };
+    if (clean === "HCL" || clean === "HYDROCHLORIC ACID" || clean === "HYDROCHLORICACID") return { formula: "HCl", label: "Hydrochloric Acid" };
+    if (clean === "NA" || clean === "SODIUM") return { formula: "Na", label: "Sodium Metal" };
+    if (clean === "FE" || clean === "IRON") return { formula: "Fe", label: "Iron Metal" };
+    // Salts are anhydrous (no water of crystallization) by default -- the vast majority of school
+    // chemistry reactions (displacement, precipitation, acid-base, etc.) are taught and balanced
+    // using the plain anhydrous formula. The hydrated/crystalline form is a DISTINCT substance that
+    // must only be selected when the user's query explicitly names it as such (e.g. "Copper Sulfate
+    // Crystals", "Copper Sulfate Pentahydrate", "Hydrous Copper Sulfate", "Blue Vitriol", or a
+    // formula already written with its hydrate water, e.g. "CuSO4.5H2O"/"CuSO4·5H2O").
+    if (clean.includes("CUSO4") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("BLUE VITRIOL") || clean.includes("5H2O"))) return { formula: "CuSO4·5H2O", label: "Copper Sulfate Pentahydrate" };
+    if (clean.includes("CUSO4") || clean === "COPPER SULFATE" || clean === "COPPERSULFATE" || clean === "COPPER(II) SULFATE" || clean === "COPPER II SULFATE" || clean === "CUPRIC SULFATE") return { formula: "CuSO4", label: "Copper(II) Sulfate" };
+    if (clean === "NAOH" || clean === "SODIUM HYDROXIDE" || clean === "SODIUMHYDROXIDE") return { formula: "NaOH", label: "Sodium Hydroxide" };
+    if (clean === "KOH" || clean === "POTASSIUM HYDROXIDE" || clean === "POTASSIUMHYDROXIDE") return { formula: "KOH", label: "Potassium Hydroxide" };
+    if (clean === "CA(OH)2" || clean === "CAOH2" || clean === "CALCIUM HYDROXIDE" || clean === "CALCIUMHYDROXIDE" || clean === "SLAKED LIME") return { formula: "Ca(OH)2", label: "Calcium Hydroxide" };
+    if (clean === "NH4OH" || clean === "AMMONIUM HYDROXIDE" || clean === "AMMONIUMHYDROXIDE" || clean === "AQUEOUS AMMONIA") return { formula: "NH4OH", label: "Ammonium Hydroxide" };
+    if (clean === "PROPENE" || clean === "C3H6") return { formula: "C3H6", label: "Propene" };
+    if (clean === "HBR" || clean === "HYDROGEN BROMIDE") return { formula: "HBr", label: "Hydrogen Bromide" };
+    if (clean === "CU" || clean === "COPPER") return { formula: "Cu", label: "Copper Metal" };
+    if (clean.includes("ZNSO4") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("7H2O"))) return { formula: "ZnSO4·7H2O", label: "Zinc Sulfate Heptahydrate" };
+    if (clean.includes("ZNSO4") || clean === "ZINC SULFATE" || clean === "ZINCSULFATE") return { formula: "ZnSO4", label: "Zinc Sulfate" };
+    if (clean.includes("BACL2") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("2H2O"))) return { formula: "BaCl2·2H2O", label: "Barium Chloride Dihydrate" };
+    if (clean.includes("BACL2") || clean === "BARIUM CHLORIDE" || clean === "BARIUMCHLORIDE") return { formula: "BaCl2", label: "Barium Chloride" };
+    if (clean === "NA2SO4" || clean === "SODIUM SULFATE" || clean === "SODIUMSULFATE") return { formula: "Na2SO4", label: "Sodium Sulfate" };
+    if (clean.includes("FESO4") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("VITRIOL") || clean.includes("7H2O"))) return { formula: "FeSO4·7H2O", label: "Iron Sulfate Heptahydrate" };
+    if (clean.includes("FESO4") || clean === "IRON SULFATE" || clean === "IRONSULFATE" || clean === "IRON(II) SULFATE" || clean === "FERROUS SULFATE") return { formula: "FeSO4", label: "Iron(II) Sulfate" };
+    if (clean.includes("MGSO4") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("EPSOM") || clean.includes("7H2O"))) return { formula: "MgSO4·7H2O", label: "Magnesium Sulfate Heptahydrate" };
+    if (clean.includes("MGSO4") || clean === "MAGNESIUM SULFATE" || clean === "MAGNESIUMSULFATE") return { formula: "MgSO4", label: "Magnesium Sulfate" };
+    if (clean.includes("NA2CO3") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("WASHING SODA") || clean.includes("10H2O"))) return { formula: "Na2CO3·10H2O", label: "Sodium Carbonate Decahydrate" };
+    if (clean.includes("NA2CO3") || clean === "SODIUM CARBONATE" || clean === "SODIUMCARBONATE") return { formula: "Na2CO3", label: "Sodium Carbonate" };
+    if (clean.includes("FECL3") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("6H2O"))) return { formula: "FeCl3·6H2O", label: "Iron(III) Chloride Hexahydrate" };
+    if (clean.includes("FECL3") || clean === "IRON CHLORIDE" || clean === "IRONTRICHLORIDE" || clean === "IRON(III) CHLORIDE") return { formula: "FeCl3", label: "Iron(III) Chloride" };
+    if (clean === "CO" || clean === "CARBON MONOXIDE" || clean === "CARBONMONOXIDE") return { formula: "CO", label: "Carbon Monoxide" };
+    if (clean === "NH3" || clean === "AMMONIA" || clean === "AMMONIAGAS") return { formula: "NH3", label: "Ammonia" };
+    if (clean === "HEXANE" || clean === "C6H14") return { formula: "C6H14", label: "Hexane" };
+    if (clean === "OXALIC ACID" || clean === "OXALICACID" || clean === "H2C2O4" || clean === "C2H2O4") return { formula: "H2C2O4", label: "Oxalic Acid" };
+    if (clean === "STEARIC ACID" || clean === "STEARICACID" || clean === "C18H36O2" || clean === "C17H35COOH") return { formula: "C18H36O2", label: "Stearic Acid" };
+    if (clean.includes("CUCL2") && (clean.includes("HYDRATE") || clean.includes("CRYSTAL") || clean.includes("HYDROUS") || clean.includes("2H2O"))) return { formula: "CuCl2·2H2O", label: "Copper(II) Chloride Dihydrate" };
+    if (clean.includes("CUCL2") || clean === "COPPER CHLORIDE" || clean === "COPPERDICHLORIDE" || clean === "COPPER(II) CHLORIDE") return { formula: "CuCl2", label: "Copper(II) Chloride" };
+    if (clean === "CARBONIC ACID" || clean === "CARBONICACID" || clean === "H2CO3") return { formula: "H2CO3", label: "Carbonic Acid" };
+    if (clean === "GYPSUM" || clean === "CALCIUM SULFATE DIHYDRATE" || clean === "CALCIUMSULFATEDIHYDRATE" || clean === "CASO4.2H2O" || clean === "CASO4·2H2O") return { formula: "CaSO4·2H2O", label: "Gypsum" };
+    if (clean === "PLASTER OF PARIS" || clean === "PLASTEROFPARIS" || clean === "CALCIUM SULFATE HEMIHYDRATE" || clean === "CALCIUMSULFATEHEMIHYDRATE" || clean === "CASO4.0.5H2O" || clean === "CASO4·0.5H2O" || clean === "CASO4.1/2H2O") return { formula: "CaSO4·0.5H2O", label: "Plaster of Paris" };
+    if (clean === "BLEACHING POWDER" || clean === "BLEACHINGPOWDER" || clean === "CALCIUM OXYCHLORIDE" || clean === "CALCIUMOXYCHLORIDE" || clean === "CALCIUM HYPOCHLORITE" || clean === "CALCIUMHYPOCHLORITE" || clean === "CAOCL2") return { formula: "CaOCl2", label: "Bleaching Powder" };
+    if (clean === "GLUCOSE" || clean === "C6H12O6") return { formula: "C6H12O6", label: "Glucose" };
+    if (clean === "FRUCTOSE") return { formula: "C6H12O6", label: "Fructose" };
+    if (clean === "MALTOSE" || clean === "C12H22O11") return { formula: "C12H22O11", label: "Maltose" };
+    // The substances below are all already recognized by isSalt() further up (so they were already
+    // being correctly labeled "Aqueous ___"), but had no entry here -- meaning they fell through to
+    // the generic auto-formatter and displayed as a bare, un-described formula. Giving each one a
+    // proper descriptive label here keeps their state-labeling and their display name consistent.
+    if (clean === "NACL" || clean === "SODIUM CHLORIDE" || clean === "SODIUMCHLORIDE" || clean === "COMMON SALT") return { formula: "NaCl", label: "Sodium Chloride" };
+    if (clean === "KI" || clean === "POTASSIUM IODIDE" || clean === "POTASSIUMIODIDE") return { formula: "KI", label: "Potassium Iodide" };
+    if (clean === "ZNCO3" || clean === "ZINC CARBONATE" || clean === "ZINCCARBONATE") return { formula: "ZnCO3", label: "Zinc Carbonate" };
+    if (clean === "MGCO3" || clean === "MAGNESIUM CARBONATE" || clean === "MAGNESIUMCARBONATE") return { formula: "MgCO3", label: "Magnesium Carbonate" };
+    if (clean === "NH4CL" || clean === "AMMONIUM CHLORIDE" || clean === "AMMONIUMCHLORIDE" || clean === "SAL AMMONIAC") return { formula: "NH4Cl", label: "Ammonium Chloride" };
+    if (clean === "PB(NO3)2" || clean === "PBNO32" || clean === "LEAD NITRATE" || clean === "LEADNITRATE") return { formula: "Pb(NO3)2", label: "Lead(II) Nitrate" };
+    if (clean === "PBI2" || clean === "LEAD IODIDE" || clean === "LEADIODIDE") return { formula: "PbI2", label: "Lead(II) Iodide" };
+    if (clean === "AGNO3" || clean === "SILVER NITRATE" || clean === "SILVERNITRATE") return { formula: "AgNO3", label: "Silver Nitrate" };
+    if (clean === "AGCL" || clean === "SILVER CHLORIDE" || clean === "SILVERCHLORIDE") return { formula: "AgCl", label: "Silver Chloride" };
+    if (clean === "NAHCO3" || clean === "SODIUM BICARBONATE" || clean === "SODIUMBICARBONATE" || clean === "BAKING SODA") return { formula: "NaHCO3", label: "Sodium Bicarbonate" };
+    if (clean === "K2CO3" || clean === "POTASSIUM CARBONATE" || clean === "POTASSIUMCARBONATE" || clean === "POTASH") return { formula: "K2CO3", label: "Potassium Carbonate" };
+    if (clean === "CACL2" || clean === "CALCIUM CHLORIDE" || clean === "CALCIUMCHLORIDE") return { formula: "CaCl2", label: "Calcium Chloride" };
+    if (clean === "ZNCL2" || clean === "ZINC CHLORIDE" || clean === "ZINCCHLORIDE") return { formula: "ZnCl2", label: "Zinc Chloride" };
+    if (clean === "KNO3" || clean === "POTASSIUM NITRATE" || clean === "POTASSIUMNITRATE") return { formula: "KNO3", label: "Potassium Nitrate" };
+    if (clean === "NANO3" || clean === "SODIUM NITRATE" || clean === "SODIUMNITRATE") return { formula: "NaNO3", label: "Sodium Nitrate" };
+    if (clean === "KMNO4" || clean === "POTASSIUM PERMANGANATE" || clean === "POTASSIUMPERMANGANATE") return { formula: "KMnO4", label: "Potassium Permanganate" };
+    if (clean === "K2CR2O7" || clean === "POTASSIUM DICHROMATE" || clean === "POTASSIUMDICHROMATE") return { formula: "K2Cr2O7", label: "Potassium Dichromate" };
+    if (clean === "ZN" || clean === "ZINC") return { formula: "Zn", label: "Zinc Metal" };
+    if (clean === "MG" || clean === "MAGNESIUM") return { formula: "Mg", label: "Magnesium Metal" };
+    if (clean === "AL" || clean === "ALUMINIUM" || clean === "ALUMINUM") return { formula: "Al", label: "Aluminium Metal" };
+    if (clean === "CA" || clean === "CALCIUM") return { formula: "Ca", label: "Calcium Metal" };
+    if (clean === "H2SO4" || clean === "SULFURIC ACID" || clean === "SULFURICACID" || clean === "SULPHURIC ACID") return { formula: "H2SO4", label: "Sulfuric Acid" };
+    if (clean === "HNO3" || clean === "NITRIC ACID" || clean === "NITRICACID") return { formula: "HNO3", label: "Nitric Acid" };
+    if (clean === "CH3COOH" || clean === "ACETIC ACID" || clean === "ACETICACID" || clean === "ETHANOIC ACID" || clean === "ETHANOICACID" || clean === "VINEGAR") return { formula: "CH3COOH", label: "Acetic Acid" };
+
+    // Only apply automatic Title Case to inputs that read as a plain multi-word chemical NAME
+    // (e.g. "potassium iodide" -> "Potassium Iodide"). A compact single-token formula (e.g. "KI",
+    // "NaOH", "CuSO4") must never be Title Cased -- doing so corrupts its case-sensitive element
+    // symbols (e.g. "KI" was previously mangled into "Ki"). Since that same mangled string was also
+    // being reused as the `formula` field (not just the display label), it broke downstream
+    // formula matching too, not merely the display name.
+    const raw = name.trim();
+    const looksLikeMultiWordName = /\s/.test(raw) && /^[a-zA-Z0-9.\s]+$/.test(raw);
+    const label = looksLikeMultiWordName
+      ? raw.replace(/\b([a-z])([a-z]*)\b/gi, (m, g1, g2) => g1.toUpperCase() + g2.toLowerCase())
+      : raw;
+    return { formula: raw, label };
+  }
+
+  interface ReactantItemInput {
+    formula: string;
+    concentration: "dilute" | "concentrated";
+    gasSupply?: "limited" | "excess";
+  }
+
+  function generateDynamicFallback(
+    reactants: ReactantItemInput[],
+    temperature: number,
+    pressure: number,
+    solvent: string,
+    addedPeroxide: boolean,
+    tKelvin: number,
+    catalyst: string = "None"
+  ) {
+    const list = reactants.map((r, idx) => {
+      const norm = normalizeFormula(r.formula);
+      return {
+        formula: norm.formula,
+        label: norm.label,
+        concentration: r.concentration || "concentrated",
+        gasSupply: r.gasSupply || "excess",
+        originalIndex: idx
+      };
+    });
+
+    let reactionFeasible = true;
+    let reactionClass = "Association / Thermal Collisions";
+    let balancedEquation = "";
+    let reactantsData = list.map((item, idx) => {
+      let displayName = item.label;
+      if (isAcid(item.formula, item.label)) {
+        displayName = `${item.concentration === "dilute" ? "Diluted" : "Concentrated"} ${item.label}`;
+      } else if (isSalt(item.formula) || isBase(item.formula)) {
+        displayName = `Aqueous ${item.label}`;
+      } else {
+        const fUpper = item.formula.toUpperCase();
+        if (["FE", "NA", "CU", "ZN", "MG", "CAO", "MGO"].includes(fUpper)) {
+          displayName = `Solid ${item.label}`;
+        } else if (["O2", "CO2", "H2", "CL2"].includes(fUpper)) {
+          displayName = `Gaseous ${item.label}`;
+        } else {
+          displayName = item.label;
+        }
+      }
+      return {
+        formula: item.formula,
+        name: displayName,
+        iupacName: item.label.toLowerCase(),
+        pubchemId: `300${idx}${Math.floor(Math.random() * 90)}`,
+        molecularWeight: 40 + idx * 18
+      };
+    });
+
+    let productsData: any[] = [];
+    let deltaH_rxn = -40;
+    let deltaS_rxn = 10;
+    let thermoType = "Exothermic";
+    let visuals = {
+      solutionColorStart: "clear",
+      solutionColorEnd: "clear",
+      hasBubbles: false,
+      gasName: "",
+      precipitateColor: "",
+      animationDescription: "Combined reagents collide inside the reactor, exchanging species dependent isochorically."
+    };
+    let dangerLevel = "safe";
+    let conceptualExplanationFoundational = "";
+    let conceptualExplanationAdvanced = "";
+    let arrowPushingDetails = "";
+    let advice: string[] = [];
+
+    const formulasUpper = list.map(x => x.formula.toUpperCase());
+    const hasFormula = (f: string) => formulasUpper.some(x => x.includes(f.toUpperCase()));
+    const findReactant = (f: string) => list.find(x => x.formula.toUpperCase().includes(f.toUpperCase()));
+
+    // Let's analyze indicators like dilute vs concentrated of these reactants
+    const anyConc = list.some(r => r.concentration === "concentrated");
+
+    // SINGLE REACTANT THERMAL DECOMPOSITION (1 reactant)
+    if (list.length === 1) {
+      const single = list[0];
+      const singleFormula = single.formula.toUpperCase();
+      reactionClass = "Thermal Decomposition";
+      if (singleFormula === "CACO3" || singleFormula === "CALCIUM CARBONATE") {
+        balancedEquation = "CaCO₃(s) --[Heat]--> CaO(s) + CO₂(g)";
+        productsData = [
+          { formula: "CaO", name: "Calcium Oxide (Quicklime)", pubchemId: "14730", state: "s" },
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" }
+        ];
+        deltaH_rxn = 178.3; // Endothermic
+        deltaS_rxn = 160.4;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide (CO₂)";
+        visuals.animationDescription = `Heating solid CaCO₃ (limestone) ${catalyst && catalyst !== "None" ? `with ${catalyst} catalyst` : ""} causes crystal structure degradation, releasing bubbles of Carbon Dioxide and leaving behind Calcium Oxide powder.`;
+        conceptualExplanationFoundational = "A fundamental CBSE Class 10 decomposition. Calcium Carbonate (limestone) on heating decomposes to produce calcium oxide (quicklime) and gaseous carbon dioxide.";
+        conceptualExplanationAdvanced = `This is a highly endothermic solid decomposition reaction driven entirely by high entropy change (producing a gas). In the presence of ${catalyst && catalyst !== "None" ? `${catalyst}` : "heat"}, activation barriers of crystalline degradation are lowered.`;
+      } else if (singleFormula === "ZNCO3" || singleFormula === "ZINC CARBONATE") {
+        balancedEquation = "ZnCO₃(s) --[Heat]--> ZnO(s) + CO₂(g)";
+        productsData = [
+          { formula: "ZnO", name: "Zinc Oxide", pubchemId: "14824", state: "s" },
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" }
+        ];
+        deltaH_rxn = 71.5; // Endothermic
+        deltaS_rxn = 145.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide (CO₂)";
+        visuals.animationDescription = `Heating dull white Zinc Carbonate (ZnCO₃) powder results in chemical decomposition. It turns yellow when hot (forming Zinc Oxide) and releases Carbon Dioxide bubbles, turning white again upon cooling.`;
+        conceptualExplanationFoundational = "A classic Class 9-10 chemistry lab showcase: Zinc Carbonate decomposed by high heat into yellow-white Zinc Oxide residue and Carbon Dioxide gas. Turning yellow when hot is a key signature of ZnO!";
+        conceptualExplanationAdvanced = "Thermolytic dissociation of calamine (ZnCO₃) proceeds with a moderately low activation energy compared to CaCO₃. Zinc Oxide solid acts as an n-type semiconductor and displays thermochromism (yellow when hot, white when cold).";
+      } else if (singleFormula === "MGCO3" || singleFormula === "MAGNESIUM CARBONATE") {
+        balancedEquation = "MgCO₃(s) --[Heat]--> MgO(s) + CO₂(g)";
+        productsData = [
+          { formula: "MgO", name: "Magnesium Oxide", pubchemId: "14792", state: "s" },
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" }
+        ];
+        deltaH_rxn = 117.3;
+        deltaS_rxn = 152.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide (CO₂)";
+        visuals.animationDescription = `Decomposition of Magnesium Carbonate (MgCO₃) under flame heat. The white powder is converted to dense MgO while CO₂ gas bubbles bubble away.`;
+        conceptualExplanationFoundational = "Heating solid Magnesium Carbonate decomposes it into white Magnesium Oxide ash and carbon dioxide gas.";
+        conceptualExplanationAdvanced = "A high-entropy thermolytic decomposition showing classic group-2 metal carbonate thermal stability scaling (MgCO₃ is less thermally stable than CaCO₃ due to smaller ionic radius of Mg²⁺).";
+      } else if (singleFormula === "NAHCO3" || singleFormula === "SODIUM BICARBONATE") {
+        balancedEquation = "2NaHCO₃(s) --[Heat]--> Na₂CO₃(s) + H₂O(g) + CO₂(g)";
+        productsData = [
+          { formula: "Na2CO3", name: "Sodium Carbonate (Washing Soda)", pubchemId: "10340", state: "s" },
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 135.6;
+        deltaS_rxn = 334.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide & Steam";
+        visuals.animationDescription = `Baking soda thermal rise! Heating dry NaHCO₃ powder breaks it down, creating a light, dry residue of Sodium Carbonate and releasing a mixture of steam and Carbon Dioxide gas.`;
+        conceptualExplanationFoundational = "Baking soda (Sodium Bicarbonate) on heating breaks down into Sodium Carbonate, water, and Carbon Dioxide gas. This is why baking soda makes cakes rise!";
+        conceptualExplanationAdvanced = "The low temperature decomposition (starting around 80°C) of NaHCO₃. The release of CO₂ gas and water vapor is useful for leavening agent mechanisms and dry powder fire extinguishers.";
+      } else if (singleFormula === "H2O2" || singleFormula === "HYDROGEN PEROXIDE") {
+        balancedEquation = "2H₂O₂(l) --[Catalyst]--> 2H₂O(l) + O₂(g)";
+        productsData = [
+          { formula: "H2O", name: "Water Liquid", pubchemId: "962", state: "l" },
+          { formula: "O2", name: "Oxygen Gas", pubchemId: "977", state: "g" }
+        ];
+        deltaH_rxn = -196.4;
+        deltaS_rxn = 125.0;
+        thermoType = "Exothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Oxygen (O₂)";
+        visuals.animationDescription = `Rapid catalytic decomposition of Hydrogen Peroxide (H₂O₂)! Oxygen gas is vigorously evolved with rapid bubbling, generating mild heat.`;
+        conceptualExplanationFoundational = "Hydrogen peroxide decomposes naturally into water and oxygen gas. Adding a catalyst like MnO₂ makes this happen super fast, creating an explosion of soapy oxygen bubbles!";
+        conceptualExplanationAdvanced = "A highly exothermic catalytic disproportionation reaction. The MnO₂ catalyst provides an active surface containing Mn oxides of multiple states to reduce the activation barriers of radical-mediated O-O bond cleavage.";
+      } else if (singleFormula === "H2C2O4" || singleFormula === "OXALIC ACID" || singleFormula === "C2H2O4") {
+        balancedEquation = "H₂C₂O₄(s) --[Heat]--> CO(g) + CO₂(g) + H₂O(g)";
+        productsData = [
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+          { formula: "CO", name: "Carbon Monoxide Gas", pubchemId: "281", state: "g" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 150.0;
+        deltaS_rxn = 350.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Monoxide, Carbon Dioxide & Steam";
+        visuals.animationDescription = `Heating Oxalic acid causes complete sublimative thermal decomposition. It breaks down completely into Carbon Monoxide gas, Carbon Dioxide gas, and Steam, leaving no solid residue!`;
+        conceptualExplanationFoundational = "Oxalic acid decomposes when heated above its melting point (~190°C) into carbon dioxide, poisonous carbon monoxide gas, and water vapor.";
+        conceptualExplanationAdvanced = "An endothermic decarbonylation and decarboxylation process. Dry Oxalic acid undergoes intramolecular proton transfer followed by consecutive bond cleavage to yield CO, CO₂ and H₂O.";
+      } else if (singleFormula === "H2CO3" || singleFormula === "CARBONIC ACID" || singleFormula === "CARBONICACID") {
+        balancedEquation = "H₂CO₃(aq) → H₂O(l) + CO₂(g)";
+        productsData = [
+          { formula: "H2O", name: "Water Liquid", pubchemId: "962", state: "l" },
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" }
+        ];
+        deltaH_rxn = 20.4;
+        deltaS_rxn = 96.5;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide (CO₂)";
+        visuals.animationDescription = "Carbonic acid is highly unstable in liquid form and spontaneously decomposes at room temperature, releasing rapid fizzing bubbles of Carbon Dioxide gas.";
+        conceptualExplanationFoundational = "Carbonic acid (H₂CO₃) is a weak diprotic acid. It is unstable and rapidly decomposes into water and carbon dioxide gas, which causes the fizzy effervescence we see in carbonated drinks.";
+        conceptualExplanationAdvanced = "The decomposition of H₂CO₃ in aqueous solution has a very low activation barrier (~12 kcal/mol) and is thermodynamically favored under standard ambient conditions due to the massive entropic gain from gaseous CO₂ release.";
+      } else if (singleFormula === "CASO4·2H2O" || singleFormula === "CASO4.2H2O" || singleFormula === "GYPSUM") {
+        balancedEquation = "CaSO₄·2H₂O(s) --[Heat, ~120°C]--> CaSO₄·½H₂O(s) + 1½H₂O(g)";
+        productsData = [
+          { formula: "CaSO4·0.5H2O", name: "Plaster of Paris (Calcium Sulfate Hemihydrate)", pubchemId: "24928", state: "s" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 88.0;
+        deltaS_rxn = 180.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Water Vapor (Steam)";
+        visuals.animationDescription = `Gently heating white Gypsum powder to around 120°C drives off three-quarters of its water of crystallization as steam, leaving behind the fine white powder Plaster of Paris.`;
+        conceptualExplanationFoundational = "A classic CBSE Class 10 reaction. Gypsum (calcium sulfate dihydrate) loses most of its water of crystallization on gentle heating, converting it into Plaster of Paris (calcium sulfate hemihydrate). Heating much further destroys the hemihydrate entirely into 'dead burnt plaster'.";
+        conceptualExplanationAdvanced = "This partial dehydration is carefully controlled around 120-180°C; heating beyond ~200°C over-dehydrates the hemihydrate into anhydrous CaSO4 ('dead burnt plaster'), which no longer sets properly with water.";
+      } else if (singleFormula === "CASO4·0.5H2O" || singleFormula === "CASO4.0.5H2O" || singleFormula === "PLASTER OF PARIS") {
+        balancedEquation = "CaSO₄·½H₂O(s) --[Heat, >200°C]--> CaSO₄(s) + ½H₂O(g)";
+        productsData = [
+          { formula: "CaSO4", name: "Anhydrous Calcium Sulfate (\"Dead Burnt Plaster\")", pubchemId: "24497", state: "s" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 20.0;
+        deltaS_rxn = 45.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Water Vapor (Steam)";
+        visuals.animationDescription = `Strongly overheating Plaster of Paris beyond 200°C drives off its remaining water of crystallization, converting it into anhydrous "dead burnt plaster" that has lost its ability to set with water.`;
+        conceptualExplanationFoundational = "If Plaster of Paris is heated too strongly (above ~200°C), it loses its last trace of water entirely, becoming anhydrous calcium sulfate. Unlike Plaster of Paris, this 'dead burnt plaster' no longer hardens when mixed with water, so it is chemically useless for casting.";
+        conceptualExplanationAdvanced = "Complete anhydrous CaSO4 loses the structural water channels needed to rapidly re-form the interlocking gypsum crystal lattice on rehydration, which is why over-heated plaster fails to set.";
+      } else if (singleFormula === "C6H12O6" || singleFormula === "GLUCOSE" || singleFormula === "FRUCTOSE") {
+        balancedEquation = "C₆H₁₂O₆(s) --[Heat]--> 6C(s) + 6H₂O(g) (Caramelization / Charring)";
+        productsData = [
+          { formula: "C", name: "Amorphous Carbon Solid (Char)", pubchemId: "5462310", state: "s" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 220.0;
+        deltaS_rxn = 410.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Steam";
+        visuals.animationDescription = "Heating solid glucose/fructose causes it to melt, turn amber-brown (caramelization), and eventually char completely into a dry, black carbonaceous solid releasing heavy steam.";
+        conceptualExplanationFoundational = "When simple hexose sugars like glucose or fructose are heated, they undergo caramelization and thermal degradation. If heated strongly, they char into elemental black carbon (charcoal) and release steam.";
+        conceptualExplanationAdvanced = "Thermal decomposition and dehydration of a hexose sugar. High temperatures drive intramolecular elimination of water, leaving behind carbonaceous char and gaseous H₂O.";
+      } else if (singleFormula === "C12H22O11" || singleFormula === "MALTOSE" || singleFormula === "SUCROSE") {
+        balancedEquation = "C₁₂H₂₂O₁₁(s) --[Heat]--> 12C(s) + 11H₂O(g) (Charring)";
+        productsData = [
+          { formula: "C", name: "Amorphous Carbon Solid (Char)", pubchemId: "5462310", state: "s" },
+          { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+        ];
+        deltaH_rxn = 430.0;
+        deltaS_rxn = 780.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Steam";
+        visuals.animationDescription = "Maltose/sucrose sugar melts, caramelizes, and chars under strong heat, forming a rising, black porous column of carbon solid while evolving hot steam.";
+        conceptualExplanationFoundational = "Solid sugars like maltose undergo pyrolysis and dehydration under heat, splitting completely into solid black carbon and water vapor.";
+        conceptualExplanationAdvanced = "Thermal degradation of a disaccharide. Heating above the melting point initiates glycosidic bond hydrolysis followed by dehydration of glucose monomers to solid carbon.";
+      } else {
+        balancedEquation = `${single.formula}(s) --[Heat]--> decomposed species + gas`;
+        productsData = [
+          { formula: `${single.formula}_Residue`, name: `Decomposed Chemical Residue`, pubchemId: "1019001", state: "s" },
+          { formula: "Gas", name: "Evolved Gases", pubchemId: "1019002", state: "g" }
+        ];
+        deltaH_rxn = 120.0;
+        deltaS_rxn = 110.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Released Gas";
+        visuals.animationDescription = `Vaporization and splitting! Applying high energy decomposition pathways to ${single.label} causing solid/liquid breakdown, releasing bubbles/fumes and leaving residual material at the bottom.`;
+        conceptualExplanationFoundational = `A classic thermal decomposition. Single reactant ${single.label} absorbs heat energy, breaking its primary chemical bonds into simpler constituent compounds.`;
+        conceptualExplanationAdvanced = `This is a thermolytic degradation under dry/neat or solvent conditions where the reactant ${single.label} absorbs thermodynamic enthalpy to drive bond-cleavage pathways.`;
+      }
+    }
+    // Plaster of Paris + Water (the "setting" reaction -- exothermic rehydration back into Gypsum)
+    else if ((hasFormula("CASO4·0.5H2O") || hasFormula("CASO4.0.5H2O") || hasFormula("PLASTER OF PARIS")) && (hasFormula("H2O") || hasFormula("WATER"))) {
+      reactionClass = "Hydration / Setting Reaction";
+      balancedEquation = "CaSO₄·½H₂O(s) + 1½H₂O(l) --> CaSO₄·2H₂O(s)";
+      productsData = [
+        { formula: "CaSO4·2H2O", name: "Gypsum (Calcium Sulfate Dihydrate)", pubchemId: "24928", state: "s" }
+      ];
+      deltaH_rxn = -17.0;
+      deltaS_rxn = -60.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = false;
+      visuals.gasName = "";
+      visuals.animationDescription = "The classic 'setting' reaction! Mixing Plaster of Paris powder with water forms a workable paste that slowly warms up and hardens within minutes into a solid, interlocking crystalline mass of Gypsum.";
+      conceptualExplanationFoundational = "This is the famous setting reaction used to make plaster casts, chalk, and sculpture molds. Plaster of Paris (CaSO4·½H2O) reabsorbs water and slowly recrystallizes back into hard, solid Gypsum (CaSO4·2H2O), expanding very slightly as it sets.";
+      conceptualExplanationAdvanced = "The exothermic rehydration nucleates and grows an interlocking network of needle-like gypsum crystals, which is what gives set plaster its mechanical rigidity. The slight volume expansion during crystallization is why Plaster of Paris faithfully fills fine mold details.";
+      arrowPushingDetails = "CaSO4·½H2O(s) + 1½H2O(l) → CaSO4·2H2O(s) (direct recombination with water of crystallization, no ions in solution)";
+      advice.push("This is why Plaster of Paris must be stored in an airtight container -- ambient moisture alone can slowly trigger the same setting reaction!");
+    }
+    // Chlorine gas + Slaked Lime (Calcium Hydroxide) -> Bleaching Powder
+    else if ((hasFormula("CL2") || hasFormula("CHLORINE")) && (hasFormula("CA(OH)2") || hasFormula("CALCIUM HYDROXIDE") || hasFormula("SLAKED LIME"))) {
+      // Unlike the limewater test elsewhere (which correctly uses aqueous Ca(OH)2), industrial
+      // bleaching-powder manufacture passes chlorine gas over DRY slaked lime powder, not a solution
+      // -- so the generic "Aqueous Calcium Hydroxide" auto-label from isBase() would be chemically
+      // wrong here specifically. Override it back to the correct solid/dry form for this reaction.
+      reactantsData = reactantsData.map(r =>
+        r.formula.toUpperCase().includes("CA(OH)2")
+          ? { ...r, name: "Solid Calcium Hydroxide (Dry Slaked Lime)" }
+          : r
+      );
+      reactionClass = "Combination / Halogenation";
+      balancedEquation = "Ca(OH)₂(s) + Cl₂(g) --> CaOCl₂(s) + H₂O(l)";
+      productsData = [
+        { formula: "CaOCl2", name: "Bleaching Powder (Calcium Hypochlorite)", pubchemId: "24504", state: "s" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -110.0;
+      deltaS_rxn = -40.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = false;
+      visuals.gasName = "";
+      visuals.precipitateColor = "";
+      visuals.animationDescription = "Pale greenish-yellow Chlorine gas is passed over dry, powdery slaked lime. The lime absorbs the gas and turns into a dull white powder with a sharp, pungent chlorine smell -- Bleaching Powder.";
+      conceptualExplanationFoundational = "A classic CBSE Class 10 reaction. Chlorine gas reacts with dry slaked lime (calcium hydroxide) to produce bleaching powder (calcium oxychloride), an important industrial disinfectant and bleaching agent.";
+      conceptualExplanationAdvanced = "Bleaching powder is technically a mixed salt of hypochlorous and hydrochloric acid (Ca(OCl)Cl), containing calcium bound to both a hypochlorite (OCl-) and a chloride (Cl-) ion. Its bleaching and disinfecting action comes from slow release of active chlorine/hypochlorite oxidizing species.";
+      arrowPushingDetails = "Ca(OH)2(s) + Cl2(g) → Ca(OCl)Cl(s) + H2O(l) (chlorine disproportionates onto the calcium hydroxide lattice, forming one Ca-OCl and one Ca-Cl bond)";
+      advice.push("Try passing excess Chlorine gas over Calcium Hydroxide slurry instead of dry powder to compare industrial wet-process bleaching powder manufacture!");
+    }
+    // Carbon + O2 reaction with limited vs excess Oxygen supply.
+    // hasFormula("C") checks substring containment, so it would previously also match any compound
+    // that merely contains the letter "C" anywhere (e.g. "Ca(OH)2", "NaHCO3", "CuSO4"), incorrectly
+    // classifying totally unrelated reactions as carbon combustion. Elemental carbon is matched by
+    // exact formula/label equality instead.
+    else if ((list.some(r => ["C", "CARBON"].includes(r.formula.toUpperCase()) || ["COAL", "CHARCOAL", "CARBON"].includes(r.label.toUpperCase()))) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      const o2Reactant = findReactant("O2") || findReactant("OXYGEN");
+      const supply = o2Reactant?.gasSupply || "excess";
+      reactionClass = "Combustion / Oxide Formation";
+      if (supply === "limited") {
+        balancedEquation = "2C(s) + O₂(g) --[Heat]--> 2CO(g) (Incomplete Combustion)";
+        productsData = [
+          { formula: "CO", name: "Carbon Monoxide (Extremely Toxic Gas)", pubchemId: "281", state: "g" }
+        ];
+        deltaH_rxn = -221.0; 
+        deltaS_rxn = 178.0;
+        thermoType = "Exothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Monoxide (CO)";
+        visuals.animationDescription = `Heating carbon coal with a restricted, limited Oxygen supply results in incomplete combustion, generating toxic colorless Carbon Monoxide gas.`;
+        conceptualExplanationFoundational = "When there is not enough oxygen, combustion of carbon is incomplete. Dangerous toxic carbon monoxide gas is formed instead of carbon dioxide.";
+        conceptualExplanationAdvanced = "Ambient oxygen scarcity prevents carbon species from being oxidized to +4 state. The system stabilizes at the carbon monoxide (+2) stage.";
+      } else {
+        balancedEquation = "C(s) + O₂(g) --[Heat]--> CO₂(g) (Complete Combustion)";
+        productsData = [
+          { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" }
+        ];
+        deltaH_rxn = -393.5;
+        deltaS_rxn = 2.9;
+        thermoType = "Exothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Carbon Dioxide (CO₂)";
+        visuals.animationDescription = `Vigorous complete combustion of carbon coal in an abundant excess oxygen supply, producing clean Carbon Dioxide gas.`;
+        conceptualExplanationFoundational = "Carbon reacts completely with excess oxygen gas. The carbon is fully oxidized to form stable carbon dioxide gas.";
+        conceptualExplanationAdvanced = "With thermodynamic oxygen abundance, charcoal carbon undergoes full oxidation to gaseous CO₂ with high thermal evolution (ΔH = -393.5 kJ/mol).";
+      }
+    }
+    // Hexane + O2 combustion
+    else if ((hasFormula("C6H14") || hasFormula("HEXANE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion";
+      balancedEquation = "2C₆H₁₄(l) + 19O₂(g) --[Heat]--> 12CO₂(g) + 14H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -8331.0; 
+      deltaS_rxn = 415.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Flame";
+      visuals.animationDescription = `Vigorous rapid combustion of Hexane Alkane hydrocarbon in Oxygen, producing an intense hot flame, releasing Carbon Dioxide gas bubbles, steam, and high heat energy.`;
+      conceptualExplanationFoundational = "Hexane is a flammable liquid alkane hydrocarbon. In the presence of oxygen and heat, it burns cleanly to produce carbon dioxide and water vapor releasing massive amounts of heat.";
+      conceptualExplanationAdvanced = "Complete combustion of an alkane (CnH2n+2). The massive exothermic enthalpy (ΔH° ≈ -4165 kJ/mol-hexane) drives extremely high local temperature. This reaction involves radical-chain mechanisms initiating with oxygen activation followed by methyl/methylene radical carbon-backbone collapse.";
+    }
+    // Stearic Acid + O2 combustion
+    else if ((hasFormula("C18H36O2") || hasFormula("STEARIC ACID") || hasFormula("STEARIC")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion";
+      balancedEquation = "C₁₈H₃₆O₂(s) + 26O₂(g) --[Heat]--> 18CO₂(g) + 18H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -11280.0; 
+      deltaS_rxn = 520.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide, Smoke & Steam";
+      visuals.animationDescription = `Stearic acid melts into a liquid pool, then vaporizes and burns in oxygen, typical of candle wax combustion. It releases carbon dioxide gas, steam, and generates a bright yellow flame.`;
+      conceptualExplanationFoundational = "Stearic acid is a solid saturated fatty acid commonly found in candle wax. It melts and burns in oxygen, reacting to form carbon dioxide, steam, and releasing heat.";
+      conceptualExplanationAdvanced = "Full oxidation of a C18 long-chain carboxylic acid. After melting (melting point ~69°C), high temperatures vaporize stearic acid molecule fragments, initiating radical cleavage which reacts with oxygen species (ΔH° ≈ -11.2 MJ/mol).";
+    }
+    // KMnO4 + H2C2O4 + H2SO4 (Redox Titration!)
+    else if ((hasFormula("KMnO4") || hasFormula("PERMANGANATE")) && (hasFormula("H2C2O4") || hasFormula("OXALIC ACID") || hasFormula("OXALIC")) && (hasFormula("H2SO4") || hasFormula("SULFURIC ACID") || hasFormula("SULFURIC"))) {
+      reactionClass = "Redox Reaction / Titration";
+      balancedEquation = "2KMnO₄(aq) + 5H₂C₂O₄(aq) + 3H₂SO₄(aq) --> K₂SO₄(aq) + 2MnSO₄(aq) + 10CO₂(g) + 8H₂O(l)";
+      productsData = [
+        { formula: "MnSO4", name: "Manganese(II) Sulfate", pubchemId: "24584", state: "aq" },
+        { formula: "K2SO4", name: "Potassium Sulfate", pubchemId: "24507", state: "aq" },
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -250.0;
+      deltaS_rxn = 450.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide (CO₂)";
+      visuals.animationDescription = `Oxalic Acid-Permanganate titration! Heating is required. When Potassium Permanganate (purple solution) is introduced, it reacts with Oxalic Acid under hot sulfuric acid catalysis. The intense purple color completely dechlorinates/disappears (turns colorless due to Mn²⁺ formation) while Carbon Dioxide bubbles vigorously evolve.`;
+      conceptualExplanationFoundational = "A famous school lab redox titration! Deep purple Potassium Permanganate is reduced to colorless Manganese(II) ions by oxalic acid in the presence of hot sulfuric acid, while the oxalic acid is oxidized to carbon dioxide gas.";
+      conceptualExplanationAdvanced = "The Mn(VII) center in MnO₄⁻ is reduced to Mn(II) in an 5-electron transfer process, while oxalic acid's carbon (+3) is oxidized to CO₂ (+4) releasing carbon dioxide. The reaction is autocatalytic, catalyzed by the Mn²⁺ products formed.";
+    }
+    // Oxalic Acid + KOH / NaOH (Acid-Base Neutralization, not a redox titration -- distinct from the
+    // permanganate case above). Oxalic acid is diprotic, so complete neutralization needs 2 equivalents
+    // of base and yields the oxalate salt plus water.
+    else if ((hasFormula("H2C2O4") || hasFormula("OXALIC ACID") || hasFormula("OXALIC")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE")) && !hasFormula("KMnO4") && !hasFormula("PERMANGANATE")) {
+      const usesKOH = hasFormula("KOH") || hasFormula("POTASSIUM HYDROXIDE");
+      const baseFormula = usesKOH ? "KOH" : "NaOH";
+      const baseName = usesKOH ? "Potassium Hydroxide" : "Sodium Hydroxide";
+      const saltFormula = usesKOH ? "K2C2O4" : "Na2C2O4";
+      const saltName = usesKOH ? "Potassium Oxalate" : "Sodium Oxalate";
+      const saltPubchemId = usesKOH ? "11413" : "6125";
+
+      reactionClass = "Neutralization / Double Displacement";
+      balancedEquation = `H₂C₂O₄(aq) + 2${baseFormula}(aq) --> ${saltFormula}(aq) + 2H₂O(l)`;
+      productsData = [
+        { formula: saltFormula, name: saltName, pubchemId: saltPubchemId, state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -111.8; // two neutralization steps, roughly double the standard -57.1 kJ/mol per mole of water
+      deltaS_rxn = 84.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = false;
+      visuals.gasName = "";
+      visuals.animationDescription = `Colorless Oxalic Acid solution is neutralized by ${baseName} solution. No gas evolution or color change occurs, but the solution warms noticeably as both acidic protons are neutralized in sequence.`;
+      conceptualExplanationFoundational = `Oxalic acid is a diprotic organic acid, meaning it can donate two acidic protons (H⁺) per molecule. Each proton is neutralized by a hydroxide ion (OH⁻) from ${baseName}, forming water and the soluble ${saltName} salt.`;
+      conceptualExplanationAdvanced = `Both acidic protons of H₂C₂O₄ (pKa1 ≈ 1.25, pKa2 ≈ 4.14) are sequentially neutralized by the strong base. The net ionic reaction proceeds as 2H⁺(aq) + 2OH⁻(aq) → 2H₂O(l), releasing the combined heat of neutralization across both proton-transfer steps.`;
+      arrowPushingDetails = "The OH⁻ nucleophile abstracts each acidic proton from the oxalic acid's two carboxyl (-COOH) groups in two sequential proton-transfer steps, forming water and the doubly-deprotonated oxalate (C₂O₄²⁻) dianion.";
+      advice.push("Add a phenolphthalein indicator to visually track the neutralization endpoint!");
+      advice.push("Compare this to the Oxalic Acid + Potassium Permanganate redox titration to see the difference between an acid-base and a redox reaction of the very same acid.");
+    }
+    // Decane + O2 combustion
+    else if ((hasFormula("C10H22") || hasFormula("DECANE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion";
+      balancedEquation = "2C₁₀H₂₂(l) + 31O₂(g) --[Heat]--> 20CO₂(g) + 22H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -13556.0; 
+      deltaS_rxn = 710.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Water Vapor";
+      visuals.animationDescription = `Vigorous rapid combustion of liquid Decane (saturated alkane) in oxygen, generating a hot brilliant orange flame with carbon dioxide gas and steam clouds.`;
+      conceptualExplanationFoundational = "Decane is a heavy liquid alkane hydrocarbon (C10H22). In excess oxygen and heat, it undergoes highly exothermic combustion, breaking apart to form CO2 gas and water vapor.";
+      conceptualExplanationAdvanced = "Complete combustion of an alkane according to general formula CnH2n+2. The high carbon cluster density (C10) results in higher soot generation if oxygen supply diminishes, but under complete conditions, yields full conversion with high heat output (ΔH° ≈ -6.7 MJ/mol).";
+    }
+    // Pentene + O2 combustion
+    else if ((hasFormula("C5H10") || hasFormula("PENTENE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion";
+      balancedEquation = "2C₅H₁₀(l) + 15O₂(g) --[Heat]--> 10CO₂(g) + 10H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -6722.0; 
+      deltaS_rxn = 315.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Steam";
+      visuals.animationDescription = `Rapid combustion of Pentene (alkene hydrocarbon) with oxygen, producing light carbon dioxide gas bubbles and hot steam with a yellowish-blue flame.`;
+      conceptualExplanationFoundational = "Pentene is a flammable, unsaturated alkene hydrocarbon. In excess oxygen, it burns readily to yield carbon dioxide gas and water vapor, releasing high heat energy.";
+      conceptualExplanationAdvanced = "Oxidization of an alkene (C5H10). Unsaturated hydrocarbons burn with a slightly sootier flame compared to alkanes due to higher carbon-to-hydrogen ratio, but full excess oxygen drives clean conversion to CO2 and H2O.";
+    }
+    // Pentene + H2 (Alkene Hydrogenation)
+    else if ((hasFormula("C5H10") || hasFormula("PENTENE")) && (hasFormula("H2") || hasFormula("HYDROGEN"))) {
+      reactionClass = "Addition Reaction / Hydrogenation";
+      balancedEquation = "C₅H₁₀(l) + H₂(g) --[Ni / Pt]--> C₅H₁₂(l)";
+      productsData = [
+        { formula: "C5H12", name: "Pentane Gas/Liquid", pubchemId: "10041", state: "l" }
+      ];
+      deltaH_rxn = -125.0; 
+      deltaS_rxn = -130.0;
+      thermoType = "Exothermic";
+      visuals.precipitateColor = "";
+      visuals.animationDescription = `Hydrogen gas is bubbled into liquid Pentene. In the presence of Nickel or Platinum catalyst, the C=C double bond undergoes electrophilic addition, combining with hydrogen molecules to produce saturated Pentane (C5H12).`;
+      conceptualExplanationFoundational = "An addition reaction! Unsaturated pentene containing a carbon-carbon double bond reacts with hydrogen to become saturated pentane. A transition metal like Nickel or Platinum acts as a catalyst helper to speed up this reaction.";
+      conceptualExplanationAdvanced = "Catalytic hydrogenation of alkene. The reactant H2 adsorb on the metal surface (Ni, Pd, or Pt), weakening the H-H bond. The alkene coordinates with the catalyst metal, enabling stepwise element transfer to the double bond to yield a saturated alkane (C5H12).";
+    }
+    // Citric Acid + NaOH Neutralization
+    else if ((hasFormula("C6H8O7") || hasFormula("CITRIC ACID") || hasFormula("CITRIC")) && (hasFormula("NaOH") || hasFormula("SODIUM HYDROXIDE"))) {
+      reactionClass = "Acid-Base Neutralization";
+      balancedEquation = "C₆H₈O₇(aq) + 3NaOH(aq) --> Na₃C₆H₅O₇(aq) + 3H₂O(l)";
+      productsData = [
+        { formula: "Na3C6H5O7", name: "Sodium Citrate (aq)", pubchemId: "6224", state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -162.0; 
+      deltaS_rxn = 180.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Acid-Base neutralization! Mildly sour Citric Acid is neutralized by strong alkali Sodium Hydroxide, combining to form water and soluble Sodium Citrate salt. Heat is slightly released.`;
+      conceptualExplanationFoundational = "Citric acid is a weak organic triprotic acid found in citrus fruits like lemons. When mixed with strong sodium hydroxide base, they neutralize each other, producing sodium citrate salt and water, warming up the solution.";
+      conceptualExplanationAdvanced = "A classic triprotic neutralization. Citric acid contains three carboxylic acid (-COOH) groups, requiring three moles of hydroxide ions (OH⁻) to completely deprotonate the citrate core to citric anion (C6H5O7³⁻).";
+    }
+    // Tartaric Acid + NaOH Neutralization
+    else if ((hasFormula("C4H6O6") || hasFormula("TARTARIC ACID") || hasFormula("TARTARIC")) && (hasFormula("NaOH") || hasFormula("SODIUM HYDROXIDE"))) {
+      reactionClass = "Acid-Base Neutralization";
+      balancedEquation = "C₄H₆O₆(aq) + 2NaOH(aq) --> Na₂C₄H₄O₆(aq) + 2H₂O(l)";
+      productsData = [
+        { formula: "Na2C4H4O6", name: "Sodium Tartrate", pubchemId: "23690623", state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -108.0; 
+      deltaS_rxn = 120.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Neutralization of Tartaric Acid (diprotic fruit acid) with strong Sodium Hydroxide, yielding Sodium Tartrate salt and neutral liquid water.`;
+      conceptualExplanationFoundational = "Tartaric acid is a diprotic organic acid naturally present in grapes. It reacts with sodium hydroxide base, replacing acid hydrogen atoms with sodium to yield sodium tartrate salt and water.";
+      conceptualExplanationAdvanced = "Deprotonation of diprotic tartaric acid [HOOC-CH(OH)-CH(OH)-COOH]. Two equivalent hydroxide molecules neutralize the double carboxylic cores (pKa1 ≈ 2.89, pKa2 ≈ 4.40) to form fully deprotonated tartrate (C4H4O6²⁻).";
+    }
+    // Citric Acid + NaHCO3 (Volcano Fizzy Endothermic Reaction!)
+    else if ((hasFormula("C6H8O7") || hasFormula("CITRIC ACID") || hasFormula("CITRIC")) && (hasFormula("NaHCO3") || hasFormula("BAKING SODA") || hasFormula("BICARBONATE"))) {
+      reactionClass = "Acid-Base + Decomposition";
+      balancedEquation = "C₆H₈O₇(aq) + 3NaHCO₃(s) --> Na₃C₆H₅O₇(aq) + 3CO₂(g) + 3H₂O(l)";
+      productsData = [
+        { formula: "Na3C6H5O7", name: "Sodium Citrate", pubchemId: "6224", state: "aq" },
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = 70.0; 
+      deltaS_rxn = 560.0;
+      thermoType = "Endothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide (CO₂) Fizz";
+      visuals.animationDescription = `Classic fizzing chemical kitchen volcano! Citric Acid reacts with solid Sodium Bicarbonate. Massive volumes of cold Carbon Dioxide gas bubbles are rapidly generated, causing vigorous frothing and cooling down the beaker noticeably (Endothermic!).`;
+      conceptualExplanationFoundational = "A gorgeous fizzy science experiment! Citric acid gets mixed with baking soda (sodium bicarbonate). Carbonic acid is formed, which quickly splits to release carbon dioxide gas bubbles, causing massive effervescence and cooling the mixture down!";
+      conceptualExplanationAdvanced = "A dynamic endothermic neutralization and decomposition loop. Deprotonation of citric acid generates H₃O⁺, which reacts with HCO₃⁻ to form carbonic acid (H₂CO₃). Carbonic acid undergoes rapid spontaneous dehydration to yield CO₂ gas bubbles, driving high positive entropy (ΔS° ≈ +560 J/mol K) and absorbing heat.";
+    }
+    // Acetaldehyde + AgNO3 (Silver Mirror / Tollens' Test)
+    else if ((hasFormula("CH3CHO") || hasFormula("ACETALDEHYDE")) && (hasFormula("AgNO3") || hasFormula("SILVER NITRATE") || hasFormula("Ag+"))) {
+      reactionClass = "Redox / Silver Mirror Test";
+      balancedEquation = "CH₃CHO(aq) + 2Ag⁺(aq) + H₂O(l) --> CH₃COOH(aq) + 2Ag(s)↓ + 2H⁺(aq)";
+      productsData = [
+        { formula: "Ag", name: "Metallic Silver Mirror", pubchemId: "23954", state: "s" },
+        { formula: "CH3COOH", name: "Ethanoic Acid", pubchemId: "176", state: "aq" }
+      ];
+      deltaH_rxn = -85.0; 
+      deltaS_rxn = 45.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "clear";
+      visuals.solutionColorEnd = "silver";
+      visuals.precipitateColor = "silver";
+      visuals.animationDescription = `Tollens' Silver Mirror test! Gaseous or dissolved Acetaldehyde is introduced into Tollens' reagent container. Colored Silver ions are reduced to a beautifully shiny, metallic silver mirror coating depositing on the glass walls.`;
+      conceptualExplanationFoundational = "The classic Tollens' silver mirror test for aldehydes! Acetaldehyde is oxidized into acetic acid, simultaneously reducing colorless silver ions into solid metallic silver, creating a mirror finish.";
+      conceptualExplanationAdvanced = "Analytical test to distinguish aldehydes from ketones. The active oxidant is diamminesilver(I) complex [Ag(NH3)2]+. Carbonyl oxidation of ethanal yields acetate while single electron reduction shifts Ag(I) to Ag(0) nanoparticles.";
+    }
+    // Acetone + Iodine + NaOH (Iodoform Test)
+    else if ((hasFormula("CH3COCH3") || hasFormula("ACETONE")) && (hasFormula("I2") || hasFormula("IODINE")) && (hasFormula("NaOH") || hasFormula("SODIUM HYDROXIDE"))) {
+      reactionClass = "Haloform Reaction / Iodoform Test";
+      balancedEquation = "CH₃COCH₃(aq) + 3I₂(aq) + 4NaOH(aq) --> CHI₃(s)↓ + CH₃COONa(aq) + 3NaI(aq) + 3H₂O(l)";
+      productsData = [
+        { formula: "CHI3", name: "Iodoform (Yellow Precipitate)", pubchemId: "6074", state: "s" },
+        { formula: "CH3COONa", name: "Sodium Acetate", pubchemId: "517045", state: "aq" }
+      ];
+      deltaH_rxn = -140.0; 
+      deltaS_rxn = 110.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "orange";
+      visuals.solutionColorEnd = "yellow";
+      visuals.precipitateColor = "yellow";
+      visuals.animationDescription = `Haloform test! Acetone reacts with dark orange Iodine solution under sodium hydroxide catalysis, instantly generating a distinct medicinal scent and heavy pale yellow iodoform crystals at the bottom.`;
+      conceptualExplanationFoundational = "The classic iodoform test detecting methyl ketones! Adding iodine a base to acetone converts its methyl terminal group selectively into a pale-yellow crystalline precipitate named iodoform.";
+      conceptualExplanationAdvanced = "Reversible alpha-proton halogenation, repeating until triiodoacetone forms. In base, OH- nucleophilically attacks the carbonyl carbon, initiating C-C bond cleavage of the triiodomethyl group and releasing a yellow iodoform solid.";
+    }
+    // Ethene/Propene/Pentene + Bromine (Unsaturation Test)
+    else if ((hasFormula("C2H4") || hasFormula("C3H6") || hasFormula("C5H10") || hasFormula("PROPENE") || hasFormula("PENTENE") || hasFormula("ETHENE")) && (hasFormula("Br2") || hasFormula("BROMINE"))) {
+      const alkene = hasFormula("C5H10") || hasFormula("PENTENE") ? "C5H10" : (hasFormula("C3H6") || hasFormula("PROPENE") ? "C3H6" : "C2H4");
+      reactionClass = "Electrophilic Addition / Bromine Decorization";
+      balancedEquation = `${alkene} + Br₂ --> ${alkene}Br₂`;
+      productsData = [
+        { formula: `${alkene}Br2`, name: `Dibromo-${alkene}`, pubchemId: "12480", state: "l" }
+      ];
+      deltaH_rxn = -115.0; 
+      deltaS_rxn = -110.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "orange";
+      visuals.solutionColorEnd = "clear";
+      visuals.animationDescription = `Unsaturation test! Orange-brown Bromine water is added to the unsaturated alkene. An instantaneous addition reaction takes place, completely decolorizing the orange solution to crystal clear.`;
+      conceptualExplanationFoundational = "The diagnostic test for double bonds! Liquid or gas bromine adds across double bonds, generating a colorless dihalide. The red-orange color disappears completely, proving the chemical is an alkene.";
+      conceptualExplanationAdvanced = "Electrophilic addition cycle. The pi-cloud coordinates with molecular bromine to create a cyclic bromonium ring intermediate. Rearside attack by bromide ion yields vicinal dihalide, shifting absorption out of the visible spectra.";
+    }
+    // Acetylene + Bromine (Alkyne Test)
+    else if ((hasFormula("C2H2") || hasFormula("ACETYLENE")) && (hasFormula("Br2") || hasFormula("BROMINE"))) {
+      reactionClass = "Addition Reaction / Alkyne Bromination";
+      balancedEquation = "C₂H₂(g) + 2Br₂(aq) --> C₂H₂Br₄(l)";
+      productsData = [
+        { formula: "C2H2Br4", name: "1,1,2,2-Tetrabromoethane", pubchemId: "6571", state: "l" }
+      ];
+      deltaH_rxn = -225.0; 
+      deltaS_rxn = -210.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "orange";
+      visuals.solutionColorEnd = "clear";
+      visuals.animationDescription = `Gaseous Acetylene reacts with deep orange bromine water. Two equivalents of bromine are added across the carbon-carbon triple bond, completely and instantly draining the orange-brown tint to translucent.`;
+      conceptualExplanationFoundational = "Like alkenes, alkynes have unsaturated bonds (a triple bond). Bromine adds twice to completely saturate the molecule to tetrabromoethane, causing the orange bromine color to fade.";
+      conceptualExplanationAdvanced = "Stepwise addition where acetylene coordinates to form a dibromoalkene, which undergoes secondary electrophilic attack of bromine to form fully saturated 1,1,2,2-tetrabromoethane.";
+    }
+    // Acetylene + O2 (Oxy-acetylene Combustion)
+    else if ((hasFormula("C2H2") || hasFormula("ACETYLENE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion / Oxy-acetylene Flame";
+      balancedEquation = "2C₂H₂(g) + 5O₂(g) --[Heat]--> 4CO₂(g) + 2H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -2600.0; 
+      deltaS_rxn = 220.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Water Vapor";
+      visuals.animationDescription = `Extremely strong, high-temperature combustion! Acetylene gas ignites in oxygen to generate an intensely glowing orange-white flame, venting steam and carbon dioxide.`;
+      conceptualExplanationFoundational = "A classic welding reaction! Acetylene gas burns in oxygen with a flame hot enough to melt steel. It forms carbon dioxide gas and water vapor and releases immense heat energy.";
+      conceptualExplanationAdvanced = "The high molecular unstability of the acetylene triple bond and massive enthalpy of combustion (ΔH° ≈ -1.3 MJ/mol) results in highly concentrated thermal output, raising temperatures up to 3100°C.";
+    }
+    // Bromoethane + KOH (aqueous substitution)
+    else if ((hasFormula("C2H5Br") || hasFormula("BROMOETHANE")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      reactionClass = "Nucleophilic Substitution (Sn2)";
+      balancedEquation = isNaOH 
+        ? "C₂H₅Br(l) + NaOH(aq) --> C₂H₅OH(aq) + NaBr(aq)"
+        : "C₂H₅Br(l) + KOH(aq) --> C₂H₅OH(aq) + KBr(aq)";
+      productsData = [
+        { formula: "C2H5OH", name: "Ethanol", pubchemId: "702", state: "aq" },
+        { formula: isNaOH ? "NaBr" : "KBr", name: isNaOH ? "Sodium Bromide" : "Potassium Bromide", pubchemId: isNaOH ? "10113" : "24447", state: "aq" }
+      ];
+      deltaH_rxn = -75.0; 
+      deltaS_rxn = 15.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Nucleophilic substitution! Warm bromoethane transitions to ethanol under alkaline hydroxide attacks, smoothly yielding ${isNaOH ? 'sodium' : 'potassium'} bromide solution.`;
+      conceptualExplanationFoundational = "A textbook SN2 nucleophilic substitution! The active hydroxide ion (OH-) from the base attacks bromoethane, displacing bromine to form ethanol and mineral salt.";
+      conceptualExplanationAdvanced = "Bimolecular substitution (Sn2) pathways. Hydroxide ions coordinate backside attack at the alpha-carbon transition state, causing orbital inversion and bromide departure.";
+    }
+    // Bromomethane + NaOH/KOH (aqueous substitution)
+    else if ((hasFormula("CH3Br") || hasFormula("BROMOMETHANE")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      reactionClass = "Nucleophilic Substitution (Sn2) / Methylation";
+      balancedEquation = isNaOH
+        ? "CH₃Br(l) + NaOH(aq) --> CH₃OH(aq) + NaBr(aq)"
+        : "CH₃Br(l) + KOH(aq) --> CH₃OH(aq) + KBr(aq)";
+      productsData = [
+        { formula: "CH3OH", name: "Methanol (Methyl Alcohol)", pubchemId: "887", state: "aq" },
+        { formula: isNaOH ? "NaBr" : "KBr", name: isNaOH ? "Sodium Bromide" : "Potassium Bromide", pubchemId: isNaOH ? "10113" : "24447", state: "aq" }
+      ];
+      deltaH_rxn = -82.0;
+      deltaS_rxn = 18.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Methyl halide substitution! Gaseous or liquified Bromomethane reacts quickly with strong alkali hydroxide, yielding toxic wood alcohol (Methanol) and a mineral bromide salt.`;
+      conceptualExplanationFoundational = "The simplest alkyl bromide substitution! Bromomethane reacts with sodium hydroxide or potassium hydroxide base to yield dangerous methyl alcohol (methanol) and sodium or potassium bromide.";
+      conceptualExplanationAdvanced = "Extremely rapid SN2 nucleophilic attack at the relatively unhindered methyl carbon. The high nucleophilicity of hydroxide drives the displacement of the bromide leaving group in a single concerted step.";
+    }
+    // Dibromomethane (Two bromo-carbon) + NaOH/KOH (hydrolysis)
+    else if ((hasFormula("CH2Br2") || hasFormula("DIBROMOMETHANE")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      reactionClass = "Geminal Dihalide Hydrolysis";
+      balancedEquation = isNaOH
+        ? "CH₂Br₂(l) + 2NaOH(aq) --> HCHO(aq) + 2NaBr(aq) + H₂O(l)"
+        : "CH₂Br₂(l) + 2KOH(aq) --> HCHO(aq) + 2KBr(aq) + H₂O(l)";
+      productsData = [
+        { formula: "HCHO", name: "Formaldehyde / Methanal", pubchemId: "712", state: "aq" },
+        { formula: isNaOH ? "NaBr" : "KBr", name: isNaOH ? "Sodium Bromide" : "Potassium Bromide", pubchemId: isNaOH ? "10113" : "24447", state: "aq" }
+      ];
+      deltaH_rxn = -95.0;
+      deltaS_rxn = 35.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Formaldehyde Gas smell";
+      visuals.animationDescription = `Geminal halide hydrolysis! Liquid dibromomethane reacts with basic hydroxide. Two bromines are substituted, but the resulting unstable diol spontaneously dehydrates into sharp-smelling Formaldehyde (Methanal).`;
+      conceptualExplanationFoundational = "Hydrolyzing two bromines attached to a single carbon atom! Unstable intermediate molecules containing two -OH groups decompose immediately inside water, releasing sharp-scented formaldehyde gas and salt.";
+      conceptualExplanationAdvanced = "Sequential nucleophilic substitutions at the same carbon. The intermediate gem-diol [CH2(OH)2] is highly thermodynamically unstable and undergoes instantaneous spontaneous dehydration (loss of H2O) to form the carbonyl double bond in formaldehyde.";
+    }
+    // 1,2-Dibromoethane (Two bromo-ethane) + NaOH/KOH (dehydrohalogenation / substitution)
+    else if ((hasFormula("C2H4Br2") || hasFormula("1,2-DIBROMOETHANE") || hasFormula("DIBROMOETHANE")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      const isConc = findReactant("KOH")?.concentration === "concentrated" || findReactant("NAOH")?.concentration === "concentrated";
+      
+      if (isConc) {
+        // High concentration / alkaline elimination
+        reactionClass = "Double Dehydrohalogenation (Elimination)";
+        balancedEquation = isNaOH
+          ? "C₂H₄Br₂(l) + 2NaOH(aq) --> C₂H₂(g)↑ + 2NaBr(aq) + 2H₂O(l)"
+          : "C₂H₄Br₂(l) + 2KOH(aq) --> C₂H₂(g)↑ + 2KBr(aq) + 2H₂O(l)";
+        productsData = [
+          { formula: "C2H2", name: "Acetylene / Ethyne Gas", pubchemId: "6326", state: "g" },
+          { formula: isNaOH ? "NaBr" : "KBr", name: isNaOH ? "Sodium Bromide" : "Potassium Bromide", pubchemId: isNaOH ? "10113" : "24447", state: "aq" }
+        ];
+        deltaH_rxn = 45.0;
+        deltaS_rxn = 280.0;
+        thermoType = "Endothermic";
+        visuals.hasBubbles = true;
+        visuals.gasName = "Acetylene (Ethyne) Gas";
+        visuals.animationDescription = `Dehydrohalogenation! Hot, highly concentrated alkaline hydroxide pulls hydrogen and bromine atoms clean off 1,2-dibromoethane, producing vigorous bubbles of flammable Acetylene (Ethyne) gas.`;
+        conceptualExplanationFoundational = "Making double/triple bonds! Strong, concentrated alkaline base strips hydrogen bromide (HBr) twice from 1,2-dibromoethane to form carbon-carbon triple bonds, unleashing acetylene gas bubbles!";
+        conceptualExplanationAdvanced = "Double E2 elimination pathway. Hydroxide abstracts beta-protons under elevated alkaline conditions, forcing bromide departure. First stage yields vinyl bromide, then secondary E2 converts it to ethyne (triple bond).";
+      } else {
+        // dilute hydrolysis substitution
+        reactionClass = "Vicinal Dihalide Hydrolysis";
+        balancedEquation = isNaOH
+          ? "C₂H₄Br₂(l) + 2NaOH(aq) --> C₂H₄(OH)₂(aq) + 2NaBr(aq)"
+          : "C₂H₄Br₂(l) + 2KOH(aq) --> C₂H₄(OH)₂(aq) + 2KBr(aq)";
+        productsData = [
+          { formula: "C2H6O2", name: "Ethylene Glycol (1,2-Ethanediol)", pubchemId: "174", state: "aq" },
+          { formula: isNaOH ? "NaBr" : "KBr", name: isNaOH ? "Sodium Bromide" : "Potassium Bromide", pubchemId: isNaOH ? "10113" : "24447", state: "aq" }
+        ];
+        deltaH_rxn = -68.0;
+        deltaS_rxn = 12.0;
+        thermoType = "Exothermic";
+        visuals.animationDescription = `Hydrolysis substitute! Gentle dilute hydroxide dissolves vicinal 1,2-dibromoethane to synthesise sweet, highly hygroscopic Ethylene Glycol (anti-freeze compound) and mineral salts.`;
+        conceptualExplanationFoundational = "Substituting bromines for alcohol groups! Dilute base reacts gently with 1,2-dibromoethane, substituting both bromine atoms with hydroxyl -OH units to yield sweet ethylene glycol.";
+        conceptualExplanationAdvanced = "Stepwise double SN2 substitution. Hydroxide nucleophiles displace bromides from adjacent carbons sequentially, forming 2-bromoethanol, followed by secondary displacement to form 1,2-ethanediol.";
+      }
+    }
+    // Chloroform + NaOH/KOH (Haloform Hydrolysis)
+    else if ((hasFormula("CHCl3") || hasFormula("CHLOROFORM")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      const basePrefix = isNaOH ? "Sodium" : "Potassium";
+      const saltFormula = isNaOH ? "HCOONa" : "HCOOK";
+      const chlorideFormula = isNaOH ? "NaCl" : "KCl";
+
+      reactionClass = "Haloform Alkaline Hydrolysis";
+      balancedEquation = isNaOH
+        ? "CHCl₃(l) + 4NaOH(aq) --> HCOONa(aq) + 3NaCl(aq) + 2H₂O(l)"
+        : "CHCl₃(l) + 4KOH(aq) --> HCOOK(aq) + 3KCl(aq) + 2H₂O(l)";
+      productsData = [
+        { formula: saltFormula, name: `${basePrefix} Formate`, pubchemId: "2723812", state: "aq" },
+        { formula: chlorideFormula, name: `${basePrefix} Chloride`, pubchemId: "5234", state: "aq" }
+      ];
+      deltaH_rxn = -188.0;
+      deltaS_rxn = 45.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Chloroform hydrolysis! Dense sweet-smelling liquid Chloroform is aggressively hydrolyzed by four equivalents of alkaline hydroxide, producing highly soluble ${basePrefix} Formate salt and mineral salt.`;
+      conceptualExplanationFoundational = "A classic haloform transformation! Hydrolyzing sweet chloroform with sodium hydroxide dissolves it completely, producing non-toxic sodium formate (an organic salt) and common table salt.";
+      conceptualExplanationAdvanced = "Hydrolysis initiates with deprotonation to form a dichlorocarbene [:CCl2] intermediate, which reacts with water and base, undergoing rapid nucleophilic attack to yield carbon monoxide or formate salts.";
+    }
+    // Carbon Tetrachloride + NaOH/KOH (Hydrolysis)
+    else if ((hasFormula("CCl4") || hasFormula("CARBON TETRACHLORIDE")) && (hasFormula("KOH") || hasFormula("NAOH") || hasFormula("POTASSIUM HYDROXIDE") || hasFormula("SODIUM HYDROXIDE"))) {
+      const isNaOH = hasFormula("NAOH") || hasFormula("SODIUM HYDROXIDE");
+      const basePrefix = isNaOH ? "Sodium" : "Potassium";
+      const carbonateFormula = isNaOH ? "Na2CO3" : "K2CO3";
+      const chlorideFormula = isNaOH ? "NaCl" : "KCl";
+
+      reactionClass = "Alkaline Hydrolysis of Carbon Tetrahalides";
+      balancedEquation = isNaOH
+        ? "CCl₄(l) + 6NaOH(aq) --> Na₂CO₃(aq) + 4NaCl(aq) + 3H₂O(l)"
+        : "CCl₄(l) + 6KOH(aq) --> K₂CO₃(aq) + 4KCl(aq) + 3H₂O(l)";
+      productsData = [
+        { formula: carbonateFormula, name: `${basePrefix} Carbonate`, pubchemId: "10340", state: "aq" },
+        { formula: chlorideFormula, name: `${basePrefix} Chloride`, pubchemId: "5234", state: "aq" }
+      ];
+      deltaH_rxn = -220.0;
+      deltaS_rxn = 35.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Tetrachloride breakdown! Carbon tetrachloride undergoes exceedingly slow hydrolysis under hot, concentrated basic environments to yield soluble mineral ${basePrefix} Carbonate and chloride salts.`;
+      conceptualExplanationFoundational = "Dismantling fire extinguisher fluids! Boiling carbon tetrachloride with strong caustic lye (NaOH) forces all four chlorines off, leaving simple carbonate washing soda and standard shelf salts.";
+      conceptualExplanationAdvanced = "Slow SN2 hydrolysis under extreme alkaline conditions. The high activation energy is due to steric hindrance from the four chlorine atoms guarding the central carbon, eventually yielding orthocarbonate intermediates which collapse into carbonates.";
+    }
+    // Stearic / Oleic / Palmitic acid neutralization (Soap making from natural fatty acids)
+    else if ((hasFormula("C18H36O2") || hasFormula("STEARIC") || hasFormula("C18H34O2") || hasFormula("OLEIC") || hasFormula("C16H32O2") || hasFormula("PALMITIC")) && (hasFormula("NAOH") || hasFormula("KOH") || hasFormula("SODIUM HYDROXIDE") || hasFormula("POTASSIUM HYDROXIDE"))) {
+      const isStearic = hasFormula("C18H36O2") || hasFormula("STEARIC");
+      const isOleic = hasFormula("C18H34O2") || hasFormula("OLEIC");
+      const acidName = isStearic ? "Stearic Acid" : isOleic ? "Oleic Acid" : "Palmitic Acid";
+      const baseName = (hasFormula("KOH") || hasFormula("POTASSIUM HYDROXIDE")) ? "Potassium" : "Sodium";
+      const acidFormula = isStearic ? "C₁₇H₃₅COOH" : isOleic ? "C₁₇H₃₃COOH" : "C₁₅H₃₁COOH";
+      const soapFormula = isStearic ? "C18H35NaO2" : isOleic ? "C18H33NaO2" : "C16H31NaO2";
+      const soapCompoundFormula = isStearic 
+        ? (baseName === "Potassium" ? "C18H35KO2" : "C18H35NaO2") 
+        : isOleic 
+        ? (baseName === "Potassium" ? "C18H33KO2" : "C18H33NaO2") 
+        : (baseName === "Potassium" ? "C16H31KO2" : "C16H31NaO2");
+      const soapName = `${baseName} ${isStearic ? 'Stearate' : isOleic ? 'Oleate' : 'Palmitate'} (Soap)`;
+
+      reactionClass = "Soap Synthesis / Acid-Base Neutralization";
+      balancedEquation = `${acidFormula} + ${baseName === "Potassium" ? "KOH" : "NaOH"} --> ${soapCompoundFormula}[Soap]↓ + H₂O`;
+      productsData = [
+        { formula: soapCompoundFormula, name: soapName, pubchemId: "23668197", state: "s" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -55.5; 
+      deltaS_rxn = 15.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "clear";
+      visuals.solutionColorEnd = "white";
+      visuals.precipitateColor = "white";
+      visuals.animationDescription = `Soap synthesis from pure fats! Insoluble waxy solid ${acidName} is neutralized by hot solution of ${baseName} Hydroxide. A beautiful warm, opaque white lather of ${soapName} precipitously curds and accumulates.`;
+      conceptualExplanationFoundational = `Direct soap formation through free fat acid neutralization! The natural organic acid (${acidName}) instantly reacts with caustic alkali base (${baseName} Hydroxide) to yield pure organic soap and water.`;
+      conceptualExplanationAdvanced = `Long-chain fatty acid neutralization. Hydroxide ions deprotonate the terminal carboxylic group of ${acidName}. The resulting carboxylate ions gather into thick micellar soap curds that precipitate readily inside saline or basic mediums.`;
+    }
+    // Formic Acid + NaOH (Neutralization)
+    else if ((hasFormula("HCOOH") || hasFormula("FORMIC ACID")) && (hasFormula("NaOH") || hasFormula("SODIUM HYDROXIDE"))) {
+      reactionClass = "Acid-Base Neutralization";
+      balancedEquation = "HCOOH(aq) + NaOH(aq) --> HCOONa(aq) + H₂O(l)";
+      productsData = [
+        { formula: "HCOONa", name: "Sodium Formate", pubchemId: "2723812", state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -56.0; 
+      deltaS_rxn = 80.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = `Formic acid (simplest carboxylic acid) is neutralized by sodium hydroxide, yielding soluble Sodium Formate salt and water, emitting trace steam from the heat.`;
+      conceptualExplanationFoundational = "Ant-bite neutralization! Formic acid is a simple carboxylic acid found in ants. It neutralizes sodium hydroxide base, forming sodium formate salt and water.";
+      conceptualExplanationAdvanced = "Standard neutralization of weak methanoic acid (pKa ~3.75). Proton abstraction by hydroxide ion forms stable formate anions, resonance-stabilized across double carboxyl oxygens.";
+    }
+    // Benzaldehyde + KMnO4 (Oxidation to Benzoic Acid)
+    else if ((hasFormula("C6H5CHO") || hasFormula("C7H6O") || hasFormula("BENZALDEHYDE")) && (hasFormula("KMnO4") || hasFormula("PERMANGANATE"))) {
+      reactionClass = "Redox / Organic Oxidation";
+      balancedEquation = "3C₆H₅CHO(l) + 2KMnO₄(aq) + H₂O(l) --> 3C₆H₅COOH(s)↓ + 2MnO₂(s)↓ + 2KOH(aq)";
+      productsData = [
+        { formula: "C6H5COOH", name: "Benzoic Acid (White PPT)", pubchemId: "243", state: "s" },
+        { formula: "MnO2", name: "Manganese Dioxide (Brown PPT)", pubchemId: "14801", state: "s" }
+      ];
+      deltaH_rxn = -310.0; 
+      deltaS_rxn = -60.0;
+      thermoType = "Exothermic";
+      visuals.solutionColorStart = "purple";
+      visuals.solutionColorEnd = "clear";
+      visuals.precipitateColor = "white-brown";
+      visuals.animationDescription = `Bright purple potassium permanganate oxidizes almond-scented liquid Benzaldehyde. White crystals of Benzoic Acid form immediately alongside a brown manganese dioxide suspension.`;
+      conceptualExplanationFoundational = "An organic oxidation! Mild almond-scented benzaldehyde is oxidized by potassium permanganate into benzoic acid which deposits as white crystalline solids, while the purple permanganate color is reduced.";
+      conceptualExplanationAdvanced = "Permanganate ion coordinates with the aldehyde hydrate, undergoing single hydrate transfer to reduce Mn(VII) into insoluble brown MnO2, oxidizing benzaldehyde into less soluble benzoic acid (pKa ~4.20).";
+    }
+    // Esterification check (CH3COOH + C2H5OH + H2SO4) (3 reactants)
+    else if (hasFormula("CH3COOH") && (hasFormula("C2H5OH") || hasFormula("ETHANOL"))) {
+      const h2so4Reactant = findReactant("H2SO4");
+      const hasH2SO4 = !!h2so4Reactant;
+      const isConcAcid = h2so4Reactant?.concentration !== "dilute";
+
+      reactionClass = "Esterification (Acid Catalyst)";
+      balancedEquation = "CH₃COOH(aq) + C₂H₅OH(aq) --[H₂SO₄]--> CH₃COOC₂H₅(aq) + H₂O(l)";
+      productsData = [
+        { formula: "CH3COOC2H5", name: "Ethyl Ethanoate (Ester)", pubchemId: "8857", state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -12.5;
+      deltaS_rxn = -4.3;
+
+      if (hasH2SO4) {
+        if (isConcAcid) {
+          visuals.animationDescription = "Heating ethanoic acid and ethanol with concentrated sulfuric acid catalyst. A sweet, fruity, organic ester smell is produced rapidly.";
+          conceptualExplanationFoundational = "A classic Class 10 CBSE reaction. Ethanoic acid combines with ethanol in the presence of concentrated sulfuric acid catalyst (acting as a superb dehydrator) to synthesize ethyl ethanoate ester.";
+          conceptualExplanationAdvanced = "Concentrated sulfuric acid acts as a proton donor to activate the carboxyl oxygen, facilitating nucleophilic attack by the ethanol hydroxyl group. It shifts the esterification equilibrium by removing water molecules.";
+          arrowPushingDetails = "Protonation of CH₃COOH → Attack by C₂H₅OH → Proton transfer → Loss of H₂O catalyst regenerates.";
+          dangerLevel = "safe";
+        } else {
+          visuals.animationDescription = "Ethanoic acid and ethanol react with dilute H₂SO₄. Reaction proceeds much slower, with negligible ester aroma.";
+          conceptualExplanationFoundational = "Because the sulfuric acid is dilute, its water absorption capability is low, keeping the equilibrium lying partially on the reactant side and slowing ester development.";
+          conceptualExplanationAdvanced = "With high hydronium concentration in dilute acid, hydrolysis of ester competes with esterification, limiting the final equilibrium yield.";
+          dangerLevel = "safe";
+        }
+      } else {
+        visuals.animationDescription = "In the absence of a strong acid catalyst, the reactants collide without undergoing substantial ester formation.";
+        conceptualExplanationFoundational = "Without the acid catalyst, this organic combination is extremely slow and will not form sweet-smelling ester under standard classroom session times.";
+        conceptualExplanationAdvanced = "The activation energy barrier for carboxylic acid nucleophilic substitution is too high (+120 kJ/mol) without proton activation of the carbonyl carbon.";
+      }
+    }
+    // Alkaline KMnO4 Oxidation (C2H5OH + KMnO4 + NaOH) (3 reactants)
+    else if ((hasFormula("C2H5OH") || hasFormula("ETHANOL")) && hasFormula("KMNO4")) {
+      reactionClass = "Alkaline Oxidation of Alcohol";
+      balancedEquation = "CH₃CH₂OH(aq) + 2[O] --[KMnO₄/NaOH]--> CH₃COOH(aq) + H₂O(l)";
+      productsData = [
+        { formula: "CH3COOH", name: "Ethanoic Acid", pubchemId: "176", state: "aq" },
+        { formula: "MnO2", name: "Manganese Dioxide (Precipitate)", pubchemId: "14801", state: "s" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -242.0;
+      deltaS_rxn = 45.0;
+
+      const hasNaOH = hasFormula("NaOH") || hasFormula("KOH");
+      const isNaOHDilute = findReactant("NaOH")?.concentration === "dilute" || findReactant("KOH")?.concentration === "dilute";
+
+      if (hasNaOH) {
+        visuals.solutionColorStart = "purple";
+        visuals.solutionColorEnd = "clear";
+        visuals.precipitateColor = "brown";
+        if (isNaOHDilute) {
+          visuals.animationDescription = "The deep purple potassium permanganate solution decolorizes slowly, leaving a slightly cloudy, brown precipitative manganese dioxide ring.";
+          conceptualExplanationFoundational = "Alkaline potassium permanganate behaves as a vigorous oxidizer of Class 10 science. It converts ethanol into ethanoic acid, depleting its purple state.";
+          conceptualExplanationAdvanced = "In basic aqueous medium, Permanganate (Mn(VII)) is reduced to MnO₂, causing a brown suspension. Dilute alkali slows oxidation kinetics and the MnO₂ settling rate.";
+        } else {
+          visuals.animationDescription = "Vigorous decolorization! The deep purple solution turns rapidly clear with an intense, dense brown precipitate of MnO₂ forming at the bottom.";
+          conceptualExplanationFoundational = "Strong concentrated alkali accelerates the oxidation of alcohol into organic ethanoic acid, rapidly degrading the purple KMnO₄ color.";
+          conceptualExplanationAdvanced = "The reaction proceeds via ethyl aldehyde intermediates. High hydroxide ion concentrations speed up the MnO₄⁻ reduction path, shifting kinetics into high gear.";
+        }
+      } else {
+        visuals.solutionColorStart = "purple";
+        visuals.solutionColorEnd = "purple";
+        visuals.animationDescription = "Neutral permanganate reacts only sluggishly with ethanol without alkaline activation, maintaining its violet tint.";
+        conceptualExplanationFoundational = "Alkaline medium (such as sodium hydroxide) is necessary to activate potassium permanganate into its highly reactive oxidizing configuration.";
+      }
+    }
+    // Soap Saponification (Oil + NaOH + NaCl) (3-4 reactants)
+    else if ((hasFormula("OIL") || hasFormula("FAT") || hasFormula("ESTOR") || hasFormula("VEGETABLE") || hasFormula("CASTOR")) && hasFormula("NAOH")) {
+      const hasNaCl = hasFormula("NACL");
+      reactionClass = "Saponification (Ester Hydrolysis)";
+      balancedEquation = "Glyceryl Ester + 3NaOH → Glycerol + 3 Sodium Stearate (Soap)";
+      productsData = [
+        { formula: "C17H35COONa", name: "Sodium Stearate (Soap Curd)", pubchemId: "23668197", state: "s" },
+        { formula: "C3H8O3", name: "Glycerol", pubchemId: "753", state: "aq" }
+      ];
+      deltaH_rxn = -35.2;
+      deltaS_rxn = 12.0;
+
+      if (hasNaCl) {
+        visuals.animationDescription = "Heating ester oil with NaOH. Upon introducing Sodium Chloride (NaCl), thick, white soap curds precipitate and float on the aqueous surface.";
+        conceptualExplanationFoundational = "Saponification reaction (Class 10 CBSE)! Vegetable oil is hydrolyzed by strong Sodium Hydroxide. Adding salt (NaCl) reduces soap solubility, precipitating out soap curds (salting out).";
+        conceptualExplanationAdvanced = "NaOH drives the nucleophilic ester hydrolysis of triglyceride molecules. The addition of NaCl shifts the ionic equilibrium, decreasing soap solubility via common ion effect.";
+      } else {
+        visuals.animationDescription = "Oil and NaOH blend into a warm, cloudy, emulsified suspension, with no clear soap separation.";
+        conceptualExplanationFoundational = "Hydrolysis forms soluble soap molecules. However, adding salt (such as NaCl) is crucial to 'salt out' and precipitate the soap out of solution so it can solidify.";
+      }
+    }
+    // Test for Metal + Acid
+    else if (list.some(r => ["ZN", "FE", "MG", "AL", "NA", "CA"].includes(r.formula.toUpperCase())) && list.some(r => ["HCL", "H2SO4", "HNO3", "HBR"].includes(r.formula.toUpperCase()))) {
+      const metal = list.find(r => ["ZN", "FE", "MG", "AL", "NA", "CA"].includes(r.formula.toUpperCase()))!;
+      const acid = list.find(r => ["HCL", "H2SO4", "HNO3", "HBR"].includes(r.formula.toUpperCase()))!;
+
+      reactionClass = "Zinc/Metal Acid Displacement";
+      balancedEquation = `${metal.formula}(s) + 2${acid.formula}(aq) → ${metal.formula}Cl₂ + H₂(g)`;
+      productsData = [
+        { formula: `${metal.formula}Cl2`, name: `${metal.label} Chloride`, pubchemId: "12501", state: "aq" },
+        { formula: "H2", name: "Hydrogen Gas", pubchemId: "783", state: "g" }
+      ];
+      deltaH_rxn = -140;
+      deltaS_rxn = 64.0;
+      visuals.hasBubbles = true;
+      visuals.gasName = "Hydrogen (H₂)";
+
+      if (acid.concentration === "dilute") {
+        visuals.animationDescription = `Safe and steady effervescence. Bubbles of Hydrogen gas emerge from the surface of solid ${metal.label} metal at a moderate rate inside dilute ${acid.label}.`;
+        conceptualExplanationFoundational = `A core 9th/10th grade CBSE NCERT practical. Active metals stand above Hydrogen in the reactivity series and displace it from dilute acids, generating safe, steady streams of Hydrogen gas.`;
+        conceptualExplanationAdvanced = "The solid metal undergoes simple electron donation (oxidation). Because the acid is dilute, hydronium concentration is moderate, yielding highly regulated, non-hazardous kinetic rates.";
+      } else {
+        dangerLevel = "hazardous";
+        visuals.animationDescription = `Explosive-style boiling reaction! High heat is instantly liberated as concentrated ${acid.label} vigorously dissolves the solid ${metal.label}, creating a cloud of hot acid vapours and thick gas bubbles.`;
+        conceptualExplanationFoundational = `Concentrated acid contains high active hydronium ions, turning the displacement highly exothermic. This must be handled with extreme caution because it boils instantly and releases hot acid steam.`;
+        conceptualExplanationAdvanced = "High reactant concentration leads to near-simultaneous surface oxidation of the metallic substrate, creating extreme reaction velocities and huge thermal gradients.";
+      }
+    }
+    // Double Displacement precipitation: BaCl2 + Na2SO4
+    else if (hasFormula("BACL2") && hasFormula("NA2SO4")) {
+      reactionClass = "Double Displacement (Precipitation)";
+      balancedEquation = "BaCl₂(aq) + Na₂SO₄(aq) → BaSO₄(s)↓ + 2NaCl(aq)";
+      productsData = [
+        { formula: "BaSO4", name: "Barium Sulfate (Insoluble Salt)", pubchemId: "24414", state: "s" },
+        { formula: "NaCl", name: "Sodium Chloride", pubchemId: "5234", state: "aq" }
+      ];
+      deltaH_rxn = -18.7;
+      deltaS_rxn = 21.0;
+      visuals.precipitateColor = "white";
+
+      const rBa = findReactant("BACL2")!;
+      const rNa = findReactant("NA2SO4")!;
+
+      if (rBa.concentration === "dilute" || rNa.concentration === "dilute") {
+        visuals.animationDescription = "A slow, milky-white translucent suspension forms sluggishly. The turbidity slowly increases, resembling standard low-concentration assays.";
+        conceptualExplanationFoundational = "Dilute reagents have fewer ions per unit volume, which lowers the collision frequency. Barium Sulfate precipitates slowly as a fine, slow-settling suspension.";
+        conceptualExplanationAdvanced = "Low supersaturation ratio drives crystalline nucleations to occur at a sluggish speed, producing small colloid crystals that remain suspended for long durations.";
+      } else {
+        visuals.animationDescription = "Instantaneous and highly dense white precipitate! Curdy white insoluble Barium Sulfate forms right upon collision and quickly precipitates to the bottom.";
+        conceptualExplanationFoundational = "CBSE Class 10 Textbook Activity 1.10. High concentration of sulfate and barium ions immediately exceeds the solubility limit (Ksp), throwing heavy Barium Sulfate out of solution.";
+        conceptualExplanationAdvanced = "High concentration leads to massive supersaturation, triggering instantaneous, run-away crystal nucleation. A thick, flocculated precipitate of BaSO₄ is formed.";
+      }
+    }
+    // Glucose/Fructose + O2 (Combustion / Respiration)
+    else if ((hasFormula("C6H12O6") || hasFormula("GLUCOSE") || hasFormula("FRUCTOSE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion / Cellular Respiration";
+      balancedEquation = "C₆H₁₂O₆(s) + 6O₂(g) → 6CO₂(g) + 6H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -2803.0;
+      deltaS_rxn = 182.4;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Steam";
+      visuals.animationDescription = "Sugar combustion! The solid sugar reacts vigorously with excess oxygen when heated, burning with a steady flame to evolve carbon dioxide gas and water vapor, releasing massive thermal energy.";
+      conceptualExplanationFoundational = "Combustion of simple sugars (glucose and fructose). This is the exact chemical reaction for cellular respiration, where cells oxidize glucose to release CO2, water, and energy!";
+      conceptualExplanationAdvanced = "Exothermic complete oxidation of a hexose. The reaction is highly spontaneous (ΔG° ≈ -2857 kJ/mol) and proceeds via radical-chain pathways under combustion, or enzymatically in biological mitochondria.";
+    }
+    // Maltose + O2 (Combustion)
+    else if ((hasFormula("C12H22O11") || hasFormula("MALTOSE") || hasFormula("SUCROSE")) && (hasFormula("O2") || hasFormula("OXYGEN"))) {
+      reactionClass = "Combustion";
+      balancedEquation = "C₁₂H₂₂O₁₁(s) + 12O₂(g) → 12CO₂(g) + 11H₂O(g)";
+      productsData = [
+        { formula: "CO2", name: "Carbon Dioxide Gas", pubchemId: "280", state: "g" },
+        { formula: "H2O", name: "Water Vapor", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = -5645.0;
+      deltaS_rxn = 358.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Carbon Dioxide & Steam";
+      visuals.animationDescription = "Disaccharide sugar burns brilliantly in excess oxygen, producing high-intensity heat, water vapor, and carbon dioxide gas.";
+      conceptualExplanationFoundational = "Combustion of disaccharide sugar (maltose). High-energy bonds are fully oxidized to form stable carbon dioxide and water molecules.";
+      conceptualExplanationAdvanced = "Complete oxidation of disaccharide maltose. Intramolecular glycosidic links break down during thermal degradation, followed by complete oxidation of glucose units.";
+    }
+    // Carbonic Acid + NaOH Neutralization
+    else if ((hasFormula("H2CO3") || hasFormula("CARBONIC ACID") || hasFormula("CARBONIC")) && (hasFormula("NaOH") || hasFormula("SODIUM HYDROXIDE"))) {
+      reactionClass = "Acid-Base Neutralization";
+      balancedEquation = "H₂CO₃(aq) + 2NaOH(aq) → Na₂CO₃(aq) + 2H₂O(l)";
+      productsData = [
+        { formula: "Na2CO3", name: "Sodium Carbonate", pubchemId: "10340", state: "aq" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -106.0;
+      deltaS_rxn = 125.0;
+      thermoType = "Exothermic";
+      visuals.animationDescription = "Carbonic Acid is neutralized by strong Sodium Hydroxide base, yielding soluble Sodium Carbonate salt and liquid water with mild heat release.";
+      conceptualExplanationFoundational = "Carbonic acid is a weak inorganic acid. It reacts with strong sodium hydroxide base to undergo a classic neutralization, producing sodium carbonate salt and water.";
+      conceptualExplanationAdvanced = "Stepwise double neutralization of diprotic carbonic acid (pKa1 ≈ 6.35, pKa2 ≈ 10.33) with sodium hydroxide to yield Na2CO3 salt.";
+    }
+    // Carbonic Acid + Ca(OH)2 (Limewater Milkiness!)
+    else if ((hasFormula("H2CO3") || hasFormula("CARBONIC ACID") || hasFormula("CARBONIC") || hasFormula("CO2") || hasFormula("CARBON DIOXIDE")) && (hasFormula("CA(OH)2") || hasFormula("CALCIUM HYDROXIDE") || hasFormula("SLAKED LIME"))) {
+      // Accepts both plain CO2 gas (the standard "blow into limewater" classroom test) and
+      // pre-formed carbonic acid H2CO3 -- both give the same textbook milky-white precipitate.
+      const usesCO2Gas = hasFormula("CO2") || hasFormula("CARBON DIOXIDE");
+      reactionClass = "Precipitation / Double Displacement";
+      balancedEquation = usesCO2Gas
+        ? "CO₂(g) + Ca(OH)₂(aq) → CaCO₃(s)↓ + H₂O(l)"
+        : "H₂CO₃(aq) + Ca(OH)₂(aq) → CaCO₃(s)↓ + 2H₂O(l)";
+      productsData = [
+        { formula: "CaCO3", name: "Calcium Carbonate (Insoluble Precipitate)", pubchemId: "10112", state: "s" },
+        { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+      ];
+      deltaH_rxn = -45.0;
+      deltaS_rxn = 50.0;
+      thermoType = "Exothermic";
+      visuals.hasBubbles = usesCO2Gas;
+      visuals.gasName = usesCO2Gas ? "Carbon Dioxide (CO₂), being absorbed" : "";
+      visuals.precipitateColor = "white";
+      visuals.animationDescription = usesCO2Gas
+        ? "Limewater test! Carbon Dioxide gas is bubbled through clear Calcium Hydroxide (limewater) solution, instantly turning it milky-white as insoluble Calcium Carbonate precipitates out."
+        : "Limewater test! Soluble Calcium Hydroxide is mixed with Carbonic Acid, instantly forming a milky-white turbid suspension of Calcium Carbonate precipitate.";
+      conceptualExplanationFoundational = "The classic school chemical test! Carbon dioxide (as gas, or dissolved as carbonic acid) reacts with calcium hydroxide (slaked lime / limewater) to form insoluble calcium carbonate, turning the solution milky white. This is the standard laboratory test used to detect CO₂, including in exhaled breath.";
+      conceptualExplanationAdvanced = "Limewater carbonation. Mixing bicarbonate/carbonate species with calcium ions rapidly exceeds the solubility product threshold of CaCO3 (Ksp ≈ 3.3 x 10⁻⁹), precipitating white calcite/aragonite. Prolonged excess CO₂ exposure can redissolve the precipitate by forming soluble calcium bicarbonate, Ca(HCO₃)₂.";
+    }
+    // Glucose/Fructose/Maltose + H2SO4 (Sugar Dehydration / Carbon Snake)
+    else if ((hasFormula("C6H12O6") || hasFormula("C12H22O11") || hasFormula("GLUCOSE") || hasFormula("FRUCTOSE") || hasFormula("MALTOSE") || hasFormula("SUCROSE")) && (hasFormula("H2SO4") || hasFormula("SULFURIC ACID") || hasFormula("SULFURIC"))) {
+      const isDisaccharide = hasFormula("C12H22O11") || hasFormula("MALTOSE") || hasFormula("SUCROSE");
+      reactionClass = "Dehydration / Carbon Snake Demon.";
+      balancedEquation = isDisaccharide
+        ? "C₁₂H₂₂O₁₁(s) + H₂SO₄(conc) → 12C(s)↓ + 11H₂O(g) + H₂SO₄/water mixture"
+        : "C₆H₁₂O₆(s) + H₂SO₄(conc) → 6C(s)↓ + 6H₂O(g) + H₂SO₄/water mixture";
+      productsData = [
+        { formula: "C", name: "Solid Carbon (Black Porous Snake)", pubchemId: "5462310", state: "s" },
+        { formula: "H2O", name: "Water (as steam)", pubchemId: "962", state: "g" }
+      ];
+      deltaH_rxn = isDisaccharide ? -1050.0 : -550.0;
+      deltaS_rxn = isDisaccharide ? 950.0 : 480.0;
+      thermoType = "Exothermic";
+      visuals.precipitateColor = "black";
+      visuals.hasBubbles = true;
+      visuals.gasName = "Steam & Sulfur Dioxide";
+      visuals.animationDescription = "Vigorous sugar dehydration! Concentrated Sulfuric acid is added to the sugar. The white powder instantly turns yellow, then dark brown, and finally swells dramatically into a steaming, hot, black porous snake-like column of pure carbon rising out of the beaker, emitting a strong caramelized odor.";
+      conceptualExplanationFoundational = "A highly famous and spectacular demonstration! Concentrated sulfuric acid has an extremely strong affinity for water. It literally rips away Hydrogen and Oxygen atoms from sugar as water molecules, leaving behind a steaming, expanding column of pure black carbon (charcoal).";
+      conceptualExplanationAdvanced = "Exothermic acid-catalyzed carbohydrate dehydration. Sulfuric acid acts as a powerful dehydrating agent, protonating hydroxyl groups to drive beta-eliminations, leaving highly cross-linked amorphous carbon. The intense heat of hydration boils the eliminated water into steam, which expands the carbon residue into a highly porous snake-like column.";
+    }
+    // Default dynamic formula handler
+    else {
+      // General dynamic handling of whatever they input
+      const combined = list.map(r => r.formula).join(" + ");
+      const combinedLabels = list.map(r => r.label).join(", ");
+      const concentrations = list.map(r => `${r.label} is ${r.concentration}`).join(" and ");
+
+      balancedEquation = `${list.map(r => r.formula).join(" + ")} → ${list.map(r => r.formula + "_Product").join(" + ")}`;
+      productsData = list.map((r, i) => ({
+        formula: `${r.formula}_Product`,
+        name: `Transformed ${r.label} Phase`,
+        pubchemId: `400${i}`,
+        state: "aq"
+      }));
+
+      visuals.animationDescription = solvent === "None"
+        ? `Multiple reactants (${combinedLabels}) are combined neat (without solvent). Standard solid/gas phase collisions indicate safe dry blend formation. Notice that ${concentrations}.`
+        : `Multiple reactants (${combinedLabels}) are combined inside ${solvent} solvent. Standard physical models indicate safe blend formation. Notice that ${concentrations}.`;
+      conceptualExplanationFoundational = solvent === "None"
+        ? `Combining ${list.length} variables (${combinedLabels}) neat triggers direct physical contact, solid-phase, or gas-phase thermodynamic exchange without solvent dilution.`
+        : `Combining ${list.length} variables (${combinedLabels}) triggers molecular and physical thermal exchange inside the ${solvent} solvent.`;
+      conceptualExplanationAdvanced = solvent === "None"
+        ? `This ${list.length}-reactant system reacts under temperature ${temperature}°C without solvent-mediated ions, proceeding as a gas, solid-phase or molten neat reaction.`
+        : `This ${list.length}-reactant system reacts under temperature ${temperature}°C. Free hydronium and solvent forces inside ${solvent} influence the kinetic parameters.`;
+    }
+
+    // Set thermodynamic constants based on temperature
+    thermoType = deltaH_rxn < 0 ? "Exothermic" : "Endothermic";
+    const dG = deltaH_rxn - tKelvin * (deltaS_rxn / 1000);
+    const calculatedDeltaG = Number(dG.toFixed(2));
+    const isSpontaneous = dG < 0;
+
+    return {
+      reactionFeasible,
+      reactantsData,
+      productsData,
+      deltaH_rxn,
+      deltaS_rxn,
+      balancedEquation,
+      reactionClass,
+      thermoType,
+      calculatedDeltaG,
+      isSpontaneous,
+      visuals,
+      dangerLevel,
+      conceptualExplanationFoundational,
+      conceptualExplanationAdvanced,
+      arrowPushingDetails,
+      advice: advice.length > 0 ? advice : [
+        "Change the concentration and temp sliders to trace thermodynamic shifts.",
+        "This is an interactive simulation backing up school CBSE/NCERT activities perfectly."
+      ]
+    };
+  }
+
+  // Chemistry Reaction Simulator dynamic programmatic backend
+  const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  }) : null;
+
+  app.post("/api/simulate-reaction", async (req, res) => {
+    const { reactants, reactantA, reactantB, temperature, pressure, solvent, addedPeroxide, catalyst } = req.body;
+    
+    let reactantList: Array<{ formula: string; concentration: "dilute" | "concentrated"; gasSupply?: "limited" | "excess" }> = [];
+    if (reactants && Array.isArray(reactants)) {
+      reactantList = reactants
+        .filter(r => r && r.formula && r.formula.trim().length > 0)
+        .map(r => ({
+          formula: r.formula,
+          concentration: r.concentration || "concentrated",
+          gasSupply: r.gasSupply
+        }));
+    } else {
+      if (reactantA) {
+        reactantList.push({ formula: reactantA, concentration: "concentrated" });
+      }
+      if (reactantB) {
+        reactantList.push({ formula: reactantB, concentration: "concentrated" });
+      }
+    }
+
+    if (reactantList.length === 0) {
+      return res.status(400).json({ error: "At least one reactant is required to run the simulation." });
+    }
+
+    const tKelvin = (temperature === undefined ? 25 : Number(temperature)) + 273.15;
+    const pAtm = pressure === undefined ? 1 : Number(pressure);
+    const solv = solvent || "Water";
+    const perox = !!addedPeroxide;
+
+    // Normalizing strings for quick, beautiful local curriculum checks but stripping out crystallization water (e.g. ·5H2O or .5H2O)
+    const cleanFormulaForMatch = (f: string) => f.trim().toUpperCase().replace(/[·.]\d+H2O/g, "").replace(/\./g, "").trim();
+    const rawA = (reactantList[0]?.formula || "").trim();
+    const rawB = (reactantList[1]?.formula || "").trim();
+    const rA = cleanFormulaForMatch(rawA);
+    const rB = cleanFormulaForMatch(rawB);
+    // Whether the user actually picked the crystalline/hydrate form of a salt (vs. its plain
+    // anhydrous formula) is significant to a chemistry student, so the hardcoded curriculum
+    // reactions below must reflect back whichever form was really selected -- not silently swap
+    // in the hydrate every time, regardless of what was typed/chosen.
+    const isHydrateFormula = (f: string) => /[·.]\s*\d*\.?\d*\s*H2O/i.test(f);
+
+    // Check offline fallbacks for guaranteed instantaneous 100% reliable responses
+    let fallbackMatched = false;
+    let fallbackData: any = null;
+
+    // FE + CUSO4
+    if ((rA === "FE" && rB === "CUSO4") || (rA === "CUSO4" && rB === "FE")) {
+      fallbackMatched = true;
+      // Whichever raw input actually named the crystalline/hydrate form (CuSO4.5H2O) determines
+      // whether the displayed reactant/product also carries its water of crystallization -- typing
+      // the plain anhydrous formula must show the plain anhydrous reaction, not silently substitute
+      // the hydrate every time.
+      const cuInputIsHydrate = isHydrateFormula(rA === "CUSO4" ? rawA : rawB);
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          { formula: "Fe", name: "Solid Iron Metal", iupacName: "Iron", pubchemId: "23925", molecularWeight: 55.85 },
+          cuInputIsHydrate
+            ? { formula: "CuSO4·5H2O", name: "Aqueous Copper Sulfate Pentahydrate", iupacName: "Copper(II) sulfate pentahydrate", pubchemId: "24463", molecularWeight: 249.69 }
+            : { formula: "CuSO4", name: "Aqueous Copper(II) Sulfate", iupacName: "Copper(II) sulfate", pubchemId: "24462", molecularWeight: 159.61 }
+        ],
+        productsData: [
+          cuInputIsHydrate
+            ? { formula: "FeSO4·7H2O", name: "Aqueous Iron(II) Sulfate Heptahydrate", pubchemId: "62662", state: "aq" }
+            : { formula: "FeSO4", name: "Aqueous Iron(II) Sulfate", pubchemId: "24393", state: "aq" },
+          { formula: "Cu", name: "Solid Copper", pubchemId: "23978", state: "s" }
+        ],
+        deltaH_rxn: -154.0, // kJ/mol
+        deltaS_rxn: 11.5, // J/(mol K)
+        balancedEquation: cuInputIsHydrate
+          ? "Fe(s) + CuSO4·5H2O(aq) → FeSO4·7H2O(aq) + Cu(s)"
+          : "Fe(s) + CuSO4(aq) → FeSO4(aq) + Cu(s)",
+        reactionClass: "Single Displacement / Redox",
+        thermoType: "Exothermic",
+        visuals: {
+          solutionColorStart: "blue",
+          solutionColorEnd: "emerald", // pale green
+          hasBubbles: false,
+          gasName: "",
+          precipitateColor: "brown", // copper coating
+          animationDescription: "Blue copper sulfate solution turns light green while a reddish-brown metallic copper sediment deposits on the iron surface."
+        },
+        dangerLevel: "safe",
+        conceptualExplanationFoundational: "Iron stands higher in the Reactivity Series than Copper. Hence, Iron readily displaces Copper from its chemical solution, forming light green Iron Sulfate and depositing reddish-brown metallic Copper.",
+        conceptualExplanationAdvanced: "The standard reduction potential of Fe(II)/Fe is -0.44V, whereas Cu(II)/Cu is +0.34V. Fe is a much stronger reducing agent and readily displaces Cu(II) from solution. Gibbs Free Energy (ΔG) remains highly negative across all standard conditions.",
+        arrowPushingDetails: "Fe(s) → Fe²⁺(aq) + 2e⁻ (Oxidation at metallic core)\nCu²⁺(aq) + 2e⁻ → Cu(s) (Reduction onto iron electrode grid)",
+        advice: [
+          "Try substituting Zinc (Zn) inside Copper Sulfate to observe a similarly vigorous displacement!",
+          "Notice how the solid iron block acquires a reddish-brown coating over time during laboratory NCERT Activity 10.5."
+        ]
+      };
+    }
+
+    // CU + ZNSO4 (NO REACTION CASE)
+    if ((rA === "CU" && rB === "ZNSO4") || (rA === "ZNSO4" && rB === "CU")) {
+      fallbackMatched = true;
+      const znInputIsHydrate = isHydrateFormula(rA === "ZNSO4" ? rawA : rawB);
+      fallbackData = {
+        reactionFeasible: false,
+        reactantsData: [
+          { formula: "Cu", name: "Solid Copper Metal", iupacName: "Copper", pubchemId: "23978", molecularWeight: 63.55 },
+          znInputIsHydrate
+            ? { formula: "ZnSO4·7H2O", name: "Aqueous Zinc Sulfate Heptahydrate", iupacName: "Zinc sulfate heptahydrate", pubchemId: "62640", molecularWeight: 287.6 }
+            : { formula: "ZnSO4", name: "Aqueous Zinc Sulfate", iupacName: "Zinc sulfate", pubchemId: "24424", molecularWeight: 161.4 }
+        ],
+        productsData: [],
+        deltaH_rxn: 213.0, // highly positive
+        deltaS_rxn: -5.0,
+        balancedEquation: znInputIsHydrate
+          ? "Cu(s) + ZnSO4·7H2O(aq) → No Reaction"
+          : "Cu(s) + ZnSO4(aq) → No Reaction",
+        reactionClass: "Single Displacement",
+        thermoType: "Endothermic",
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "clear",
+          hasBubbles: false,
+          gasName: "",
+          precipitateColor: "",
+          animationDescription: "Solution remains absolutely static. No metal color changes or gas evolution are observed."
+        },
+        dangerLevel: "safe",
+        conceptualExplanationFoundational: "Copper is less reactive than Zinc and sits lower in the metal reactivity series. A less reactive metal cannot displace a more reactive metal from its salt solution, resulting in zero chemical transformation.",
+        conceptualExplanationAdvanced: "The Gibbs Free Energy (ΔG) is positive (+214 kJ) under standard parameters because Cu(II)/Cu potential (+0.34V) is far higher than Zn(II)/Zn (-0.76V). Thus, the reverse reaction is thermodynamically impossible.",
+        arrowPushingDetails: "No electron transfer occurs because Copper cannot reduce Zinc(II) ions in aqueous state.",
+        advice: [
+          "Try swapping the reactants: Use Zinc metallic powder with Copper Sulfate solution instead!",
+          "Use a stronger reducing agent like Magnesium or Aluminum to readily displace Zinc."
+        ]
+      };
+    }
+
+    // NA + H2O (EXPLOSION DEMO)
+    if ((rA === "NA" && rB === "H2O") || (rA === "H2O" && rB === "NA")) {
+      fallbackMatched = true;
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          { formula: "Na", name: "Sodium Metal", iupacName: "Sodium", pubchemId: "5356137", molecularWeight: 22.99 },
+          { formula: "H2O", name: "Water", iupacName: "Oxidane", pubchemId: "962", molecularWeight: 18.02 }
+        ],
+        productsData: [
+          { formula: "NaOH", name: "Sodium Hydroxide", pubchemId: "14798", state: "aq" },
+          { formula: "H2", name: "Hydrogen Gas", pubchemId: "783", state: "g" }
+        ],
+        deltaH_rxn: -368.4, // highly exothermic
+        deltaS_rxn: 35.2,
+        balancedEquation: "2Na(s) + 2H2O(l) → 2NaOH(aq) + H2(g)",
+        reactionClass: "Combination / Vigorous Neutralization",
+        thermoType: "Exothermic",
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "pink", // assuming phenolphthalein indicator
+          hasBubbles: true,
+          gasName: "Hydrogen (H₂)",
+          precipitateColor: "",
+          animationDescription: "Vigorous fizzing. The sodium metal melts into a tiny glob, skates wildly across the water surface evolving Hydrogen gas, and ignites with a golden yellow flame! An intense heat explosion shattered the beaker!"
+        },
+        dangerLevel: "explosive",
+        conceptualExplanationFoundational: "Sodium is an alkali metal that reacts violently with water. The reaction releases heavy amounts of highly flammable Hydrogen gas alongside extreme exothermic heat, leading to an immediate local fire or burst.",
+        conceptualExplanationAdvanced: "Sodium has an extremely low first ionization energy and huge negative redox potential of -2.71V. It reduces protons in water to Hydrogen gas. The enormous heat release coupled with rapid volume expansion of evolved Hydrogen gas triggers an explosive shockwave.",
+        arrowPushingDetails: "2Na(s) → 2Na⁺(aq) + 2e⁻ (Oxidation)\n2H₂O(l) + 2e⁻ → 2OH⁻(aq) + H₂(g) (Proton Reduction)",
+        advice: [
+          "BOOM! Pure Alkali Metals in hot water will trigger an explosive strain. Re-adjust conditions carefully!",
+          "Try using a mild non-polar medium or cool down the apparatus temperature below 0°C to slow down kinetics."
+        ]
+      };
+    }
+
+    // ACID-BASE NEUTRALIZATION NH3/HCL/NAOH/KOH
+    if (((rA === "NAOH" || rA === "KOH" || rA === "BASE") && (rB === "HCL" || rB === "ACID")) ||
+        ((rA === "HCL" || rA === "ACID") && (rB === "NAOH" || rB === "KOH" || rB === "BASE"))) {
+      fallbackMatched = true;
+      const usesKOH = rA === "KOH" || rB === "KOH";
+      const baseFormula = usesKOH ? "KOH" : "NaOH";
+      const baseName = usesKOH ? "Potassium Hydroxide" : "Sodium Hydroxide";
+      const saltFormula = usesKOH ? "KCl" : "NaCl";
+      const saltPubchemId = usesKOH ? "4873" : "5234";
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          { formula: "HCl", name: "Hydrochloric Acid", iupacName: "chlorane", pubchemId: "313", molecularWeight: 36.46 },
+          { formula: baseFormula, name: baseName, iupacName: baseName, pubchemId: usesKOH ? "14797" : "14798", molecularWeight: usesKOH ? 56.11 : 40.00 }
+        ],
+        productsData: [
+          { formula: saltFormula, name: `${saltFormula === "NaCl" ? "Sodium" : "Potassium"} Chloride (Salt)`, pubchemId: saltPubchemId, state: "aq" },
+          { formula: "H2O", name: "Water", pubchemId: "962", state: "l" }
+        ],
+        deltaH_rxn: -57.1, // standard neutralization enthalpy
+        deltaS_rxn: 80.5,
+        balancedEquation: `HCl(aq) + ${baseFormula}(aq) → ${saltFormula}(aq) + H2O(l)`,
+        reactionClass: "Neutralization / Double Displacement",
+        thermoType: "Exothermic",
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "clear",
+          hasBubbles: false,
+          gasName: "",
+          precipitateColor: "",
+          animationDescription: "Strong acid and strong base combine silently. No visual color changes occur, but the system releases heat rapidly, raising the solution temperature coordinate."
+        },
+        dangerLevel: "safe",
+        conceptualExplanationFoundational: `When an acidic solution mixes with a basic solution, the H⁺ ions of the acid combine with the OH⁻ ions of the base to form molecular water (H₂O) and soluble salt (${saltFormula}). This neutralization reaction is always exothermic.`,
+        conceptualExplanationAdvanced: "The net ionic reaction is H⁺(aq) + OH⁻(aq) → H₂O(l) with standard heat of neutralisation ΔH = -57.1 kJ/mol. The reaction is highly spontaneous (ΔG < 0) driven by massive positive entropic release from covalent water bonding.",
+        arrowPushingDetails: "OH⁻ nucleophile attacks the proton of hydronium H₃O⁺ ion, forming two neutral H₂O water solvent clusters.",
+        advice: [
+          "Try adding a fast pH indicator (like Phenolphthalein) to watch the solution swap from brilliant dark magenta to absolute clear at neutralization endpoint!",
+          "Use a weak acid like Acetic Acid to observe a lower enthalpy of chemical neutralization."
+        ]
+      };
+    }
+
+    // ORGANIC ALKENE PROPENE + HBR (MARK / ANTI-MARK EFFECT)
+    if (((rA === "PROPENE" || rA === "C3H6") && rB === "HBR") || ((rA === "HBR" || rA === "H-BR") && (rB === "PROPENE" || rB === "C3H6"))) {
+      fallbackMatched = true;
+      const isAntiMark = perox;
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          { formula: "C3H6", name: "Propene", iupacName: "Prop-1-ene", pubchemId: "6378", molecularWeight: 42.08 },
+          { formula: "HBr", name: "Hydrogen Bromide", iupacName: "bromane", pubchemId: "260", molecularWeight: 80.91 }
+        ],
+        productsData: isAntiMark ? [
+          { formula: "CH3-CH2-CH2Br", name: "1-Bromopropane", pubchemId: "7841", state: "l" }
+        ] : [
+          { formula: "CH3-CHBr-CH3", name: "2-Bromopropane", pubchemId: "7840", state: "l" }
+        ],
+        deltaH_rxn: isAntiMark ? -112.0 : -123.0,
+        deltaS_rxn: -145.0, // decrease in entropy
+        balancedEquation: isAntiMark 
+          ? "CH3-CH=CH2 + HBr (with Peroxides) → CH3-CH2-CH2Br"
+          : "CH3-CH=CH2 + HBr → CH3-CHBr-CH3",
+        reactionClass: "Electrophilic Addition (Organic)",
+        thermoType: "Exothermic",
+        majorProduct: isAntiMark ? "1-Bromopropane (Anti-Markovnikov Product)" : "2-Bromopropane (Markovnikov Product)",
+        minorProduct: isAntiMark ? "2-Bromopropane" : "1-Bromopropane",
+        majorYield: isAntiMark ? 92 : 86,
+        minorYield: isAntiMark ? 8 : 14,
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "clear",
+          hasBubbles: false,
+          gasName: "",
+          precipitateColor: "",
+          animationDescription: isAntiMark 
+            ? "Addition reaction proceeds under radial anti-Markovnikov mechanism, forming 1-bromopropane product."
+            : "Hydrogen bromide adds to propene gas under classic Markovnikov conditions inside non-polar CCl4 solvent."
+        },
+        dangerLevel: "safe",
+        conceptualExplanationFoundational: isAntiMark
+          ? "NCERT / Org Core Rule: In the presence of organic peroxides (Peroxide Effect), HBr adds to unsymmetric alkenes contrary to Markovnikov's rule. The negative bromide part attaches to the carbon with MORE hydrogen atoms."
+          : "Markovnikov's Rule: During hydrohalogenation of an unsymmetrical alkene, the acidic Hydrogen attaches to the double-bonded Carbon having more Hydrogen atom substituents, while Halogen goes to the highly substituted Carbon.",
+        conceptualExplanationAdvanced: isAntiMark
+          ? "The addition of HBr in the presence of peroxides proceeds via a free-radical chain mechanism. The bromyl free radical (Br•) attacks first to generate the more stable secondary free radical (•CH(CH3)CH2Br) rather than a primary radical, leading to 1-bromopropane."
+          : "The reaction starts with protonation of propene double bond to generate a stable secondary carbocation (CH3-C⁺H-CH3). Bromide anion nucleophile attacks this carbon, forming 2-bromopropane with high Markovnikov selectivity.",
+        arrowPushingDetails: isAntiMark
+          ? "Initiation: Peroxide → 2 R-O•\nR-O• + H-Br → R-O-H + Br•\nPropagation: Br• attacks propene double bond forming •CH(CH3)CH2Br secondary radical, which abstracts H from H-Br."
+          : "π-electrons of alkene double bond shift to protonate, creating a 2° carbocation intermediate. Bromide (Br⁻) nucleophile attacks the positive carbocation.",
+        advice: [
+          "Notice the reaction flip: This 'What If?' pathway showcases anti-Markovnikov (Kharasch peroxide effect) when organic peroxides are added!",
+          "Use Polar Protic solvents to accelerate Markovnikov carbocation pathways."
+        ]
+      };
+    }
+
+    // BASE PRECIPITATION - BA2+ / SO42-
+    if (((rA === "BA2+" || rA === "BACL2") && (rB === "SO42-" || rB === "NASO4" || rB === "NA2SO4")) ||
+        ((rA === "SO42-" || rA === "NASO4" || rA === "NA2SO4") && (rB === "BA2+" || rB === "BACL2"))) {
+      fallbackMatched = true;
+      const baInputIsHydrate = isHydrateFormula(rA === "BACL2" ? rawA : rawB);
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          baInputIsHydrate
+            ? { formula: "BaCl2·2H2O", name: "Aqueous Barium Chloride Dihydrate", iupacName: "Barium chloride dihydrate", pubchemId: "5284346", molecularWeight: 244.26 }
+            : { formula: "BaCl2", name: "Aqueous Barium Chloride", iupacName: "Barium chloride", pubchemId: "25204", molecularWeight: 208.23 },
+          { formula: "Na2SO4", name: "Aqueous Sodium Sulfate", iupacName: "Sodium sulfate", pubchemId: "24436", molecularWeight: 142.04 }
+        ],
+        productsData: [
+          { formula: "BaSO4", name: "Solid Barium Sulfate (Precipitate)", pubchemId: "24414", state: "s" },
+          { formula: "NaCl", name: "Aqueous Sodium Chloride", pubchemId: "5234", state: "aq" }
+        ],
+        deltaH_rxn: -18.4,
+        deltaS_rxn: 30.1,
+        balancedEquation: baInputIsHydrate
+          ? "BaCl2·2H2O(aq) + Na2SO4(aq) → BaSO4(s)↓ + 2NaCl(aq) + 2H2O(l)"
+          : "BaCl2(aq) + Na2SO4(aq) → BaSO4(s)↓ + 2NaCl(aq)",
+        reactionClass: "Precipitation / Double Displacement",
+        thermoType: "Exothermic",
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "clear",
+          hasBubbles: false,
+          gasName: "",
+          precipitateColor: "white",
+          animationDescription: "An instant white milky precipitate of Barium Sulfate (BaSO4) is formed and slowly settles down to the bottom of the beaker."
+        },
+        dangerLevel: "safe",
+        conceptualExplanationFoundational: "When solutions of Barium Chloride and Sodium Sulfate are mixed, an insoluble white precipitate of Barium Sulfate is formed immediately along with soluble Sodium Chloride. This is an example of double displacement and precipitation.",
+        conceptualExplanationAdvanced: "The solubility product (Ksp) of BaSO4 is extremely low (1.1 x 10⁻¹⁰). Mixing Ba²⁺ and SO₄²⁻ ions exceeds this threshold, triggering spontaneous nucleation and rapid white solid precipitation.",
+        arrowPushingDetails: "Ba²⁺(aq) + SO₄²⁻(aq) → BaSO₄(s)↓ (Ionic grid association)",
+        advice: [
+          "Check standard solubility rules: heavy metal sulfates like BaSO4 are highly insoluble in water.",
+          "Try using Barium Nitrate instead of Barium Chloride to yield the same rich white precipitate!"
+        ]
+      };
+    }
+
+    if (fallbackMatched && fallbackData) {
+      // Calculate dynamic ΔG based on the current temp (Kelvin) for fallback data
+      // DeltaG = DeltaH - T * (DeltaS / 1000)
+      const dH = fallbackData.deltaH_rxn;
+      const dS = fallbackData.deltaS_rxn;
+      const dG = dH - tKelvin * (dS / 1000);
+      fallbackData.calculatedDeltaG = Number(dG.toFixed(2));
+      fallbackData.isSpontaneous = dG < 0;
+
+      // In secondary Fallback, we support condition based branching
+      // If ΔG > 0, we can override reaction feasibility to false to match non-spontaneous condition branching
+      if (dG > 0 && fallbackData.reactionFeasible) {
+        fallbackData.reactionFeasible = false;
+        fallbackData.conceptualExplanationFoundational = "The thermodynamic state under this extreme condition does not support spontaneous reaction. No chemical transformation occurs.";
+        fallbackData.conceptualExplanationAdvanced = `The Gibbs Free Energy (ΔG = ${fallbackData.calculatedDeltaG} kJ) goes positive at this temperature (${temperature}°C), indicating that the reaction has become non-spontaneous and cannot occur.`;
+      }
+
+      return res.json(fallbackData);
+    }
+
+    // Call Gemini API if we have it and no static fallback matches; otherwise execute our physical simulation fallback
+    if (!ai) {
+      console.log("No Gemini API Key defined. Launching dynamic offline simulation backup.");
+      const fallbackResult = generateDynamicFallback(reactantList, temperature, pressure, solvent, addedPeroxide, tKelvin, catalyst);
+      return res.json(fallbackResult);
+    }
+
+    try {
+      const reactantDescs = reactantList.map(r => `${r.formula} (${r.concentration || "concentrated"})`).join(", ");
+      
+      let response = null;
+      let attempts = 0;
+      const MAX_ATTEMPTS = 3;
+      let delay = 1000;
+
+      while (attempts < MAX_ATTEMPTS) {
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: `
+              Predict the chemical reaction outputs and thermodynamic constants for reactants: "${reactantDescs}"
+              in solvent: "${solv}" at Temp: ${temperature}°C, Pressure: ${pressure} atm. addedPeroxide: ${perox}.
+              Analyze physical and CBSE curriculum rules (e.g. reactivity series, school single/double displacement, oxidation, Saponification, Esterification, Solubility and pH etc).
+              Pay close attention if materials are "dilute" or "concentrated", which can alter reaction kinetics, heat, bubbles, or precipitate thickness.
+              Determine spontaneity under these conditions using: deltaH_rxn (kJ/mol) and deltaS_rxn (J/mol K).
+              Return your prediction ONLY as a JSON string matching the specified schema.
+            `,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  reactionFeasible: { type: Type.BOOLEAN, description: "Is reaction possible under standard reactivity/conditions" },
+                  reactantsData: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        formula: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        iupacName: { type: Type.STRING },
+                        pubchemId: { type: Type.STRING },
+                        molecularWeight: { type: Type.NUMBER }
+                      }
+                    }
+                  },
+                  productsData: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        formula: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        pubchemId: { type: Type.STRING },
+                        state: { type: Type.STRING }
+                      }
+                    }
+                  },
+                  deltaH_rxn: { type: Type.NUMBER, description: "Standard enthalpy of reaction in kJ/mol" },
+                  deltaS_rxn: { type: Type.NUMBER, description: "Standard entropy change in J/(mol K)" },
+                  balancedEquation: { type: Type.STRING },
+                  reactionClass: { type: Type.STRING },
+                  thermoType: { type: Type.STRING, description: "Exothermic or Endothermic" },
+                  majorProduct: { type: Type.STRING },
+                  minorProduct: { type: Type.STRING },
+                  majorYield: { type: Type.NUMBER },
+                  minorYield: { type: Type.NUMBER },
+                  visuals: {
+                    type: Type.OBJECT,
+                    properties: {
+                      solutionColorStart: { type: Type.STRING },
+                      solutionColorEnd: { type: Type.STRING },
+                      hasBubbles: { type: Type.BOOLEAN },
+                      gasName: { type: Type.STRING },
+                      precipitateColor: { type: Type.STRING },
+                      animationDescription: { type: Type.STRING }
+                    },
+                    required: ["solutionColorStart", "solutionColorEnd", "hasBubbles", "precipitateColor"]
+                  },
+                  dangerLevel: { type: Type.STRING, description: "safe, hazardous, explosive" },
+                  conceptualExplanationFoundational: { type: Type.STRING },
+                  conceptualExplanationAdvanced: { type: Type.STRING },
+                  arrowPushingDetails: { type: Type.STRING },
+                  advice: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["reactionFeasible", "reactantsData", "deltaH_rxn", "deltaS_rxn", "balancedEquation", "reactionClass", "thermoType"]
+              }
+            }
+          });
+          break; // Success!
+        } catch (retryErr: any) {
+          attempts++;
+          if (attempts >= MAX_ATTEMPTS) {
+            throw retryErr;
+          }
+          await new Promise((r) => setTimeout(r, delay));
+          delay *= 2;
+        }
+      }
+
+      if (!response) {
+        throw new Error("No response returned from Gemini API");
+      }
+
+      const parsedData = JSON.parse(response.text.trim());
+      
+      // Compute deltaG on server-side dynamically
+      const dH = parsedData.deltaH_rxn || 0;
+      const dS = parsedData.deltaS_rxn || 0;
+      const dG = dH - tKelvin * (dS / 1000);
+      parsedData.calculatedDeltaG = Number(dG.toFixed(2));
+      parsedData.isSpontaneous = dG < 0;
+
+      // Handle non-spontaneity: overriding feasibility if ΔG is positive
+      if (dG > 0 && parsedData.reactionFeasible) {
+        parsedData.reactionFeasible = false;
+        parsedData.conceptualExplanationFoundational = "Gibbs Free Energy calculations indicate that this process is non-spontaneous at these environment levels.";
+        parsedData.conceptualExplanationAdvanced = `The Gibbs Free Energy (ΔG = ${parsedData.calculatedDeltaG} kJ) is positive under these conditions, rendering the reaction non-spontaneous. Hence, no products are formed.`;
+      }
+
+      return res.json(parsedData);
+    } catch (err: any) {
+      console.log("[Simulation] Dynamic handler invoked.");
+      const fallbackResult = generateDynamicFallback(reactantList, temperature, pressure, solvent, addedPeroxide, tKelvin, catalyst);
+      return res.json(fallbackResult);
+    }
+  });
+
+  // —————————————————————————————————————————————————————————————————————
+  // Helper tools and databases for "Know Your Chemicals (KYC)"
+  // —————————————————————————————————————————————————————————————————————
+  function isValidFormula(str: string): boolean {
+    const s = str.trim();
+    if (s.includes(" ")) return false;
+    // must start with uppercase or parenthesis
+    if (!/^[A-Z(]/.test(s)) return false;
+    // Check if every lowercase letter is part of a valid element symbol (i.e. immediately preceded by an uppercase letter)
+    for (let i = 0; i < s.length; i++) {
+      if (/[a-z]/.test(s[i])) {
+        if (i === 0 || !/[A-Z]/.test(s[i - 1])) {
+          return false;
+        }
+      }
+    }
+    // must contain mostly elements, numbers, parentheses, dots, etc.
+    return /^[A-Za-z0-9().·\+=\-\[\]]+$/.test(s);
+  }
+
+  // Computes a real molecular weight from a chemical formula string (e.g. "V2O5", "Ca(OH)2",
+  // "(NH4)2SO4", "CaSO4·2H2O") by summing each element's atomic mass from PERIODIC_TABLE_ELEMENTS,
+  // handling parenthesized groups with multipliers and a trailing "·nH2O"/".nH2O" hydrate suffix.
+  // Returns null if the formula contains anything this simple parser can't handle (unknown element
+  // symbols, ionic charge brackets, etc.) so the caller can fall back gracefully instead of
+  // reporting a fabricated number.
+  function calculateMolecularWeight(formula: string): number | null {
+    const hydrateMatch = formula.match(/[·.](\d*)H2O$/);
+    let mainFormula = formula;
+    let hydrateWaterCount = 0;
+    if (hydrateMatch) {
+      hydrateWaterCount = hydrateMatch[1] === "" ? 1 : parseInt(hydrateMatch[1], 10);
+      mainFormula = formula.slice(0, formula.length - hydrateMatch[0].length);
+    }
+
+    const massLookup: Record<string, number> = {};
+    for (const el of PERIODIC_TABLE_ELEMENTS) {
+      massLookup[el.sym] = parseFloat(el.mass);
+    }
+
+    const str = mainFormula.trim();
+    let index = 0;
+
+    const parseGroup = (): Record<string, number> | null => {
+      const counts: Record<string, number> = {};
+      while (index < str.length) {
+        const ch = str[index];
+        if (ch === "(" || ch === "[") {
+          const closeCh = ch === "(" ? ")" : "]";
+          index++;
+          const inner = parseGroup();
+          if (!inner) return null;
+          if (str[index] !== closeCh) return null;
+          index++;
+          let numStr = "";
+          while (index < str.length && /[0-9]/.test(str[index])) {
+            numStr += str[index];
+            index++;
+          }
+          const multiplier = numStr === "" ? 1 : parseInt(numStr, 10);
+          for (const el in inner) {
+            counts[el] = (counts[el] || 0) + inner[el] * multiplier;
+          }
+        } else if (ch === ")" || ch === "]") {
+          break;
+        } else if (/[A-Z]/.test(ch)) {
+          let sym = ch;
+          index++;
+          if (index < str.length && /[a-z]/.test(str[index])) {
+            sym += str[index];
+            index++;
+          }
+          if (!(sym in massLookup)) return null;
+          let numStr = "";
+          while (index < str.length && /[0-9]/.test(str[index])) {
+            numStr += str[index];
+            index++;
+          }
+          const count = numStr === "" ? 1 : parseInt(numStr, 10);
+          counts[sym] = (counts[sym] || 0) + count;
+        } else {
+          return null;
+        }
+      }
+      return counts;
+    };
+
+    const counts = parseGroup();
+    if (!counts || index !== str.length || Object.keys(counts).length === 0) return null;
+
+    let total = 0;
+    for (const el in counts) {
+      total += massLookup[el] * counts[el];
+    }
+    total += hydrateWaterCount * (massLookup["H"] * 2 + massLookup["O"]);
+
+    return Math.round(total * 100) / 100;
+  }
+
+  function classifyFormula(formula: string): { classification: "Organic" | "Inorganic"; reason: string } {
+    // A standard chemical formula consists of uppercase letter optionally followed by lowercase letter
+    const elementsInFormula: string[] = [];
+    const elementRegex = /([A-Z][a-z]?)/g;
+    let match;
+    while ((match = elementRegex.exec(formula)) !== null) {
+      elementsInFormula.push(match[1]);
+    }
+
+    const hasCarbon = elementsInFormula.includes("C");
+
+    if (!hasCarbon) {
+      return {
+        classification: "Inorganic",
+        reason: `This compound (${formula}) does not contain any carbon atoms, classifying it systematically as inorganic.`
+      };
+    }
+
+    // It has Carbon. Check for inorganic carbonaceous groups
+    const norm = formula.toUpperCase();
+    const isCarbonate = norm.includes("CO3") || norm.includes("HCO3");
+    const isCarbonOxide = norm === "CO" || norm === "CO2" || norm === "C3O2";
+    const isCyanide = norm.includes("CN") && !norm.includes("CH"); 
+    const isCarbide = (norm.endsWith("C") || /C[1-9]?$/.test(norm)) && !norm.includes("H") && !norm.includes("O");
+
+    if (isCarbonate || isCarbonOxide || isCyanide || isCarbide) {
+      let group = "inorganic group";
+      if (isCarbonate) group = "carbonate";
+      if (isCarbonOxide) group = "carbon oxide";
+      if (isCyanide) group = "cyanide";
+      if (isCarbide) group = "carbide";
+      return {
+        classification: "Inorganic",
+        reason: `Even though it contains carbon, ${formula} contains it only in the form of an inorganic ${group} without traditional organic covalent carbon-hydrogen frameworks.`
+      };
+    }
+
+    return {
+      classification: "Organic",
+      reason: `This is classified as an organic compound because it contains covalent carbon-hydrogen or carbon-carbon bonds forming an organic molecular framework.`
+    };
+  }
+
+  const COMMON_NAMES_TO_FORMULA: Record<string, { formula: string, iupac: string, type: string, color: string, classification?: "Organic" | "Inorganic", smiles?: string }> = {
+    "copper oxide": { formula: "CuO", iupac: "Copper(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Cu]=O" },
+    "copper(ii) oxide": { formula: "CuO", iupac: "Copper(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Cu]=O" },
+    "copper (ii) oxide": { formula: "CuO", iupac: "Copper(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Cu]=O" },
+    "copper(i) oxide": { formula: "Cu2O", iupac: "Copper(I) oxide", type: "Metal Oxide", color: "Red/brown powder", classification: "Inorganic", smiles: "[Cu]O[Cu]" },
+    "copper (i) oxide": { formula: "Cu2O", iupac: "Copper(I) oxide", type: "Metal Oxide", color: "Red/brown powder", classification: "Inorganic", smiles: "[Cu]O[Cu]" },
+    "cuprous oxide": { formula: "Cu2O", iupac: "Copper(I) oxide", type: "Metal Oxide", color: "Red/brown powder", classification: "Inorganic", smiles: "[Cu]O[Cu]" },
+    "cupric oxide": { formula: "CuO", iupac: "Copper(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Cu]=O" },
+    "copper sulfate": { formula: "CuSO4", iupac: "Copper(II) sulfate", type: "Metal Salt", color: "Blue crystals (hydrated) or white powder (anhydrous)", classification: "Inorganic", smiles: "[Cu+2].[O-]S(=O)(=O)[O-]" },
+    "copper (ii) sulfate": { formula: "CuSO4", iupac: "Copper(II) sulfate", type: "Metal Salt", color: "Blue crystals (hydrated) or white powder (anhydrous)", classification: "Inorganic", smiles: "[Cu+2].[O-]S(=O)(=O)[O-]" },
+    "copper(ii) sulfate": { formula: "CuSO4", iupac: "Copper(II) sulfate", type: "Metal Salt", color: "Blue crystals (hydrated) or white powder (anhydrous)", classification: "Inorganic", smiles: "[Cu+2].[O-]S(=O)(=O)[O-]" },
+    "copper carbonate": { formula: "CuCO3", iupac: "Copper(II) carbonate", type: "Metal Carbonate", color: "Green powder", classification: "Inorganic", smiles: "[Cu+2].[O-]C(=O)[O-]" },
+    "copper chloride": { formula: "CuCl2", iupac: "Copper(II) chloride", type: "Metal Halide", color: "Blue-green dihydrate crystals", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Cu+2]" },
+    "iron oxide": { formula: "Fe2O3", iupac: "Iron(III) oxide", type: "Metal Oxide", color: "Reddish-brown powder", classification: "Inorganic", smiles: "O=[Fe]O[Fe]=O" },
+    "iron(iii) oxide": { formula: "Fe2O3", iupac: "Iron(III) oxide", type: "Metal Oxide", color: "Reddish-brown powder", classification: "Inorganic", smiles: "O=[Fe]O[Fe]=O" },
+    "iron (iii) oxide": { formula: "Fe2O3", iupac: "Iron(III) oxide", type: "Metal Oxide", color: "Reddish-brown powder", classification: "Inorganic", smiles: "O=[Fe]O[Fe]=O" },
+    "iron(ii) oxide": { formula: "FeO", iupac: "Iron(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Fe]=O" },
+    "iron (ii) oxide": { formula: "FeO", iupac: "Iron(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Fe]=O" },
+    "ferric oxide": { formula: "Fe2O3", iupac: "Iron(III) oxide", type: "Metal Oxide", color: "Reddish-brown powder", classification: "Inorganic", smiles: "O=[Fe]O[Fe]=O" },
+    "ferrous oxide": { formula: "FeO", iupac: "Iron(II) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "[Fe]=O" },
+    "iron(ii,iii) oxide": { formula: "Fe3O4", iupac: "Iron(II,III) oxide", type: "Metal Oxide", color: "Black powder (magnetite)", classification: "Inorganic", smiles: "O=[Fe+2].O=[Fe+3]O[Fe+3]=O" },
+    "magnetite": { formula: "Fe3O4", iupac: "Iron(II,III) oxide", type: "Metal Oxide", color: "Black powder", classification: "Inorganic", smiles: "O=[Fe+2].O=[Fe+3]O[Fe+3]=O" },
+    "iron sulfate": { formula: "FeSO4", iupac: "Iron(II) sulfate", type: "Metal Salt", color: "Green crystals", classification: "Inorganic", smiles: "[Fe+2].[O-]S(=O)(=O)[O-]" },
+    "iron chloride": { formula: "FeCl3", iupac: "Iron(III) chloride", type: "Metal Halide", color: "Yellow-brown crystals", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Cl-].[Fe+3]" },
+    "ferric chloride": { formula: "FeCl3", iupac: "Iron(III) chloride", type: "Metal Halide", color: "Yellow-brown crystals", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Cl-].[Fe+3]" },
+    "ferrous sulfate": { formula: "FeSO4", iupac: "Iron(II) sulfate", type: "Metal Salt", color: "Green crystals", classification: "Inorganic", smiles: "[Fe+2].[O-]S(=O)(=O)[O-]" },
+    "sodium sulfate": { formula: "Na2SO4", iupac: "Sodium sulfate", type: "Metal Salt", color: "White crystalline powder", classification: "Inorganic", smiles: "[Na+].[Na+].[O-]S(=O)(=O)[O-]" },
+    "sodium chloride": { formula: "NaCl", iupac: "Sodium chloride", type: "Metal Halide", color: "White cubic crystals", classification: "Inorganic", smiles: "[Na+].[Cl-]" },
+    "sodium iodide": { formula: "NaI", iupac: "Sodium iodide", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[Na+].[I-]" },
+    "potassium chloride": { formula: "KCl", iupac: "Potassium chloride", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[K+].[Cl-]" },
+    "potassium iodide": { formula: "KI", iupac: "Potassium iodide", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[K+].[I-]" },
+    "potassium bromide": { formula: "KBr", iupac: "Potassium bromide", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[K+].[Br-]" },
+    "potassium permanganate": { formula: "KMnO4", iupac: "Potassium manganate(VII)", type: "Strong Oxidizer / Metal Salt", color: "Deep purple crystals", classification: "Inorganic", smiles: "[K+].[O-][Mn](=O)(=O)=O" },
+    "potassium dichromate": { formula: "K2Cr2O7", iupac: "Potassium dichromate(VI)", type: "Strong Oxidizer / Metal Salt", color: "Bright orange-red crystals", classification: "Inorganic", smiles: "[K+].[K+].[O-][Cr](=O)(=O)O[Cr](=O)(=O)[O-]" },
+    "sodium nitrate": { formula: "NaNO3", iupac: "Sodium nitrate", type: "Metal Salt", color: "White crystalline powder", classification: "Inorganic", smiles: "[Na+].[O-][N+](=O)[O-]" },
+    "potassium nitrate": { formula: "KNO3", iupac: "Potassium nitrate", type: "Metal Salt", color: "White crystalline powder", classification: "Inorganic", smiles: "[K+].[O-][N+](=O)[O-]" },
+    "sodium carbonate": { formula: "Na2CO3", iupac: "Sodium carbonate", type: "Metal Carbonate", color: "White powder", classification: "Inorganic", smiles: "[Na+].[Na+].[O-]C(=O)[O-]" },
+    "sodium bicarbonate": { formula: "NaHCO3", iupac: "Sodium hydrogen carbonate", type: "Metal Bicarbonate", color: "White powder", classification: "Inorganic", smiles: "[Na+].OC(=O)[O-]" },
+    "calcium chloride": { formula: "CaCl2", iupac: "Calcium chloride", type: "Metal Halide", color: "White powder or pellets", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Ca+2]" },
+    "magnesium chloride": { formula: "MgCl2", iupac: "Magnesium chloride", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Mg+2]" },
+    "calcium sulfate": { formula: "CaSO4", iupac: "Calcium sulfate", type: "Metal Salt", color: "White powder", classification: "Inorganic", smiles: "[Ca+2].[O-]S(=O)(=O)[O-]" },
+    "magnesium sulfate": { formula: "MgSO4", iupac: "Magnesium sulfate", type: "Metal Salt", color: "White crystalline powder", classification: "Inorganic", smiles: "[Mg+2].[O-]S(=O)(=O)[O-]" },
+    "calcium carbonate": { formula: "CaCO3", iupac: "Calcium carbonate", type: "Metal Carbonate", color: "White chalky powder", classification: "Inorganic", smiles: "[Ca+2].[O-]C(=O)[O-]" },
+    "calcium oxide": { formula: "CaO", iupac: "Calcium oxide", type: "Metal Oxide", color: "White powder", classification: "Inorganic", smiles: "[Ca]=O" },
+    "calcium hydroxide": { formula: "Ca(OH)2", iupac: "Calcium hydroxide", type: "Metal Hydroxide / Base", color: "White powder", classification: "Inorganic", smiles: "[OH-].[OH-].[Ca+2]" },
+    "magnesium oxide": { formula: "MgO", iupac: "Magnesium oxide", type: "Metal Oxide", color: "White powder", classification: "Inorganic", smiles: "[Mg]=O" },
+    "magnesium hydroxide": { formula: "Mg(OH)2", iupac: "Magnesium hydroxide", type: "Metal Hydroxide / Antacid", color: "White suspension or powder", classification: "Inorganic", smiles: "[OH-].[OH-].[Mg+2]" },
+    "zinc oxide": { formula: "ZnO", iupac: "Zinc oxide", type: "Metal Oxide", color: "White powder", classification: "Inorganic", smiles: "[Zn]=O" },
+    "zinc sulfate": { formula: "ZnSO4", iupac: "Zinc sulfate", type: "Metal Salt", color: "White crystalline powder", classification: "Inorganic", smiles: "[Zn+2].[O-]S(=O)(=O)[O-]" },
+    "zinc chloride": { formula: "ZnCl2", iupac: "Zinc chloride", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Zn+2]" },
+    "silver chloride": { formula: "AgCl", iupac: "Silver chloride", type: "Precious Metal Halide", color: "White precipitate / powder (darkens in light)", classification: "Inorganic", smiles: "[Cl-].[Ag+]" },
+    "barium sulfate": { formula: "BaSO4", iupac: "Barium sulfate", type: "Metal Salt", color: "White heavy powder", classification: "Inorganic", smiles: "[Ba+2].[O-]S(=O)(=O)[O-]" },
+    "barium chloride": { formula: "BaCl2", iupac: "Barium chloride", type: "Metal Halide", color: "White crystalline solid", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Ba+2]" },
+    "lead chloride": { formula: "PbCl2", iupac: "Lead(II) chloride", type: "Heavy Metal Halide", color: "White crystalline powder", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Pb+2]" },
+    "lead oxide": { formula: "PbO", iupac: "Lead(II) oxide", type: "Heavy Metal Oxide", color: "Yellow or red powder", classification: "Inorganic", smiles: "[Pb]=O" },
+    "lead nitrate": { formula: "Pb(NO3)2", iupac: "Lead(II) nitrate", type: "Heavy Metal Nitrate", color: "White crystalline powder", classification: "Inorganic", smiles: "[O-][N+](=O)[O-].[O-][N+](=O)[O-].[Pb+2]" },
+    "lead iodide": { formula: "PbI2", iupac: "Lead(II) iodide", type: "Heavy Metal Halide", color: "Bright yellow powder", classification: "Inorganic", smiles: "[I-].[I-].[Pb+2]" },
+    "silver nitrate": { formula: "AgNO3", iupac: "Silver nitrate", type: "Precious Metal Nitrate", color: "White crystals", classification: "Inorganic", smiles: "[Ag+].[O-][N+](=O)[O-]" },
+    "aluminum oxide": { formula: "Al2O3", iupac: "Aluminium oxide", type: "Metal Oxide / Amphoteric", color: "White powder", classification: "Inorganic", smiles: "O=[Al]O[Al]=O" },
+    "aluminium oxide": { formula: "Al2O3", iupac: "Aluminium oxide", type: "Metal Oxide / Amphoteric", color: "White powder", classification: "Inorganic", smiles: "O=[Al]O[Al]=O" },
+    "aluminum chloride": { formula: "AlCl3", iupac: "Aluminium chloride", type: "Metal Halide", color: "White or pale yellow solid", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Cl-].[Al+3]" },
+    "aluminium chloride": { formula: "AlCl3", iupac: "Aluminium chloride", type: "Metal Halide", color: "White or pale yellow solid", classification: "Inorganic", smiles: "[Cl-].[Cl-].[Cl-].[Al+3]" },
+    "water": { formula: "H2O", iupac: "Oxidane", type: "Solvent", color: "Colorless liquid", classification: "Inorganic", smiles: "O" },
+    "ammonia": { formula: "NH3", iupac: "Ammonia", type: "Weak Base", color: "Colorless gas with pungent odor", classification: "Inorganic", smiles: "N" },
+    "carbon dioxide": { formula: "CO2", iupac: "Carbon dioxide", type: "Non-metal Oxide", color: "Colorless odorless gas", classification: "Inorganic", smiles: "O=C=O" },
+    "carbon monoxide": { formula: "CO", iupac: "Carbon monoxide", type: "Non-metal Oxide", color: "Colorless odorless toxic gas", classification: "Inorganic", smiles: "[C-]#[O+]" },
+    "sulfur dioxide": { formula: "SO2", iupac: "Sulfur dioxide", type: "Acidic Oxide", color: "Colorless gas with pungent suffocating odor", classification: "Inorganic", smiles: "O=S=O" },
+    "sulfur trioxide": { formula: "SO3", iupac: "Sulfur trioxide", type: "Acidic Oxide", color: "Colorless fuming liquid or gas", classification: "Inorganic", smiles: "O=S(=O)=O" },
+    "nitrogen dioxide": { formula: "NO2", iupac: "Nitrogen dioxide", type: "Acidic Oxide", color: "Reddish-brown toxic gas", classification: "Inorganic", smiles: "[O-][N+](=O)=O" },
+    "nitrous oxide": { formula: "N2O", iupac: "Dinitrogen oxide", type: "Non-metal Oxide", color: "Colorless sweet-smelling gas (laughing gas)", classification: "Inorganic", smiles: "[N-]=[N+]=O" },
+    "nitric oxide": { formula: "NO", iupac: "Nitrogen monoxide", type: "Non-metal Oxide", color: "Colorless gas", classification: "Inorganic", smiles: "[N]=O" },
+    "phosphorus pentoxide": { formula: "P2O5", iupac: "Phosphorus pentoxide", type: "Acidic Oxide", color: "White crystalline powder", classification: "Inorganic", smiles: "O=P(O)OP(=O)(O)O" },
+    "hydrochloric acid": { formula: "HCl", iupac: "Hydrogen chloride", type: "Mineral Acid", color: "Colorless fuming liquid", classification: "Inorganic", smiles: "Cl" },
+    "sulfuric acid": { formula: "H2SO4", iupac: "Sulfuric acid", type: "Mineral Acid", color: "Colorless viscous liquid", classification: "Inorganic", smiles: "OS(=O)(=O)O" },
+    "nitric acid": { formula: "HNO3", iupac: "Nitric acid", type: "Mineral Acid", color: "Colorless or yellowish liquid", classification: "Inorganic", smiles: "O[N+](=O)[O-]" },
+    "phosphoric acid": { formula: "H3PO4", iupac: "Phosphoric acid", type: "Mineral Acid", color: "Colorless viscous liquid or crystalline solid", classification: "Inorganic", smiles: "OP(=O)(O)O" },
+    "methane": { formula: "CH4", iupac: "Methane", type: "Alkane Hydrocarbon", color: "Colorless odorless gas", classification: "Organic", smiles: "C" },
+    "ethane": { formula: "C2H6", iupac: "Ethane", type: "Alkane Hydrocarbon", color: "Colorless odorless gas", classification: "Organic", smiles: "CC" },
+    "propane": { formula: "C3H8", iupac: "Propane", type: "Alkane Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "CCC" },
+    "butane": { formula: "C4H10", iupac: "Butane", type: "Alkane Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "CCCC" },
+    "ethene": { formula: "C2H4", iupac: "Ethene", type: "Alkene Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "C=C" },
+    "ethylene": { formula: "C2H4", iupac: "Ethene", type: "Alkene Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "C=C" },
+    "ethyne": { formula: "C2H2", iupac: "Ethyne", type: "Alkyne Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "C#C" },
+    "acetylene": { formula: "C2H2", iupac: "Ethyne", type: "Alkyne Hydrocarbon", color: "Colorless gas", classification: "Organic", smiles: "C#C" },
+    "ethanol": { formula: "C2H5OH", iupac: "Ethanol", type: "Alcohol", color: "Colorless volatile liquid", classification: "Organic", smiles: "CCO" },
+    "methanol": { formula: "CH3OH", iupac: "Methanol", type: "Alcohol", color: "Colorless toxic liquid", classification: "Organic", smiles: "CO" },
+    "acetic acid": { formula: "CH3COOH", iupac: "Ethanoic acid", type: "Carboxylic Acid", color: "Colorless pungent liquid", classification: "Organic", smiles: "CC(=O)O" },
+    "ethanoic acid": { formula: "CH3COOH", iupac: "Ethanoic acid", type: "Carboxylic Acid", color: "Colorless pungent liquid", classification: "Organic", smiles: "CC(=O)O" },
+    "glucose": { formula: "C6H12O6", iupac: "D-Glucose", type: "Monosaccharide Sugar", color: "White crystalline powder", classification: "Organic", smiles: "C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O" },
+    "sucrose": { formula: "C12H22O11", iupac: "beta-D-fructofuranosyl alpha-D-glucopyranoside", type: "Disaccharide Sugar", color: "White crystals or powder", classification: "Organic", smiles: "C(C1C(C(C(C(O1)OC2(C(C(C(O2)CO)O)O)CO)O)O)O)O" },
+    "fructose": { formula: "C6H12O6", iupac: "D-Fructose", type: "Monosaccharide Sugar", color: "White crystalline powder", classification: "Organic", smiles: "C([C@@H]1[C@H]([C@@H](C(O1)(O)CO)O)O)O" },
+    "urea": { formula: "CO(NH2)2", iupac: "Urea", type: "Organic Amide", color: "White crystalline solid", classification: "Organic", smiles: "C(=O)(N)N" },
+    "caffeine": { formula: "C8H10N4O2", iupac: "1,3,7-Trimethylpurine-2,6-dione", type: "Purine Alkaloid", color: "White needles or powder", classification: "Organic", smiles: "CN1C2=C(C(=O)N(C1=O)C)N=CN2C" },
+    "acetone": { formula: "CH3COCH3", iupac: "Propan-2-one", type: "Ketone Solvent", color: "Colorless volatile liquid", classification: "Organic", smiles: "CC(=O)C" },
+    "propanone": { formula: "CH3COCH3", iupac: "Propan-2-one", type: "Ketone Solvent", color: "Colorless volatile liquid", classification: "Organic", smiles: "CC(=O)C" },
+    "chloroform": { formula: "CHCl3", iupac: "Trichloromethane", type: "Halocarbon Solvent", color: "Colorless heavy volatile liquid", classification: "Organic", smiles: "C(Cl)(Cl)Cl" },
+    "salicylic acid": { formula: "C7H6O3", iupac: "2-Hydroxybenzoic acid", type: "Hydroxy Acid", color: "White needles or powder", classification: "Organic", smiles: "C1=CC=C(C(=C1)O)C(=O)O" },
+    "citric acid": { formula: "C6H8O7", iupac: "2-hydroxypropane-1,2,3-tricarboxylic acid", type: "Tricarboxylic Hydroxy Acid", color: "White crystalline solid", classification: "Organic", smiles: "C(C(=O)O)C(CC(=O)O)(C(=O)O)O" },
+    "aspirin": { formula: "C9H8O4", iupac: "2-Acetyloxybenzoic acid", type: "Ester / Carboxylic Acid", color: "White crystalline powder", classification: "Organic", smiles: "CC(=O)OC1=CC=CC=C1C(=O)O" },
+    "acetylsalicylic acid": { formula: "C9H8O4", iupac: "2-Acetyloxybenzoic acid", type: "Ester / Carboxylic Acid", color: "White crystalline powder", classification: "Organic", smiles: "CC(=O)OC1=CC=CC=C1C(=O)O" },
+    "paracetamol": { formula: "C8H9NO2", iupac: "N-(4-hydroxyphenyl)acetamide", type: "Amide / Phenol", color: "White crystalline powder", classification: "Organic", smiles: "CC(=O)NC1=CC=C(C=C1)O" },
+    "acetaminophen": { formula: "C8H9NO2", iupac: "N-(4-hydroxyphenyl)acetamide", type: "Amide / Phenol", color: "White crystalline powder", classification: "Organic", smiles: "CC(=O)NC1=CC=C(C=C1)O" },
+    "lactic acid": { formula: "C3H6O3", iupac: "2-Hydroxypropanoic acid", type: "Hydroxy Acid", color: "Syrupy colorless liquid or white solid", classification: "Organic", smiles: "CC(C(=O)O)O" },
+    "glycine": { formula: "C2H5NO2", iupac: "2-Aminoacetic acid", type: "Amino Acid", color: "White crystalline solid", classification: "Organic", smiles: "C(C(=O)O)N" },
+    "alanine": { formula: "C3H7NO2", iupac: "2-Aminopropanoic acid", type: "Amino Acid", color: "White crystalline powder", classification: "Organic", smiles: "CC(C(=O)O)N" },
+    "ibuprofen": { formula: "C13H18O2", iupac: "(RS)-2-(4-(2-methylpropyl)phenyl)propanoic acid", type: "Carboxylic Acid", color: "White crystalline powder", classification: "Organic", smiles: "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O" },
+    "ascorbic acid": { formula: "C6H8O6", iupac: "(5R)-[(1S)-1,2-dihydroxyethyl]-3,4-dihydroxyfuran-2(5H)-one", type: "Enol / Lactone", color: "White to light yellow crystals", classification: "Organic", smiles: "C(C(C1C(=C(C(=O)O1)O)O)O)O" },
+    "vitamin c": { formula: "C6H8O6", iupac: "(5R)-[(1S)-1,2-dihydroxyethyl]-3,4-dihydroxyfuran-2(5H)-one", type: "Enol / Lactone", color: "White to light yellow crystals", classification: "Organic", smiles: "C(C(C1C(=C(C(=O)O1)O)O)O)O" },
+    "carbon tetrachloride": { formula: "CCl4", iupac: "Tetrachloromethane", type: "Halocarbon Solvent", color: "Colorless heavy volatile liquid", classification: "Organic", smiles: "C(Cl)(Cl)(Cl)Cl" },
+    "benzene": { formula: "C6H6", iupac: "Benzene", type: "Aromatic Hydrocarbon", color: "Colorless volatile liquid", classification: "Organic", smiles: "C1=CC=CC=C1" },
+    "gypsum": { formula: "CaSO4·2H2O", iupac: "Calcium sulfate dihydrate", type: "Hydrated Metal Salt", color: "White crystalline solid", classification: "Inorganic", smiles: "[Ca+2].[O-]S(=O)(=O)[O-].O.O" },
+    "calcium sulfate dihydrate": { formula: "CaSO4·2H2O", iupac: "Calcium sulfate dihydrate", type: "Hydrated Metal Salt", color: "White crystalline solid", classification: "Inorganic", smiles: "[Ca+2].[O-]S(=O)(=O)[O-].O.O" },
+    "plaster of paris": { formula: "CaSO4·0.5H2O", iupac: "Calcium sulfate hemihydrate", type: "Hydrated Metal Salt", color: "Fine white powder", classification: "Inorganic", smiles: "[Ca+2].[O-]S(=O)(=O)[O-].O" },
+    "calcium sulfate hemihydrate": { formula: "CaSO4·0.5H2O", iupac: "Calcium sulfate hemihydrate", type: "Hydrated Metal Salt", color: "Fine white powder", classification: "Inorganic", smiles: "[Ca+2].[O-]S(=O)(=O)[O-].O" },
+    "bleaching powder": { formula: "CaOCl2", iupac: "Calcium hypochlorite", type: "Inorganic Salt / Disinfectant", color: "Dull white powder with a strong smell of chlorine", classification: "Inorganic", smiles: "[Ca+2].[Cl-].[O-][Cl]" },
+    "calcium oxychloride": { formula: "CaOCl2", iupac: "Calcium hypochlorite", type: "Inorganic Salt / Disinfectant", color: "Dull white powder with a strong smell of chlorine", classification: "Inorganic", smiles: "[Ca+2].[Cl-].[O-][Cl]" },
+    "calcium hypochlorite": { formula: "CaOCl2", iupac: "Calcium hypochlorite", type: "Inorganic Salt / Disinfectant", color: "Dull white powder with a strong smell of chlorine", classification: "Inorganic", smiles: "[Ca+2].[Cl-].[O-][Cl]" },
+    "bromoethane": { formula: "C2H5Br", iupac: "Bromoethane", type: "Alkyl Halide", color: "Colorless volatile liquid", classification: "Organic", smiles: "CCBr" },
+    "ethyl bromide": { formula: "C2H5Br", iupac: "Bromoethane", type: "Alkyl Halide", color: "Colorless volatile liquid", classification: "Organic", smiles: "CCBr" },
+    "chloromethane": { formula: "CH3Cl", iupac: "Chloromethane", type: "Alkyl Halide", color: "Colorless gas", classification: "Organic", smiles: "CCl" },
+    "methyl chloride": { formula: "CH3Cl", iupac: "Chloromethane", type: "Alkyl Halide", color: "Colorless gas", classification: "Organic", smiles: "CCl" },
+    "bromomethane": { formula: "CH3Br", iupac: "Bromomethane", type: "Alkyl Halide", color: "Colorless gas", classification: "Organic", smiles: "CBr" },
+    "methyl bromide": { formula: "CH3Br", iupac: "Bromomethane", type: "Alkyl Halide", color: "Colorless gas", classification: "Organic", smiles: "CBr" },
+    "iodomethane": { formula: "CH3I", iupac: "Iodomethane", type: "Alkyl Halide", color: "Colorless liquid", classification: "Organic", smiles: "CI" },
+    "methyl iodide": { formula: "CH3I", iupac: "Iodomethane", type: "Alkyl Halide", color: "Colorless liquid", classification: "Organic", smiles: "CI" },
+    "dichloromethane": { formula: "CH2Cl2", iupac: "Dichloromethane", type: "Alkyl Halide Solvent", color: "Colorless volatile liquid", classification: "Organic", smiles: "C(Cl)Cl" },
+    "methylene chloride": { formula: "CH2Cl2", iupac: "Dichloromethane", type: "Alkyl Halide Solvent", color: "Colorless volatile liquid", classification: "Organic", smiles: "C(Cl)Cl" },
+    "iodoform": { formula: "CHI3", iupac: "Triiodomethane", type: "Alkyl Halide / Antiseptic", color: "Pale yellow crystalline solid", classification: "Organic", smiles: "C(I)(I)I" },
+    "triiodomethane": { formula: "CHI3", iupac: "Triiodomethane", type: "Alkyl Halide / Antiseptic", color: "Pale yellow crystalline solid", classification: "Organic", smiles: "C(I)(I)I" },
+    "chlorobenzene": { formula: "C6H5Cl", iupac: "Chlorobenzene", type: "Aryl Halide", color: "Colorless liquid", classification: "Organic", smiles: "C1=CC=C(C=C1)Cl" },
+    "bromobenzene": { formula: "C6H5Br", iupac: "Bromobenzene", type: "Aryl Halide", color: "Colorless liquid", classification: "Organic", smiles: "C1=CC=C(C=C1)Br" }
+  };
+
+  const PERIODIC_TABLE_ELEMENTS = [
+    { num: 1, sym: "H", name: "Hydrogen", mass: "1.008", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Hydrogen is the most abundant chemical substance in the Universe, making up about 75% of all normal matter.", uses: "Clean energy fuel cells, rocket fuel, industrial ammonia synthesis via the Haber process, oil hydrogenation." },
+    { num: 2, sym: "He", name: "Helium", mass: "4.0026", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Helium is the second lightest and second most abundant element in the observable universe, and it cannot be solidified by cooling alone.", uses: "Cryogenics (cooling superconducting magnets in MRIs), pressurizing liquid rocket propellants, leak detection, helium balloons." },
+    { num: 3, sym: "Li", name: "Lithium", mass: "6.94", cat: "Metal", state: "Solid", color: "Silvery-white soft metal", fact: "Lithium is the least dense of all solid elements and is so soft it can be easily cut with a butter knife.", uses: "Rechargeable lithium-ion batteries, lightweight alloys for aerospace, psychiatric mood stabilizers, lubricating greases." },
+    { num: 4, sym: "Be", name: "Beryllium", mass: "9.0122", cat: "Metal", state: "Solid", color: "Lead-gray metallic solid", fact: "Beryllium is relatively rare in the universe and often forms in stars when larger cosmic rays collide with other elements.", uses: "Structural materials for aerospace, military satellites, spacecraft mirrors, window filters for X-ray tubes." },
+    { num: 5, sym: "B", name: "Boron", mass: "10.81", cat: "Metalloid", state: "Solid", color: "Black-brown crystalline metalloid", fact: "Boron is commonly found in Earth's crust in solar-evaporated mineral deposits called borates.", uses: "Manufacturing borosilicate glass, fiberglass insulation, agricultural micronutrients, control rods in nuclear reactors." },
+    { num: 6, sym: "C", name: "Carbon", mass: "12.011", cat: "Non-metal", state: "Solid", color: "Black (graphite) or clear (diamond)", fact: "Carbon has the highest thermal conductivity of any known element and is the foundational element for all known organic life.", uses: "Steel manufacturing, activated carbon filters, carbon fiber structures, synthetic diamonds, jewelry." },
+    { num: 7, sym: "N", name: "Nitrogen", mass: "14.007", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Nitrogen gas makes up about 78% of Earth's atmosphere and is highly inert in its diatomic form.", uses: "Liquid nitrogen cryostat cooling, inert purging systems, chemical synthesis of ammonia and fertilizers, food preservation." },
+    { num: 8, sym: "O", name: "Oxygen", mass: "15.999", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Oxygen is the third-most abundant element in the universe by mass, after hydrogen and helium, and is highly reactive.", uses: "Medical respiratory support, steel production, oxidizer in liquid rocket engines, municipal water purification." },
+    { num: 9, sym: "F", name: "Fluorine", mass: "18.998", cat: "Non-metal", state: "Gas", color: "Pale yellow-green highly toxic gas", fact: "Fluorine is the most electronegative and chemically reactive of all elements, reacting with almost any substance.", uses: "Water and toothpaste fluoridation, manufacturing Teflon non-stick coatings, uranium hexafluoride for enrichment, refrigerants." },
+    { num: 10, sym: "Ne", name: "Neon", mass: "20.180", cat: "Non-metal", state: "Gas", color: "Colorless gas (glowing reddish-orange)", fact: "Neon glows with a distinct, brilliant reddish-orange light when ionized in high-voltage glow discharge tubes.", uses: "Advertising neon signs, high-voltage indicators, cold cathode tubes, cryogenic liquid refrigerants." },
+    { num: 11, sym: "Na", name: "Sodium", mass: "22.990", cat: "Metal", state: "Solid", color: "Silvery-white extremely soft metal", fact: "Sodium is a highly reactive alkali metal that floats on water and reacts violently with it to release explosive hydrogen gas.", uses: "Raw material for table salt (NaCl) and baking soda (NaHCO3), high-pressure sodium-vapor lamps, organic chemical catalyst." },
+    { num: 12, sym: "Mg", name: "Magnesium", mass: "24.305", cat: "Metal", state: "Solid", color: "Shiny silvery-gray solid", fact: "Magnesium burns with an intensely bright white flame and is the central atom in chlorophyll molecules.", uses: "Lightweight structural aluminum-magnesium alloys, fireworks, signal flares, anti-acid medication (milk of magnesia), dietary supplements." },
+    { num: 13, sym: "Al", name: "Aluminum", mass: "26.982", cat: "Metal", state: "Solid", color: "Silvery-white lightweight metal", fact: "Aluminum is the most abundant metal in Earth's crust, but was once so precious that it was valued higher than gold.", uses: "Beverage cans, aircraft frames, kitchen foil wraps, high-voltage power lines, window frames, engine components." },
+    { num: 14, sym: "Si", name: "Silicon", mass: "28.085", cat: "Metalloid", state: "Solid", color: "Dark gray shiny crystalline solid", fact: "Silicon is a major component of sand, clay, quartz, and amethyst, and is the second most abundant element in Earth's crust.", uses: "Semiconductor computer chips, solar photovoltaic cells, silica glassmaking, silicone sealants and lubricants." },
+    { num: 15, sym: "P", name: "Phosphorus", mass: "30.974", cat: "Non-metal", state: "Solid", color: "White (waxy/translucent) or Red (powder)", fact: "White phosphorus glows faintly in the dark when exposed to oxygen, a phenomenon known as chemiluminescence.", uses: "Agricultural fertilizers, safety matches, steel manufacturing, pyrotechnics, detergent builders." },
+    { num: 16, sym: "S", name: "Sulfur", mass: "32.06", cat: "Non-metal", state: "Solid", color: "Bright yellow crystalline solid", fact: "Pure sulfur is odorless; the notorious 'rotten egg' smell is due to hydrogen sulfide gas.", uses: "Industrial production of sulfuric acid, vulcanization of rubber, gunpowder, fertilizers, skincare fungicides." },
+    { num: 17, sym: "Cl", name: "Chlorine", mass: "35.45", cat: "Non-metal", state: "Gas", color: "Pale greenish-yellow choking gas", fact: "Chlorine is a highly active halogen that was used as a chemical weapon during World War I.", uses: "Water disinfection (drinking and swimming pools), PVC plastic manufacturing, industrial bleaching, salt production." },
+    { num: 18, sym: "Ar", name: "Argon", mass: "39.948", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Argon is the third-most abundant gas in Earth's atmosphere, representing roughly 0.93%.", uses: "Double-pane window thermal insulation, shielding gas in gas tungsten arc welding, incandescent light bulbs preservation." },
+    { num: 19, sym: "K", name: "Potassium", mass: "39.098", cat: "Metal", state: "Solid", color: "Silvery-white extremely soft metal", fact: "Potassium is an alkali metal that oxidizes within seconds of air exposure and is crucial for cellular neural transmission.", uses: "Agricultural potash fertilizers, liquid soaps, optical glass manufacturing, salt substitutes, potassium hydroxide precursors." },
+    { num: 20, sym: "Ca", name: "Calcium", mass: "40.078", cat: "Metal", state: "Solid", color: "Dull gray alkaline earth metal", fact: "Calcium is the fifth-most abundant element in Earth's crust and is highly essential for human bone structure.", uses: "Cement and concrete production, steel manufacturing deoxidizer, dietary supplements, calcium carbonate fillers." },
+    { num: 21, sym: "Sc", name: "Scandium", mass: "44.956", cat: "Metal", state: "Solid", color: "Silvery-white transition metal", fact: "Scandium is a rare-earth element discovered in Scandinavia, where it occurs in very trace minerals.", uses: "High-strength aluminum-scandium alloys for aerospace and high-end sports equipment (bicycle frames, baseball bats)." },
+    { num: 22, sym: "Ti", name: "Titanium", mass: "47.867", cat: "Metal", state: "Solid", color: "Silvery-gray lustrous metal", fact: "Titanium is as strong as steel but 45% lighter, and it has the highest strength-to-weight ratio of any metal.", uses: "Aerospace structural frames, jet engines, medical prosthetic implants, dental crowns, sports gear, white paint pigment (TiO2)." },
+    { num: 23, sym: "V", name: "Vanadium", mass: "50.942", cat: "Metal", state: "Solid", color: "Steel-gray ductile metal", fact: "Vanadium is named after Vanadís, the Old Norse goddess of beauty and fertility, owing to its colorful chemical compounds.", uses: "Strengthening steel alloys (rebar, tools), titanium aerospace alloys, vanadium redox flow batteries for grid storage." },
+    { num: 24, sym: "Cr", name: "Chromium", mass: "51.996", cat: "Metal", state: "Solid", color: "Shiny silver-gray hard metal", fact: "Chromium is the primary additive in stainless steel (minimum 10.5%) that creates a protective passive layer against rust.", uses: "Chrome plating, stainless steel alloys, green and yellow pigments, leather tanning, refractory materials." },
+    { num: 25, sym: "Mn", name: "Manganese", mass: "54.938", cat: "Metal", state: "Solid", color: "Hard, brittle silvery-gray metal", fact: "Manganese is essential to iron and steel production because of its sulfur-fixing and deoxidizing properties.", uses: "Stainless steel manufacturing, dry cell batteries, aluminum alloy cans, coloring agents in glass and bricks." },
+    { num: 26, sym: "Fe", name: "Iron", mass: "55.845", cat: "Metal", state: "Solid", color: "Lustrous metallic gray metal", fact: "Iron is the most abundant element on Earth by mass, forming much of Earth's outer and inner core.", uses: "Structural steel beams, cast iron cookware, concrete reinforcement, industrial magnets, hemoglobin oxygen carrier in biology." },
+    { num: 27, sym: "Co", name: "Cobalt", mass: "58.933", cat: "Metal", state: "Solid", color: "Hard lustrous bluish-gray metal", fact: "Cobalt is a key component of Vitamin B12 and was historically used by ancient Egyptians to paint glass deep blue.", uses: "Lithium-ion battery cathodes, aerospace superalloys, high-strength permanent magnets, cobalt blue glass pigments." },
+    { num: 28, sym: "Ni", name: "Nickel", mass: "58.693", cat: "Metal", state: "Solid", color: "Lustrous silvery metal with golden tinge", fact: "Nickel is highly resistant to oxidation and is a major component of Earth's iron-nickel core.", uses: "Rechargeable batteries, stainless steel and nickel-chrome alloys, electroplating, coins, gas turbine engines." },
+    { num: 29, sym: "Cu", name: "Copper", mass: "63.546", cat: "Metal", state: "Solid", color: "Reddish-orange metallic metal", fact: "Copper has been used by humans for over 10,000 years and is one of the few metals occurring naturally in directly usable form.", uses: "Electrical wiring, plumbing pipes, brass and bronze alloys, heat exchangers, cookware, integrated circuit interconnects." },
+    { num: 30, sym: "Zn", name: "Zinc", mass: "65.38", cat: "Metal", state: "Solid", color: "Bluish-white lustrous metal", fact: "Zinc has been used for galvanizing steel to prevent rust since the 19th century and is essential for human enzyme systems.", uses: "Galvanizing steel structures, brass alloys, die-cast components, zinc-carbon batteries, dietary supplements." },
+    { num: 31, sym: "Ga", name: "Gallium", mass: "69.723", cat: "Metal", state: "Solid", color: "Silvery-blue soft metal", fact: "Gallium has a melting point of only 29.76°C (85.57°F), causing it to melt into a liquid when held in a warm hand.", uses: "Semiconductors (Gallium Arsenide, Gallium Nitride) for microchips, LEDs, laser diodes, high-temperature thermometers." },
+    { num: 32, sym: "Ge", name: "Germanium", mass: "72.630", cat: "Metalloid", state: "Solid", color: "Lustrous hard grayish-white metalloid", fact: "Germanium was highly important in the early development of solid-state electronics, including the first transistor.", uses: "Fiber optic communication lines, infrared night-vision optics, solar cell arrays on satellites, polymerization catalysts." },
+    { num: 33, sym: "As", name: "Arsenic", mass: "74.922", cat: "Metalloid", state: "Solid", color: "Metallic gray brittle metalloid", fact: "Arsenic and its compounds are well-known poisons, historically used as a stealth toxin in political assassinations.", uses: "Semiconductor n-type doping, lead-acid car batteries, specialized wood preservatives, alloy hardening." },
+    { num: 34, sym: "Se", name: "Selenium", mass: "78.971", cat: "Non-metal", state: "Solid", color: "Gray (metallic) or red (amorphous)", fact: "Selenium is a photoconductor, which means its electrical conductivity increases as light exposure increases.", uses: "Glassmaking (red tint and decolorizing), photocells, solar panels, laser printers, anti-dandruff shampoo." },
+    { num: 35, sym: "Br", name: "Bromine", mass: "79.904", cat: "Non-metal", state: "Liquid", color: "Red-brown fuming liquid", fact: "Bromine is the only nonmetallic element that is a liquid at standard temperature and pressure, emitting a pungent vapor.", uses: "Brominated flame retardants, water purification, pharmaceuticals, agricultural pesticides, photography chemical emulsions." },
+    { num: 36, sym: "Kr", name: "Krypton", mass: "83.798", cat: "Non-metal", state: "Gas", color: "Colorless gas", fact: "Between 1960 and 1983, the official definition of a meter was based on the orange-red spectral line of krypton-86.", uses: "High-speed photography strobe lights, airport runway lighting systems, energy-efficient fluorescent bulbs." },
+    { num: 37, sym: "Rb", name: "Rubidium", mass: "85.468", cat: "Metal", state: "Solid", color: "Silvery soft alkali metal", fact: "Rubidium is extremely reactive, igniting spontaneously in air and reacting explosively with water.", uses: "Atomic clocks for satellite synchronization, vapor turbines, vacuum tube getter, pyrotechnic colorants." },
+    { num: 38, sym: "Sr", name: "Strontium", mass: "87.62", cat: "Metal", state: "Solid", color: "Silvery-yellow soft metal", fact: "Strontium salts burn with an intense, brilliant crimson-red flame, making them essential in pyrotechnics.", uses: "Fireworks, ferrite permanent magnets, glow-in-the-dark paints and emergency exit signs." },
+    { num: 39, sym: "Y", name: "Yttrium", mass: "88.906", cat: "Metal", state: "Solid", color: "Silvery-metallic transition metal", fact: "Yttrium was discovered in the Swedish village of Ytterby, which also gave names to ytterbium, terbium, and erbium.", uses: "Superconductors (YBCO), red phosphors for television displays, YAG lasers, metal alloys." },
+    { num: 40, sym: "Zr", name: "Zirconium", mass: "91.224", cat: "Metal", state: "Solid", color: "Silvery-gray transition metal", fact: "Zirconium is highly resistant to corrosion by acids, alkalis, and saltwater, and has a very low neutron absorption.", uses: "Cladding for nuclear reactor fuel rods, ceramic glazes, industrial chemical valves, cubic zirconia gemstone jewelry." },
+    { num: 41, sym: "Nb", name: "Niobium", mass: "92.906", cat: "Metal", state: "Solid", color: "Light gray ductile metal", fact: "Niobium is used in superconducting alloys that can conduct electricity with zero resistance at very low temperatures.", uses: "Superconducting magnets in MRI scanners and particle accelerators, high-strength structural steels, jet engines." },
+    { num: 42, sym: "Mo", name: "Molybdenum", mass: "95.95", cat: "Metal", state: "Solid", color: "Dark gray transition metal", fact: "Molybdenum has one of the highest melting points of all pure elements (2,623°C) and is key to ancient samurai sword strength.", uses: "High-strength and high-temperature steel alloys, industrial heating elements, molybdenum disulfide lubricants." },
+    { num: 43, sym: "Tc", name: "Technetium", mass: "98", cat: "Metal", state: "Solid", color: "Silvery-gray radioactive metal", fact: "Technetium is the lowest atomic number element without any stable isotopes, and was the first element made artificially.", uses: "Medical diagnostic imaging (radioactive tracer Technetium-99m used in bone, heart, and lung scans)." },
+    { num: 44, sym: "Ru", name: "Ruthenium", mass: "101.07", cat: "Metal", state: "Solid", color: "Hard silvery-white transition metal", fact: "Ruthenium is a rare platinum-group metal that is highly resistant to chemical attack.", uses: "Electrical contacts, thick-film resistors, solar cells, titanium alloy corrosion-resistance booster, chemical catalysts." },
+    { num: 45, sym: "Rh", name: "Rhodium", mass: "102.91", cat: "Metal", state: "Solid", color: "Silvery-white noble metal", fact: "Rhodium is one of the rarest, densest, and most expensive precious metals, often costing more than gold and platinum.", uses: "Three-way catalytic converters in automobiles, plating jewelry and searchlight mirrors, electrical contacts." },
+    { num: 46, sym: "Pd", name: "Palladium", mass: "106.42", cat: "Metal", state: "Solid", color: "Silvery-white precious metal", fact: "Palladium can absorb up to 900 times its own volume of hydrogen gas at room temperature, acting like a sponge.", uses: "Catalytic converters, hydrogen purification systems, multi-layer ceramic capacitors, dental fillings, white gold alloys." },
+    { num: 47, sym: "Ag", name: "Silver", mass: "107.87", cat: "Metal", state: "Solid", color: "Brilliant polished white metal", fact: "Silver possesses the highest electrical conductivity, thermal conductivity, and reflectivity of any metal.", uses: "Solar panels, electrical contacts, high-quality mirrors, silver jewelry, photographic film, antibacterial coatings." },
+    { num: 48, sym: "Cd", name: "Cadmium", mass: "112.41", cat: "Metal", state: "Solid", color: "Soft bluish-white metal", fact: "Cadmium is highly toxic, causing severe bone damage and kidney disease if inhaled or ingested.", uses: "Nickel-cadmium rechargeable batteries, electroplating for rust protection, cadmium yellow pigments, solar panels." },
+    { num: 49, sym: "In", name: "Indium", mass: "114.82", cat: "Metal", state: "Solid", color: "Very soft silvery-white metal", fact: "Indium-tin oxide (ITO) is transparent and electrically conductive, making modern smartphone touchscreens possible.", uses: "Touchscreens, LCD screens, solar panels, low-melting temperature alloys, vacuum seals." },
+    { num: 50, sym: "Sn", name: "Tin", mass: "118.71", cat: "Metal", state: "Solid", color: "Silvery-white soft metal", fact: "Tin has been alloyed with copper to make bronze since 3000 BC, ushering in the Bronze Age of civilization.", uses: "Solder alloys for electronics, tin cans coating to prevent food container rust, bronze and brass, pewter tableware." },
+    { num: 51, sym: "Sb", name: "Antimony", mass: "121.76", cat: "Metalloid", state: "Solid", color: "Lustrous silvery-gray metalloid", fact: "Antimony compounds have been used in cosmetics as kohl eye makeup for over 5,000 years.", uses: "Halogenated flame retardants, lead-acid batteries, infrared detectors, pewter alloys." },
+    { num: 52, sym: "Te", name: "Tellurium", mass: "127.60", cat: "Metalloid", state: "Solid", color: "Brittle silvery-white metalloid", fact: "Tellurium is one of the rarest stable elements in the Earth's crust, often found associated with gold deposits.", uses: "Thermoelectric generators, cadmium-telluride (CdTe) solar panels, steel and copper alloys, vulcanization of rubber." },
+    { num: 53, sym: "I", name: "Iodine", mass: "126.90", cat: "Non-metal", state: "Solid", color: "Dark purple-black shiny crystals", fact: "Iodine sublimates upon heating, turning from solid crystals directly into a beautiful violet gas without melting first.", uses: "Medical antiseptics (povidone-iodine), thyroid health supplements, polarized filters for displays, cloud seeding." },
+    { num: 54, sym: "Xe", name: "Xenon", mass: "131.29", cat: "Non-metal", state: "Gas", color: "Colorless gas (glowing blue)", fact: "Xenon was the first noble gas ever shown to form chemical compounds, breaking the theory of complete inertness.", uses: "High-intensity discharge headlights, movie projector bulbs, spacecraft ion thruster propulsion, medical general anesthesia." },
+    { num: 55, sym: "Cs", name: "Cesium", mass: "132.91", cat: "Metal", state: "Solid", color: "Silvery-gold extremely soft metal", fact: "Cesium is so reactive it melts at just 28.4°C (83.1°F) and is used to define the official length of a second.", uses: "Cesium atomic clocks, specialized oil drilling fluids, photoelectric cells, vacuum tube gas getters." },
+    { num: 56, sym: "Ba", name: "Barium", mass: "137.33", cat: "Metal", state: "Solid", color: "Silvery-white soft metal", fact: "Although pure barium is toxic, insoluble barium sulfate is swallowed by medical patients for gastrointestinal X-rays.", uses: "Barium meal medical imaging, heavy drilling muds for oil wells, green fireworks, vacuum tube oxygen scavengers." },
+    { num: 57, sym: "La", name: "Lanthanum", mass: "138.91", cat: "Metal", state: "Solid", color: "Silvery-white soft rare-earth metal", fact: "Lanthanum is the prototype and naming origin of the lanthanide series of rare-earth elements.", uses: "High-refractive index camera lenses, hybrid car nickel-metal hydride batteries, carbon-arc searchlights." },
+    { num: 58, sym: "Ce", name: "Cerium", mass: "140.12", cat: "Metal", state: "Solid", color: "Silvery-gray rare-earth metal", fact: "Cerium is the most abundant of the rare-earth elements and is highly pyrophoric (sparks when scratched).", uses: "Mischmetal for lighter flints, catalytic converters in diesel engines, glass polishing powders, carbon-arc lights." },
+    { num: 59, sym: "Pr", name: "Praseodymium", mass: "140.91", cat: "Metal", state: "Solid", color: "Soft silvery rare-earth metal", fact: "Praseodymium provides a beautiful yellow-green color when used as a glass tinting agent.", uses: "Didymium protective glass for glassblowers, high-strength permanent magnets, carbon-arc projector lights." },
+    { num: 60, sym: "Nd", name: "Neodymium", mass: "144.24", cat: "Metal", state: "Solid", color: "Soft silvery rare-earth metal", fact: "Neodymium is alloyed with iron and boron to create the strongest permanent magnets commercially available.", uses: "High-power permanent magnets, electric car motors, wind turbines, hard disk drives, solid-state lasers." },
+    { num: 61, sym: "Pm", name: "Promethium", mass: "145", cat: "Metal", state: "Solid", color: "Silvery radioactive solid", fact: "Promethium is extremely rare and was discovered only after being synthesized in nuclear reactors.", uses: "Nuclear batteries for spacecraft, thickness gauges, luminous instrumentation dials." },
+    { num: 62, sym: "Sm", name: "Samarium", mass: "150.36", cat: "Metal", state: "Solid", color: "Silvery-white rare-earth metal", fact: "Samarium-cobalt magnets are extremely resistant to demagnetization and function at temperatures up to 700°C.", uses: "Samarium-cobalt magnets, medical cancer radiotherapy, control rods in nuclear reactors, specialized lasers." },
+    { num: 63, sym: "Eu", name: "Europium", mass: "151.96", cat: "Metal", state: "Solid", color: "Silvery-white rare-earth metal", fact: "Europium is the most chemically reactive of all rare-earth elements, oxidizing instantly in air.", uses: "Red phosphors in televisions and CRT displays, fluorescent lamps, anti-counterfeiting ink in Euro bank notes." },
+    { num: 64, sym: "Gd", name: "Gadolinium", mass: "157.25", cat: "Metal", state: "Solid", color: "Silvery-white rare-earth metal", fact: "Gadolinium has a high magnetic susceptibility and is highly effective at enhancing MRI scans.", uses: "Intravenous MRI contrast agents, nuclear reactor control rods, marine propulsion reactors." },
+    { num: 65, sym: "Tb", name: "Terbium", mass: "158.93", cat: "Metal", state: "Solid", color: "Silvery-gray rare-earth metal", fact: "Terbium can be deformed mechanically and is used in green phosphors and magneto-optical discs.", uses: "Green phosphors for TVs and lamps, sonar transducer alloys (Terfenol-D), military solid-state electronics." },
+    { num: 66, sym: "Dy", name: "Dysprosium", mass: "162.50", cat: "Metal", state: "Solid", color: "Silvery rare-earth metal", fact: "Dysprosium is added to neodymium magnets to increase their resistance to demagnetization at high heat.", uses: "Neodymium magnet thermal stabilizers, laser materials, infrared sensing systems, nuclear reactor control rods." },
+    { num: 67, sym: "Ho", name: "Holmium", mass: "164.93", cat: "Metal", state: "Solid", color: "Silvery-white rare-earth metal", fact: "Holmium has the highest magnetic strength of any element, capable of concentrating magnetic flux.", uses: "High-strength magnetic poles, medical solid-state lasers, microwave equipment filters." },
+    { num: 68, sym: "Er", name: "Erbium", mass: "167.26", cat: "Metal", state: "Solid", color: "Silvery rare-earth metal", fact: "Erbium ions are doped into silica fibers to amplify light signals in transoceanic internet cables.", uses: "Fiber optic amplifiers (EDFAs), surgical laser systems, pink coloring agent in glass and porcelain glazes." },
+    { num: 69, sym: "Tm", name: "Thulium", mass: "168.93", cat: "Metal", state: "Solid", color: "Silvery rare-earth metal", fact: "Thulium is the second rarest of the stable rare-earth elements, making it highly expensive.", uses: "Portable battlefield X-ray machines, high-power solid-state lasers, ceramic magnetic materials." },
+    { num: 70, sym: "Yb", name: "Ytterbium", mass: "173.05", cat: "Metal", state: "Solid", color: "Silvery-yellow rare-earth metal", fact: "Ytterbium has been used in atomic clocks, serving as an extremely stable frequency standard.", uses: "Industrial fiber lasers, portable industrial radiographic X-ray sources, high-precision atomic clocks." },
+    { num: 71, sym: "Lu", name: "Lutetium", mass: "174.97", cat: "Metal", state: "Solid", color: "Silvery-white rare-earth metal", fact: "Lutetium is the heaviest, hardest, and highest-density element of the lanthanide rare-earth series.", uses: "Crystals for PET scan detectors, petroleum cracking catalysts, high-refractive-index immersion lenses." },
+    { num: 72, sym: "Hf", name: "Hafnium", mass: "178.49", cat: "Metal", state: "Solid", color: "Silvery-gray transition metal", fact: "Hafnium is extremely resistant to corrosion and is used in modern computer microprocessors.", uses: "Nuclear reactor control rods, high-k gate dielectric insulators in microchips, gas turbine superalloys." },
+    { num: 73, sym: "Ta", name: "Tantalum", mass: "180.95", cat: "Metal", state: "Solid", color: "Silvery-blue hard refractory metal", fact: "Tantalum is completely immune to body fluids, making it an excellent material for surgical bone implants.", uses: "Electrolytic capacitors in smartphones, chemical processing heat exchangers, surgical pins and skull plates." },
+    { num: 74, sym: "W", name: "Tungsten", mass: "183.84", cat: "Metal", state: "Solid", color: "Steel-gray hard heavy metal", fact: "Tungsten has the highest melting point of all metals (3,422°C) and the highest tensile strength.", uses: "Incandescent light bulb filaments, tungsten carbide cutting tools, military armor-piercing shells, weights." },
+    { num: 75, sym: "Re", name: "Rhenium", mass: "186.21", cat: "Metal", state: "Solid", color: "Silvery-gray heavy transition metal", fact: "Rhenium is one of the rarest elements in the Earth's crust, found in molybdenum ores.", uses: "Jet engine superalloys for high heat, platinum-rhenium catalysts for producing unleaded gasoline." },
+    { num: 76, sym: "Os", name: "Osmium", mass: "190.23", cat: "Metal", state: "Solid", color: "Hard, brittle bluish-white metal", fact: "Osmium is the densest naturally occurring chemical element, twice as dense as lead.", uses: "Highly wear-resistant electrical contacts, record player stylus tips, fountain pen nibs." },
+    { num: 77, sym: "Ir", name: "Iridium", mass: "192.22", cat: "Metal", state: "Solid", color: "Silvery-yellow transition metal", fact: "Iridium is the most corrosion-resistant metal known, and is highly abundant in dinosaur-killing asteroids.", uses: "High-end spark plugs, crucibles for high-temperature single crystal growth, standard kilogram weight prototypes." },
+    { num: 78, sym: "Pt", name: "Platinum", mass: "195.08", cat: "Metal", state: "Solid", color: "Silvery-white dense noble metal", fact: "Platinum is highly unreactive and has extensive biological use in chemical chemotherapy.", uses: "Automotive catalytic converters, fine jewelry, laboratory crucibles, anticancer drugs (cisplatin)." },
+    { num: 79, sym: "Au", name: "Gold", mass: "196.97", cat: "Metal", state: "Solid", color: "Bright metallic yellow metal", fact: "Gold is the most malleable and ductile of all metals; a single gram can be beaten into a one-square-meter sheet.", uses: "Financial gold reserves, fine jewelry, corrosion-free electrical connectors, aerospace heat shielding." },
+    { num: 80, sym: "Hg", name: "Mercury", mass: "200.59", cat: "Metal", state: "Liquid", color: "Silvery liquid metal", fact: "Mercury is the only metal that is a liquid at room temperature and pressure, historically known as quicksilver.", uses: "Clinical thermometers, industrial barometers, fluorescent light bulbs, dental amalgam fillings." },
+    { num: 81, sym: "Tl", name: "Thallium", mass: "204.38", cat: "Metal", state: "Solid", color: "Soft bluish-gray metal", fact: "Thallium is highly toxic and tasteless, historically popular as a murder weapon in mystery novels.", uses: "Infrared optical lenses, low-temperature liquid thermometers (alloyed with mercury), electronics." },
+    { num: 82, sym: "Pb", name: "Lead", mass: "207.2", cat: "Metal", state: "Solid", color: "Dull bluish-gray heavy soft metal", fact: "Lead is a highly toxic cumulative poison that affects the nervous system, historically used in pipes and gasoline.", uses: "Lead-acid car batteries, X-ray and radiation shielding, industrial weights, ammunition." },
+    { num: 83, sym: "Bi", name: "Bismuth", mass: "208.98", cat: "Metal", state: "Solid", color: "Silvery-white metal with pinkish hue", fact: "Bismuth crystals grow in a beautiful stair-step spiral form with colorful iridescent oxide layers.", uses: "Active ingredient in Pepto-Bismol stomach medicine, low-melting safety plugs for fire sprinklers." },
+    { num: 84, sym: "Po", name: "Polonium", mass: "209", cat: "Metalloid", state: "Solid", color: "Silvery-gray highly radioactive metal", fact: "Polonium was discovered by Marie Curie and named in honor of her homeland, Poland.", uses: "Industrial static eliminators in brush bristles, thermoelectric heat sources for space probes." },
+    { num: 85, sym: "At", name: "Astatine", mass: "210", cat: "Metalloid", state: "Solid", color: "Dark radioactive solid", fact: "Astatine is the rarest naturally occurring element in Earth's crust, with less than 30 grams existing at any time.", uses: "Experimental cancer alpha-particle targeted radiotherapy." },
+    { num: 86, sym: "Rn", name: "Radon", mass: "222", cat: "Non-metal", state: "Gas", color: "Colorless radioactive gas", fact: "Radon is a naturally occurring radioactive noble gas that can accumulate in basements and cause lung cancer.", uses: "Geological earthquake fault monitoring, hydrological tracing, cancer radiation therapy." },
+    { num: 87, sym: "Fr", name: "Francium", mass: "223", cat: "Metal", state: "Solid", color: "Highly radioactive reactive metal", fact: "Francium is the second rarest element in Earth's crust and is highly unstable.", uses: "Basic research into nuclear structure and laser-trapped atomic spectroscopy." },
+    { num: 88, sym: "Ra", name: "Radium", mass: "226", cat: "Metal", state: "Solid", color: "Silvery-white radioactive alkaline earth metal", fact: "Radium was discovered by Marie Curie and was used in self-luminous watch dials before its radiation toxicity was discovered.", uses: "Industrial radiography, therapeutic cancer radiation, historical self-luminous paint." },
+    { num: 89, sym: "Ac", name: "Actinium", mass: "227", cat: "Metal", state: "Solid", color: "Silvery radioactive metal", fact: "Actinium glows with an eerie, intense pale blue light in the dark due to its high radioactivity.", uses: "Targeted alpha-immunotherapy for cancer, neutron source generator." },
+    { num: 90, sym: "Th", name: "Thorium", mass: "232.04", cat: "Metal", state: "Solid", color: "Silvery-white radioactive metal", fact: "Thorium has been studied extensively as a safer, more abundant alternative nuclear fuel to uranium.", uses: "Experimental thorium nuclear fuel cycles, high-temperature crucibles, camping lantern mantles." },
+    { num: 91, sym: "Pa", name: "Protactinium", mass: "231.04", cat: "Metal", state: "Solid", color: "Bright silvery radioactive metal", fact: "Protactinium is extremely scarce on Earth and highly hazardous due to alpha particle emission.", uses: "Scientific geological dating of sediments, nuclear waste research." },
+    { num: 92, sym: "U", name: "Uranium", mass: "238.03", cat: "Metal", state: "Solid", color: "Silvery-gray radioactive metal", fact: "Uranium is the heaviest naturally occurring element on Earth and has immense energy density.", uses: "Fuel for commercial nuclear power plants, depleted uranium armor plating, military nuclear weapons." },
+    { num: 93, sym: "Np", name: "Neptunium", mass: "237", cat: "Metal", state: "Solid", color: "Silvery radioactive metal", fact: "Neptunium is named after the planet Neptune and is produced as a byproduct in nuclear reactors.", uses: "Precursor in Plutonium-238 production, neutron detection instruments." },
+    { num: 94, sym: "Pu", name: "Plutonium", mass: "244", cat: "Metal", state: "Solid", color: "Bright silvery radioactive metal", fact: "Plutonium-239 is fissile and was used in the Trinity test and Nagasaki atomic bomb.", uses: "Nuclear weapon fissile cores, fuel for space probe radioisotope thermoelectric generators (RTGs)." },
+    { num: 95, sym: "Am", name: "Americium", mass: "243", cat: "Metal", state: "Solid", color: "Silvery-white radioactive metal", fact: "Americium is a synthetic element that is found inside most standard household ionization smoke detectors.", uses: "Household ionization smoke detectors, industrial thickness gauges, neutron radiography." },
+    { num: 96, sym: "Cm", name: "Curium", mass: "247", cat: "Metal", state: "Solid", color: "Silvery radioactive metal", fact: "Curium was named in honor of Marie and Pierre Curie for their pioneering work on radioactivity.", uses: "Alpha particle X-ray spectrometers on Mars and Moon exploration rovers." },
+    { num: 97, sym: "Bk", name: "Berkelium", mass: "247", cat: "Metal", state: "Solid", color: "Silvery-gray radioactive metal", fact: "Berkelium was first synthesized at the University of California, Berkeley, in 1949.", uses: "Synthesis of heavier transuranic elements, basic scientific research." },
+    { num: 98, sym: "Cf", name: "Californium", mass: "251", cat: "Metal", state: "Solid", color: "Silvery radioactive metal", fact: "Californium is a extremely potent neutron emitter; one microgram releases 139 million neutrons per minute.", uses: "Neutron source for nuclear reactor startup, coal sulfur analyzers, cancer therapy." },
+    { num: 99, sym: "Es", name: "Einsteinium", mass: "252", cat: "Metal", state: "Solid", color: "Silvery radioactive metal", fact: "Einsteinium was discovered in the fallout debris of the first thermonuclear bomb (Ivy Mike) in 1952.", uses: "Basic high-energy physics laboratory research, synthesizing heavier elements." },
+    { num: 100, sym: "Fm", name: "Fermium", mass: "257", cat: "Metal", state: "Solid", color: "Metallic radioactive metal", fact: "Fermium was named after the nuclear physics pioneer Enrico Fermi and is only produced in microgram quantities.", uses: "Basic high-energy physics research, atomic structure modeling." },
+    { num: 101, sym: "Md", name: "Mendelevium", mass: "258", cat: "Metal", state: "Solid", color: "Radioactive metal", fact: "Mendelevium is named after Dmitri Mendeleev, the father of the modern periodic table.", uses: "Basic scientific study of actinides chemical properties." },
+    { num: 102, sym: "No", name: "Nobelium", mass: "259", cat: "Metal", state: "Solid", color: "Radioactive metal", fact: "Nobelium was named in honor of Alfred Nobel, the Swedish philanthropist who founded the Nobel Prizes.", uses: "Heavy-ion nuclear physics research." },
+    { num: 103, sym: "Lr", name: "Lawrencium", mass: "262", cat: "Metal", state: "Solid", color: "Radioactive metal", fact: "Lawrencium was named after Ernest Lawrence, inventor of the cyclotron particle accelerator.", uses: "Scientific research in heavy transactinide elements." },
+    { num: 104, sym: "Rf", name: "Rutherfordium", mass: "267", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Rutherfordium is the first superheavy transactinide element, with an extremely short half-life.", uses: "Scientific research in nuclear chemistry and physics." },
+    { num: 105, sym: "Db", name: "Dubnium", mass: "268", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Dubnium is named after Dubna, Russia, where it was first synthesized by nuclear researchers.", uses: "Scientific research in superheavy elements." },
+    { num: 106, sym: "Sg", name: "Seaborgium", mass: "269", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Seaborgium is named after Glenn Seaborg, the only person to have an element named after him while alive.", uses: "Basic research into transactinide element physics." },
+    { num: 107, sym: "Bh", name: "Bohrium", mass: "270", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Bohrium is named after Niels Bohr, who developed the quantum model of the atom.", uses: "Scientific research in superheavy elements." },
+    { num: 108, sym: "Hs", name: "Hassium", mass: "269", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Hassium is named after the German state of Hesse (Hassia), where it was synthesized.", uses: "Scientific research in superheavy elements." },
+    { num: 109, sym: "Mt", name: "Meitnerium", mass: "278", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Meitnerium is named in honor of Lise Meitner, a co-discoverer of nuclear fission.", uses: "Scientific research in superheavy elements." },
+    { num: 110, sym: "Ds", name: "Darmstadtium", mass: "281", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Darmstadtium is named after the German city of Darmstadt, where it was synthesized.", uses: "Scientific research in superheavy elements." },
+    { num: 111, sym: "Rg", name: "Roentgenium", mass: "282", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Roentgenium is named after Wilhelm Röntgen, the physicist who discovered X-rays in 1895.", uses: "Scientific research in superheavy elements." },
+    { num: 112, sym: "Cn", name: "Copernicium", mass: "285", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Copernicium is named after the astronomer Nicolaus Copernicus, who proposed the heliocentric system.", uses: "Scientific research in superheavy elements." },
+    { num: 113, sym: "Nh", name: "Nihonium", mass: "286", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Nihonium is the first element discovered and named by a team of scientists in Japan (Nihon).", uses: "Scientific research in superheavy elements." },
+    { num: 114, sym: "Fl", name: "Flerovium", mass: "289", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Flerovium is named after the Flerov Laboratory of Nuclear Reactions in Dubna, Russia.", uses: "Scientific research in superheavy elements." },
+    { num: 115, sym: "Mc", name: "Moscovium", mass: "290", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Moscovium is named in honor of the Moscow region in Russia, where superheavy element research is conducted.", uses: "Scientific research in superheavy elements." },
+    { num: 116, sym: "Lv", name: "Livermorium", mass: "293", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Livermorium is named after the Lawrence Livermore National Laboratory in California.", uses: "Scientific research in superheavy elements." },
+    { num: 117, sym: "Ts", name: "Tennessine", mass: "294", cat: "Metal", state: "Solid", color: "Synthetic radioactive metal", fact: "Tennessine is named after the US state of Tennessee, recognizing Oak Ridge National Laboratory.", uses: "Scientific research in superheavy elements." },
+    { num: 118, sym: "Og", name: "Oganesson", mass: "294", cat: "Non-metal", state: "Gas", color: "Synthetic radioactive gas", fact: "Oganesson is the element with the highest atomic number and atomic mass of the periodic table.", uses: "Scientific research in superheavy elements." }
+  ];
+
+  // —————————————————————————————————————————————————————————————————————
+  // "Know Your Chemicals (KYC)" Chemistry Encyclopedia API Endpoint
+  // —————————————————————————————————————————————————————————————————————
+  app.post("/api/kyc/lookup", async (req, res) => {
+    const { query } = req.body;
+    if (!query || typeof query !== "string" || query.trim() === "") {
+      return res.status(400).json({ error: "Please enter a valid chemical name, common name, drug name, or molecular formula." });
+    }
+
+    const cleanQuery = query.trim().toLowerCase();
+
+    // Check if the query is an element from the periodic table
+    const elementMatch = PERIODIC_TABLE_ELEMENTS.find(
+      el => el.sym.toLowerCase() === cleanQuery || el.name.toLowerCase() === cleanQuery
+    );
+
+    // Curated, PubChem-verified sets of structural/functional isomers for standard curriculum
+    // molecular formulas (chain, position, and functional isomerism). Every name below has been
+    // checked to resolve to its own distinct compound on PubChem's structure-image endpoint, so
+    // each isomer always renders as its own separate image -- never merged into a single picture.
+    // Keyed by the molecular formula with all non-alphanumeric characters stripped and lowercased.
+    const ISOMER_GROUPS: Record<string, { isomerism_type: string; members: { name: string; iupac_name: string; note: string }[] }> = {
+      "c4h10": {
+        isomerism_type: "Chain Isomerism",
+        members: [
+          { name: "n-Butane", iupac_name: "Butane", note: "Straight, unbranched four-carbon chain." },
+          { name: "Isobutane", iupac_name: "2-Methylpropane", note: "Branched chain with a single methyl side group." }
+        ]
+      },
+      "c5h12": {
+        isomerism_type: "Chain Isomerism",
+        members: [
+          { name: "n-Pentane", iupac_name: "Pentane", note: "Straight five-carbon chain." },
+          { name: "Isopentane", iupac_name: "2-Methylbutane", note: "Branched chain with one methyl side group." },
+          { name: "Neopentane", iupac_name: "2,2-Dimethylpropane", note: "Highly branched, most compact isomer." }
+        ]
+      },
+      "c3h8o": {
+        isomerism_type: "Position Isomerism",
+        members: [
+          { name: "1-Propanol", iupac_name: "Propan-1-ol", note: "-OH group on the terminal (end) carbon." },
+          { name: "Isopropanol", iupac_name: "Propan-2-ol", note: "-OH group on the middle carbon." }
+        ]
+      },
+      "c4h10o": {
+        isomerism_type: "Chain & Position Isomerism",
+        members: [
+          { name: "1-Butanol", iupac_name: "Butan-1-ol", note: "Straight chain, -OH on the terminal carbon." },
+          { name: "2-Butanol", iupac_name: "Butan-2-ol", note: "Straight chain, -OH on the second carbon." },
+          { name: "Isobutanol", iupac_name: "2-Methylpropan-1-ol", note: "Branched chain, -OH on the terminal carbon." },
+          { name: "tert-Butanol", iupac_name: "2-Methylpropan-2-ol", note: "Branched chain, -OH on the central carbon." }
+        ]
+      },
+      "c4h8": {
+        isomerism_type: "Position & Geometric Isomerism",
+        members: [
+          { name: "1-Butene", iupac_name: "But-1-ene", note: "Double bond starting at the first carbon." },
+          { name: "cis-2-Butene", iupac_name: "(Z)-But-2-ene", note: "Double bond at the second carbon; methyl groups on the same side." },
+          { name: "trans-2-Butene", iupac_name: "(E)-But-2-ene", note: "Double bond at the second carbon; methyl groups on opposite sides." },
+          { name: "Isobutylene", iupac_name: "2-Methylprop-1-ene", note: "Branched chain with the double bond at a branch point." }
+        ]
+      },
+      "c2h6o": {
+        isomerism_type: "Functional Isomerism",
+        members: [
+          { name: "Ethanol", iupac_name: "Ethanol", note: "Contains a hydroxyl (-OH) functional group; an alcohol." },
+          { name: "Dimethyl Ether", iupac_name: "Methoxymethane", note: "Contains an ether (-O-) linkage instead of a hydroxyl group." }
+        ]
+      },
+      "c3h6o": {
+        isomerism_type: "Functional Isomerism",
+        members: [
+          { name: "Propanal", iupac_name: "Propanal", note: "Contains an aldehyde (-CHO) functional group." },
+          { name: "Acetone", iupac_name: "Propan-2-one", note: "Contains a ketone (C=O) functional group." }
+        ]
+      },
+      "c6h12o6": {
+        isomerism_type: "Functional Isomerism",
+        members: [
+          { name: "Glucose", iupac_name: "(2R,3S,4R,5R)-2,3,4,5,6-Pentahydroxyhexanal", note: "An aldose sugar containing an aldehyde group." },
+          { name: "Fructose", iupac_name: "(3S,4R,5R)-1,3,4,5,6-Pentahydroxyhexan-2-one", note: "A ketose sugar containing a ketone group." }
+        ]
+      }
+    };
+
+    const buildIsomerData = (formula: string | undefined) => {
+      if (!formula) return undefined;
+      const key = formula.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      const group = ISOMER_GROUPS[key];
+      if (!group) return undefined;
+      return {
+        isomerism_type: group.isomerism_type,
+        members: group.members.map(m => ({
+          name: m.name,
+          iupac_name: m.iupac_name,
+          note: m.note,
+          structure_url: `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(m.name)}/PNG?image_size=600x600`
+        }))
+      };
+    };
+
+    // pH reference data for a standard (typically ~0.1 M, room temperature) aqueous solution of
+    // each compound. Values are drawn from standard chemistry references (textbook/CRC Handbook
+    // ranges), keyed by normalized molecular formula. This is intentionally a curated set of the
+    // most commonly searched acids, bases, and salts rather than an attempt to cover every possible
+    // formula -- accuracy matters more than false coverage here, so anything not in this list falls
+    // back to a clearly-labeled estimate based on its classification instead of inventing a value.
+    const PH_REFERENCE: Record<string, { ph: string; note: string }> = {
+      // Strong acids
+      "hcl": { ph: "0 - 1 (concentrated); ~1 - 2 (dilute, ~0.1 M)", note: "Strongly acidic -- fully ionizes in water" },
+      "h2so4": { ph: "0 - 1 (concentrated); ~1 (dilute, ~0.1 M)", note: "Strongly acidic -- fully ionizes in water" },
+      "hno3": { ph: "0 - 1 (concentrated); ~1 (dilute, ~0.1 M)", note: "Strongly acidic -- fully ionizes in water" },
+      "hbr": { ph: "0 - 1 (concentrated); ~1 (dilute, ~0.1 M)", note: "Strongly acidic -- fully ionizes in water" },
+      // Weak / moderate acids
+      "ch3cooh": { ph: "~2.4 - 3.0 (~1 M)", note: "Weak acid -- only partially ionizes in water" },
+      "hcooh": { ph: "~2.4 (~1 M)", note: "Weak acid -- only partially ionizes in water" },
+      "h2co3": { ph: "~3.6 (saturated CO2 solution)", note: "Weak, unstable diprotic acid" },
+      "h2c2o4": { ph: "~1.3 (~0.1 M)", note: "Moderately strong diprotic organic acid" },
+      "c6h8o7": { ph: "~2.2 (~0.1 M)", note: "Weak triprotic acid" },
+      "c3h6o3": { ph: "~2.4 (~0.1 M)", note: "Weak acid" },
+      "c6h8o6": { ph: "~3.0 (~0.1 M)", note: "Weak acid" },
+      "c4h6o6": { ph: "~2.2 (~0.1 M)", note: "Weak diprotic acid" },
+      "c7h6o3": { ph: "~2.4 (saturated)", note: "Weak acid" },
+      "c7h6o2": { ph: "~2.8 (saturated)", note: "Weak acid, sparingly soluble" },
+      "h3po4": { ph: "~1.5 (~0.1 M)", note: "Moderately strong triprotic acid" },
+      "h3bo3": { ph: "~5.1 (~0.1 M)", note: "Very weak acid" },
+      "c9h8o4": { ph: "~3.5 (saturated)", note: "Weak acid, sparingly soluble" },
+      // Strong / moderate bases
+      "naoh": { ph: "13 - 14 (concentrated); ~13 (dilute, ~0.1 M)", note: "Strongly basic -- fully ionizes in water" },
+      "koh": { ph: "13 - 14 (concentrated); ~13 (dilute, ~0.1 M)", note: "Strongly basic -- fully ionizes in water" },
+      "ca(oh)2": { ph: "~12.4 (saturated limewater)", note: "Strong base, but only sparingly soluble" },
+      "nh4oh": { ph: "~11.6 (~0.1 M)", note: "Weak base -- only partially ionizes in water" },
+      "nh3": { ph: "~11.6 (~0.1 M aqueous solution)", note: "Weak base -- only partially ionizes in water" },
+      "mg(oh)2": { ph: "~10.5 (saturated)", note: "Weak, poorly soluble base" },
+      // Neutral salts (strong acid + strong base)
+      "h2o": { ph: "7.0", note: "Neutral by definition at 25°C" },
+      "nacl": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "kcl": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "kno3": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "nano3": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "na2so4": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "bacl2": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      "kcl2": { ph: "~7.0", note: "Neutral salt of a strong acid and a strong base" },
+      // Basic salts (weak acid + strong base)
+      "na2co3": { ph: "~11.6 (~0.1 M)", note: "Basic salt -- the carbonate ion hydrolyzes to produce OH-" },
+      "nahco3": { ph: "~8.3 (~0.1 M)", note: "Mildly basic salt" },
+      "k2co3": { ph: "~11.6 (~0.1 M)", note: "Basic salt -- the carbonate ion hydrolyzes to produce OH-" },
+      "ch3coona": { ph: "~8.9 (~0.1 M)", note: "Mildly basic salt of a weak acid and a strong base" },
+      // Acidic salts (strong acid + weak/hydrolyzing base, or hydrolyzing metal cation)
+      "nh4cl": { ph: "~5.0 (~0.1 M)", note: "Mildly acidic salt -- the ammonium ion hydrolyzes to release H+" },
+      "(nh4)2so4": { ph: "~5.0 - 5.5 (~0.1 M)", note: "Mildly acidic salt -- the ammonium ion hydrolyzes to release H+" },
+      "nh4no3": { ph: "~5.0 - 5.5 (~0.1 M)", note: "Mildly acidic salt -- the ammonium ion hydrolyzes to release H+" },
+      "(nh4)2co3": { ph: "~8.5 (~0.1 M)", note: "Mildly basic -- carbonate hydrolysis outweighs ammonium's acidity" },
+      "nh4hco3": { ph: "~8.0 (~0.1 M)", note: "Mildly basic -- bicarbonate hydrolysis outweighs ammonium's acidity" },
+      "(nh4)2hpo4": { ph: "~8.0 (~0.1 M)", note: "Mildly basic -- hydrogen phosphate hydrolysis outweighs ammonium's acidity" },
+      "(nh4)2cr2o7": { ph: "~4.0 - 4.5 (~0.1 M)", note: "Acidic -- both the ammonium and dichromate ions contribute to acidity" },
+      "(nh4)2s": { ph: "~9.0 - 9.5 (~0.1 M)", note: "Basic -- the sulfide ion hydrolyzes strongly to release OH-" },
+      "ch3coonh4": { ph: "~7.0 (~0.1 M)", note: "Almost perfectly neutral -- the weakly acidic ammonium ion and weakly basic acetate ion cancel out" },
+      "(nh4)2c2o4": { ph: "~6.0 (~0.1 M)", note: "Weakly acidic to near-neutral -- ammonium's acidity slightly outweighs oxalate's basicity" },
+      "nh4i": { ph: "~5.0 - 5.5 (~0.1 M)", note: "Mildly acidic salt -- the ammonium ion hydrolyzes to release H+" },
+      "nh4br": { ph: "~5.0 - 5.5 (~0.1 M)", note: "Mildly acidic salt -- the ammonium ion hydrolyzes to release H+" },
+      "nh4scn": { ph: "~4.5 - 5.0 (~0.1 M)", note: "Mildly acidic -- both the ammonium and thiocyanate ions contribute to acidity" },
+      "cuso4": { ph: "~4.0 (~0.1 M)", note: "Mildly acidic salt due to Cu2+ hydrolysis" },
+      "znso4": { ph: "~4.5 - 5.0 (~0.1 M)", note: "Mildly acidic salt due to Zn2+ hydrolysis" },
+      "feso4": { ph: "~3.5 - 4.0 (~0.1 M)", note: "Acidic salt due to Fe2+ hydrolysis" },
+      "fecl3": { ph: "~2.0 - 3.0 (~0.1 M)", note: "Fairly acidic salt due to strong Fe3+ hydrolysis" },
+      "alcl3": { ph: "~2.8 - 3.5 (~0.1 M)", note: "Fairly acidic salt due to strong Al3+ hydrolysis" },
+      "agno3": { ph: "~5.4 - 6.2 (~0.1 M)", note: "Weakly acidic salt due to slight Ag+ hydrolysis" },
+      "mgso4": { ph: "~6.0 (~0.1 M)", note: "Weakly acidic salt due to Mg2+ hydrolysis" },
+      "kal(so4)2": { ph: "~3.0 - 4.0 (~0.1 M)", note: "Acidic salt (alum) due to Al3+ hydrolysis" },
+      "k2cr2o7": { ph: "~3.5 - 4.0 (~0.1 M)", note: "Acidic due to dichromate/chromate equilibrium" },
+      "kmno4": { ph: "~7 - 8 (~0.1 M)", note: "Roughly neutral; a strong oxidizer, not a strong acid or base" }
+    };
+
+    // Fallback pH estimate for compounds outside the curated PH_REFERENCE list above, based on
+    // classification and formula patterns. Clearly labeled as approximate so it's never confused
+    // with a verified reference value.
+    const estimatePH = (result: any): { ph: string; note: string } | undefined => {
+      const formulaKey = (result.chemical_formula || "").trim().toLowerCase().replace(/[·.][0-9]*h2o$/, "").replace(/\s/g, "");
+      const curated = PH_REFERENCE[formulaKey];
+      if (curated) return curated;
+
+      // Pure elements don't have a meaningful aqueous pH.
+      if (result.element_category) return undefined;
+
+      const formulaUpper = (result.chemical_formula || "").toUpperCase();
+      const typeStr = (result.chemical_type || "").toLowerCase();
+      const reasonStr = (result.classification_reason || "").toLowerCase();
+
+      const looksLikeAcid = typeStr.includes("acid") || reasonStr.includes("carboxyl") || reasonStr.includes("acidic") || /COOH/.test(formulaUpper);
+      if (looksLikeAcid) {
+        return { ph: "~3 - 5 (approximate, weak organic acid)", note: "Estimated from its acid functional group; exact value depends on concentration" };
+      }
+
+      const looksLikeBase = formulaUpper.endsWith("OH") && (formulaUpper.startsWith("NA") || formulaUpper.startsWith("K") || formulaUpper.startsWith("CA") || formulaUpper.startsWith("MG") || formulaUpper.startsWith("NH4"));
+      if (looksLikeBase) {
+        return { ph: "~10 - 14 (approximate, basic hydroxide)", note: "Estimated from its hydroxide functional group; exact value depends on concentration" };
+      }
+
+      if (result.classification === "Inorganic" && (typeStr.includes("salt") || typeStr.includes("halide") || typeStr.includes("nitrate") || typeStr.includes("sulfate") || typeStr.includes("carbonate"))) {
+        return { ph: "~6 - 8 (approximate, near-neutral salt)", note: "Most simple salts are close to neutral in water unless their ions hydrolyze; exact value depends on the specific ions" };
+      }
+
+      if (result.classification === "Organic") {
+        return { ph: "~7 (Neutral)", note: "Non-electrolyte -- does not significantly ionize in water, so it does not meaningfully change the solution's pH" };
+      }
+
+      return undefined;
+    };
+
+    // Helper to enrich matched results with primary and fallback structure URLs
+    const enrichKYCResultWithStructureUrls = (result: any, qTerm: string): any => {
+      const commonName = result.common_name || "Not Applicable";
+      const iupacName = result.iupac_name || commonName;
+      
+      // Common names in our database are often written with a trailing synonym in parentheses
+      // for readability (e.g. "Glucose (Dextrose)", "Sulfuric Acid (Oil of Vitriol)",
+      // "Baking Soda (Sodium Bicarbonate)"). PubChem's name-lookup endpoint cannot resolve these
+      // combined strings and returns 404, which is why the structure image silently failed for
+      // every compound stored this way. We build the lookup URL from the name with any trailing
+      // "(...)" suffix stripped, while leaving the original name (with synonym) untouched
+      // everywhere else it's used for on-screen display. A "(I)"/"(II)"-style oxidation-state
+      // marker in the middle of a name (e.g. "Copper(I) Oxide") is unaffected since only a
+      // parenthetical group anchored at the very end of the string is removed.
+      const stripTrailingSynonym = (name: string) => name.replace(/\s*\([^()]*\)\s*$/, "").trim();
+
+      const sanitizeName = (name: string) => {
+        return encodeURIComponent(stripTrailingSynonym(name.trim()));
+      };
+
+      const isComplex = result.chemical_type?.toLowerCase().includes("multi") || 
+                        result.chemical_type?.toLowerCase().includes("acid") || 
+                        result.chemical_type?.toLowerCase().includes("hydroxy") || 
+                        (result.classification_reason && result.classification_reason.toLowerCase().includes("multiple functional group")) ||
+                        (result.classification_reason && result.classification_reason.toLowerCase().includes("both")) ||
+                        ["salicylic acid", "citric acid", "lactic acid", "aspirin", "paracetamol", "acetaminophen", "acetylsalicylic acid", "glycine", "alanine", "ascorbic acid", "vitamin c", "ibuprofen"].includes(commonName.toLowerCase());
+
+      const primaryName = isComplex ? iupacName : (commonName !== "Not Applicable" ? commonName : iupacName);
+      const isomers = buildIsomerData(result.chemical_formula);
+      const phData = estimatePH(result);
+
+      return {
+        ...result,
+        requested_compound: qTerm,
+        primary_structure_url: `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${sanitizeName(primaryName)}/PNG?image_size=600x600`,
+        fallback_iupac_url: `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${sanitizeName(iupacName)}/PNG?image_size=600x600`,
+        source_credit: "National Institutes of Health (NIH) - PubChem",
+        ...(isomers ? { isomers } : {}),
+        ...(phData ? { ph_value: phData.ph, ph_note: phData.note } : {})
+      };
+    };
+
+    if (elementMatch) {
+      const propertiesList = [
+        `Atomic Number: ${elementMatch.num}`,
+        `Standard State: ${elementMatch.state}`,
+        `Atomic Mass: ${elementMatch.mass} g/mol`,
+        `Classification: ${elementMatch.cat}`
+      ].join("\n");
+
+      const elementResult = {
+        common_name: elementMatch.name,
+        iupac_name: `${elementMatch.name} (Element)`,
+        chemical_formula: elementMatch.sym,
+        molecular_weight: `${elementMatch.mass} g/mol`,
+        chemical_type: `Pure Element (${elementMatch.cat})`,
+        classification: "Inorganic" as const,
+        classification_reason: `${elementMatch.name} is a pure chemical element on the periodic table (Atomic Number ${elementMatch.num}, Symbol ${elementMatch.sym}). All pure elements are fundamentally classified as Inorganic substances.`,
+        smiles_notation: `[${elementMatch.sym}]`,
+        pdb_id: null,
+        quick_fact: elementMatch.fact,
+        color: elementMatch.color,
+        properties: propertiesList,
+        uses: elementMatch.uses,
+        requested_compound: query,
+        element_category: elementMatch.cat,
+        atomic_number: elementMatch.num,
+        atomic_mass: elementMatch.mass
+      };
+
+      return res.json(enrichKYCResultWithStructureUrls(elementResult, query));
+    }
+
+    // 100% Reliable Offline fallbacks for core high-yield curriculum substances
+    const OFFLINE_KYC_DB: Record<string, any> = {
+      "phenol": {
+        "common_name": "Phenol",
+        "iupac_name": "Phenol",
+        "chemical_formula": "C6H6O",
+        "molecular_weight": "94.11 g/mol",
+        "chemical_type": "Aromatic Alcohol / Phenolic Compound",
+        "classification": "Organic",
+        "classification_reason": "It contains a hydroxyl (-OH) group directly attached to an aromatic benzene ring, making it the simplest member of the phenol chemical class.",
+        "smiles_notation": "C1=CC=C(C=C1)O",
+        "pdb_id": null,
+        "quick_fact": "Phenol (historically known as carbolic acid) was the first antiseptic widely used in surgery by Joseph Lister in 1865, drastically reducing post-operative infections.",
+        "color": "Transparent crystalline solid or pinkish needle-like crystals",
+        "properties": "Physical state: Needle-like crystalline solid\nMelting point: 40.5 °C\nBoiling point: 181.7 °C\nSlightly soluble in water at room temperature, highly soluble in organic solvents\nWeakly acidic in water (pKa ≈ 9.95)",
+        "uses": "Precursor to plastics (bisphenol-A, phenolic resins)\nIntermediate in the production of drugs (like aspirin) and herbicides\nAntiseptic and disinfectant ingredient in household cleaners and sore throat sprays"
+      },
+      "c6h5oh": {
+        "common_name": "Phenol",
+        "iupac_name": "Phenol",
+        "chemical_formula": "C6H6O",
+        "molecular_weight": "94.11 g/mol",
+        "chemical_type": "Aromatic Alcohol / Phenolic Compound",
+        "classification": "Organic",
+        "classification_reason": "It contains a hydroxyl (-OH) group directly attached to an aromatic benzene ring, making it the simplest member of the phenol chemical class.",
+        "smiles_notation": "C1=CC=C(C=C1)O",
+        "pdb_id": null,
+        "quick_fact": "Phenol (historically known as carbolic acid) was the first antiseptic widely used in surgery by Joseph Lister in 1865, drastically reducing post-operative infections.",
+        "color": "Transparent crystalline solid or pinkish needle-like crystals",
+        "properties": "Physical state: Needle-like crystalline solid\nMelting point: 40.5 °C\nBoiling point: 181.7 °C\nSlightly soluble in water at room temperature, highly soluble in organic solvents\nWeakly acidic in water (pKa ≈ 9.95)",
+        "uses": "Precursor to plastics (bisphenol-A, phenolic resins)\nIntermediate in the production of drugs (like aspirin) and herbicides\nAntiseptic and disinfectant ingredient in household cleaners and sore throat sprays"
+      },
+      "c6h6o": {
+        "common_name": "Phenol",
+        "iupac_name": "Phenol",
+        "chemical_formula": "C6H6O",
+        "molecular_weight": "94.11 g/mol",
+        "chemical_type": "Aromatic Alcohol / Phenolic Compound",
+        "classification": "Organic",
+        "classification_reason": "It contains a hydroxyl (-OH) group directly attached to an aromatic benzene ring, making it the simplest member of the phenol chemical class.",
+        "smiles_notation": "C1=CC=C(C=C1)O",
+        "pdb_id": null,
+        "quick_fact": "Phenol (historically known as carbolic acid) was the first antiseptic widely used in surgery by Joseph Lister in 1865, drastically reducing post-operative infections.",
+        "color": "Transparent crystalline solid or pinkish needle-like crystals",
+        "properties": "Physical state: Needle-like crystalline solid\nMelting point: 40.5 °C\nBoiling point: 181.7 °C\nSlightly soluble in water at room temperature, highly soluble in organic solvents\nWeakly acidic in water (pKa ≈ 9.95)",
+        "uses": "Precursor to plastics (bisphenol-A, phenolic resins)\nIntermediate in the production of drugs (like aspirin) and herbicides\nAntiseptic and disinfectant ingredient in household cleaners and sore throat sprays"
+      },
+      "carbolic acid": {
+        "common_name": "Phenol",
+        "iupac_name": "Phenol",
+        "chemical_formula": "C6H6O",
+        "molecular_weight": "94.11 g/mol",
+        "chemical_type": "Aromatic Alcohol / Phenolic Compound",
+        "classification": "Organic",
+        "classification_reason": "It contains a hydroxyl (-OH) group directly attached to an aromatic benzene ring, making it the simplest member of the phenol chemical class.",
+        "smiles_notation": "C1=CC=C(C=C1)O",
+        "pdb_id": null,
+        "quick_fact": "Phenol (historically known as carbolic acid) was the first antiseptic widely used in surgery by Joseph Lister in 1865, drastically reducing post-operative infections.",
+        "color": "Transparent crystalline solid or pinkish needle-like crystals",
+        "properties": "Physical state: Needle-like crystalline solid\nMelting point: 40.5 °C\nBoiling point: 181.7 °C\nSlightly soluble in water at room temperature, highly soluble in organic solvents\nWeakly acidic in water (pKa ≈ 9.95)",
+        "uses": "Precursor to plastics (bisphenol-A, phenolic resins)\nIntermediate in the production of drugs (like aspirin) and herbicides\nAntiseptic and disinfectant ingredient in household cleaners and sore throat sprays"
+      },
+      "uric acid": {
+        "common_name": "Uric Acid",
+        "iupac_name": "7,9-Dihydro-3H-purine-2,6,8-trione",
+        "chemical_formula": "C5H4N4O3",
+        "molecular_weight": "168.11 g/mol",
+        "chemical_type": "Purine Derivative (Heterocyclic Organic Acid)",
+        "classification": "Organic",
+        "classification_reason": "Uric acid is a nitrogen-containing heterocyclic compound built on a fused bicyclic purine ring system with carbon-hydrogen bonds, making it organic despite behaving as a weak acid in water.",
+        "smiles_notation": "C12=C(NC(=O)N1)NC(=O)NC2=O",
+        "pdb_id": null,
+        "quick_fact": "Uric acid is the final breakdown product of purine metabolism in humans. When it accumulates and crystallizes in joints it causes the painful condition gout, and its buildup in the kidneys can form kidney stones.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: Odorless white crystalline solid\nSolubility: Poorly soluble in water, dissolves more readily in alkaline solutions as soluble urate salts\nAcidity: Weak diprotic acid (pKa1 ≈ 5.4)\nStability: Stable solid at room temperature; decomposes rather than melting cleanly at high temperature",
+        "uses": "Clinically measured biomarker for diagnosing gout and kidney stone risk\nStudied in biochemistry as the end product of purine catabolism in humans and other primates (who lack the uricase enzyme)\nUsed in small amounts as an antioxidant ingredient in some cosmetic formulations"
+      },
+      "gypsum": {
+        "common_name": "Gypsum",
+        "iupac_name": "Calcium sulfate dihydrate",
+        "chemical_formula": "CaSO4·2H2O",
+        "molecular_weight": "172.17 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt consisting of calcium cations, sulfate anions, and water of crystallization.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O.O",
+        "pdb_id": null,
+        "quick_fact": "Gypsum is a soft sulfate mineral used extensively as a fertilizer and as the main constituent in plaster, blackboard chalk, and wallboard.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: Crystalline solid\nContains exactly two moles of water of crystallization per mole of calcium sulfate\nVery low solubility in water\nUndergoes dehydration upon heating to form Plaster of Paris at around 120°C",
+        "uses": "Used in the manufacturing of Plaster of Paris, wallboard (drywall), and cement\nApplied to agricultural soils as a conditioner and fertilizer to provide calcium and sulfur\nUsed as an alabaster for ornamental carving and sculpture"
+      },
+      "caso4.2h2o": {
+        "common_name": "Gypsum",
+        "iupac_name": "Calcium sulfate dihydrate",
+        "chemical_formula": "CaSO4·2H2O",
+        "molecular_weight": "172.17 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt consisting of calcium cations, sulfate anions, and water of crystallization.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O.O",
+        "pdb_id": null,
+        "quick_fact": "Gypsum is a soft sulfate mineral used extensively as a fertilizer and as the main constituent in plaster, blackboard chalk, and wallboard.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: Crystalline solid\nContains exactly two moles of water of crystallization per mole of calcium sulfate\nVery low solubility in water\nUndergoes dehydration upon heating to form Plaster of Paris at around 120°C",
+        "uses": "Used in the manufacturing of Plaster of Paris, wallboard (drywall), and cement\nApplied to agricultural soils as a conditioner and fertilizer to provide calcium and sulfur\nUsed as an alabaster for ornamental carving and sculpture"
+      },
+      "caso4·2h2o": {
+        "common_name": "Gypsum",
+        "iupac_name": "Calcium sulfate dihydrate",
+        "chemical_formula": "CaSO4·2H2O",
+        "molecular_weight": "172.17 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt consisting of calcium cations, sulfate anions, and water of crystallization.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O.O",
+        "pdb_id": null,
+        "quick_fact": "Gypsum is a soft sulfate mineral used extensively as a fertilizer and as the main constituent in plaster, blackboard chalk, and wallboard.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: Crystalline solid\nContains exactly two moles of water of crystallization per mole of calcium sulfate\nVery low solubility in water\nUndergoes dehydration upon heating to form Plaster of Paris at around 120°C",
+        "uses": "Used in the manufacturing of Plaster of Paris, wallboard (drywall), and cement\nApplied to agricultural soils as a conditioner and fertilizer to provide calcium and sulfur\nUsed as an alabaster for ornamental carving and sculpture"
+      },
+      "calcium sulfate dihydrate": {
+        "common_name": "Gypsum",
+        "iupac_name": "Calcium sulfate dihydrate",
+        "chemical_formula": "CaSO4·2H2O",
+        "molecular_weight": "172.17 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt consisting of calcium cations, sulfate anions, and water of crystallization.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O.O",
+        "pdb_id": null,
+        "quick_fact": "Gypsum is a soft sulfate mineral used extensively as a fertilizer and as the main constituent in plaster, blackboard chalk, and wallboard.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: Crystalline solid\nContains exactly two moles of water of crystallization per mole of calcium sulfate\nVery low solubility in water\nUndergoes dehydration upon heating to form Plaster of Paris at around 120°C",
+        "uses": "Used in the manufacturing of Plaster of Paris, wallboard (drywall), and cement\nApplied to agricultural soils as a conditioner and fertilizer to provide calcium and sulfur\nUsed as an alabaster for ornamental carving and sculpture"
+      },
+      "plaster of paris": {
+        "common_name": "Plaster of Paris",
+        "iupac_name": "Calcium sulfate hemihydrate",
+        "chemical_formula": "CaSO4·0.5H2O",
+        "molecular_weight": "145.15 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic mineral compound of calcium sulfate containing half a molecule of water of crystallization per calcium sulfate unit.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O",
+        "pdb_id": null,
+        "quick_fact": "Plaster of Paris gets its name from its abundant preparation by heating gypsum found near Paris. When mixed with water, it rehydrates back into hard gypsum solid.",
+        "color": "Fine white powder",
+        "properties": "Physical state: White powder\nHemihydrate structure containing half a mole of water per calcium sulfate unit\nRapidly hardens into a solid mass (Gypsum) when mixed with water\nSlightly soluble in water",
+        "uses": "Used by orthopedists as supportive casts for fractured and broken limbs\nUsed for making decorative moldings, false ceilings, cornices, and sculptures\nUsed as a fireproofing material and in dental casting molds"
+      },
+      "caso4.0.5h2o": {
+        "common_name": "Plaster of Paris",
+        "iupac_name": "Calcium sulfate hemihydrate",
+        "chemical_formula": "CaSO4·0.5H2O",
+        "molecular_weight": "145.15 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic mineral compound of calcium sulfate containing half a molecule of water of crystallization per calcium sulfate unit.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O",
+        "pdb_id": null,
+        "quick_fact": "Plaster of Paris gets its name from its abundant preparation by heating gypsum found near Paris. When mixed with water, it rehydrates back into hard gypsum solid.",
+        "color": "Fine white powder",
+        "properties": "Physical state: White powder\nHemihydrate structure containing half a mole of water per calcium sulfate unit\nRapidly hardens into a solid mass (Gypsum) when mixed with water\nSlightly soluble in water",
+        "uses": "Used by orthopedists as supportive casts for fractured and broken limbs\nUsed for making decorative moldings, false ceilings, cornices, and sculptures\nUsed as a fireproofing material and in dental casting molds"
+      },
+      "caso4·0.5h2o": {
+        "common_name": "Plaster of Paris",
+        "iupac_name": "Calcium sulfate hemihydrate",
+        "chemical_formula": "CaSO4·0.5H2O",
+        "molecular_weight": "145.15 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic mineral compound of calcium sulfate containing half a molecule of water of crystallization per calcium sulfate unit.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O",
+        "pdb_id": null,
+        "quick_fact": "Plaster of Paris gets its name from its abundant preparation by heating gypsum found near Paris. When mixed with water, it rehydrates back into hard gypsum solid.",
+        "color": "Fine white powder",
+        "properties": "Physical state: White powder\nHemihydrate structure containing half a mole of water per calcium sulfate unit\nRapidly hardens into a solid mass (Gypsum) when mixed with water\nSlightly soluble in water",
+        "uses": "Used by orthopedists as supportive casts for fractured and broken limbs\nUsed for making decorative moldings, false ceilings, cornices, and sculptures\nUsed as a fireproofing material and in dental casting molds"
+      },
+      "caso4·1/2h2o": {
+        "common_name": "Plaster of Paris",
+        "iupac_name": "Calcium sulfate hemihydrate",
+        "chemical_formula": "CaSO4·0.5H2O",
+        "molecular_weight": "145.15 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic mineral compound of calcium sulfate containing half a molecule of water of crystallization per calcium sulfate unit.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O",
+        "pdb_id": null,
+        "quick_fact": "Plaster of Paris gets its name from its abundant preparation by heating gypsum found near Paris. When mixed with water, it rehydrates back into hard gypsum solid.",
+        "color": "Fine white powder",
+        "properties": "Physical state: White powder\nHemihydrate structure containing half a mole of water per calcium sulfate unit\nRapidly hardens into a solid mass (Gypsum) when mixed with water\nSlightly soluble in water",
+        "uses": "Used by orthopedists as supportive casts for fractured and broken limbs\nUsed for making decorative moldings, false ceilings, cornices, and sculptures\nUsed as a fireproofing material and in dental casting molds"
+      },
+      "calcium sulfate hemihydrate": {
+        "common_name": "Plaster of Paris",
+        "iupac_name": "Calcium sulfate hemihydrate",
+        "chemical_formula": "CaSO4·0.5H2O",
+        "molecular_weight": "145.15 g/mol",
+        "chemical_type": "Hydrated Metal Salt / Mineral",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic mineral compound of calcium sulfate containing half a molecule of water of crystallization per calcium sulfate unit.",
+        "smiles_notation": "[Ca+2].[O-]S(=O)(=O)[O-].O",
+        "pdb_id": null,
+        "quick_fact": "Plaster of Paris gets its name from its abundant preparation by heating gypsum found near Paris. When mixed with water, it rehydrates back into hard gypsum solid.",
+        "color": "Fine white powder",
+        "properties": "Physical state: White powder\nHemihydrate structure containing half a mole of water per calcium sulfate unit\nRapidly hardens into a solid mass (Gypsum) when mixed with water\nSlightly soluble in water",
+        "uses": "Used by orthopedists as supportive casts for fractured and broken limbs\nUsed for making decorative moldings, false ceilings, cornices, and sculptures\nUsed as a fireproofing material and in dental casting molds"
+      },
+      "bleaching powder": {
+        "common_name": "Bleaching Powder",
+        "iupac_name": "Calcium hypochlorite",
+        "chemical_formula": "CaOCl2",
+        "molecular_weight": "142.98 g/mol",
+        "chemical_type": "Inorganic Mixed Salt / Disinfectant",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt composed of calcium, hypochlorite, and chloride ions with no carbon-hydrogen skeleton.",
+        "smiles_notation": "[Ca+2].[Cl-].[O-][Cl]",
+        "pdb_id": null,
+        "quick_fact": "Bleaching powder is manufactured by passing chlorine gas over dry slaked lime (calcium hydroxide). It is a strong oxidizing agent that releases chlorine when reacted with acids.",
+        "color": "Dull white powder with a strong, pungent odor of chlorine",
+        "properties": "Physical state: Solid powder\nStrong odor of chlorine gas due to continuous slow decomposition in moist air\nPowerful oxidizing agent\nSoluble in water, releasing active chlorine species",
+        "uses": "Used for disinfecting drinking water and swimming pools to kill microbes\nUsed for bleaching cotton, linen, wood pulp, and dirty clothes in laundry\nUsed as an oxidizing agent in chemical laboratories and industrial manufacturing"
+      },
+      "caocl2": {
+        "common_name": "Bleaching Powder",
+        "iupac_name": "Calcium hypochlorite",
+        "chemical_formula": "CaOCl2",
+        "molecular_weight": "142.98 g/mol",
+        "chemical_type": "Inorganic Mixed Salt / Disinfectant",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt composed of calcium, hypochlorite, and chloride ions with no carbon-hydrogen skeleton.",
+        "smiles_notation": "[Ca+2].[Cl-].[O-][Cl]",
+        "pdb_id": null,
+        "quick_fact": "Bleaching powder is manufactured by passing chlorine gas over dry slaked lime (calcium hydroxide). It is a strong oxidizing agent that releases chlorine when reacted with acids.",
+        "color": "Dull white powder with a strong, pungent odor of chlorine",
+        "properties": "Physical state: Solid powder\nStrong odor of chlorine gas due to continuous slow decomposition in moist air\nPowerful oxidizing agent\nSoluble in water, releasing active chlorine species",
+        "uses": "Used for disinfecting drinking water and swimming pools to kill microbes\nUsed for bleaching cotton, linen, wood pulp, and dirty clothes in laundry\nUsed as an oxidizing agent in chemical laboratories and industrial manufacturing"
+      },
+      "calcium oxychloride": {
+        "common_name": "Bleaching Powder",
+        "iupac_name": "Calcium hypochlorite",
+        "chemical_formula": "CaOCl2",
+        "molecular_weight": "142.98 g/mol",
+        "chemical_type": "Inorganic Mixed Salt / Disinfectant",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt composed of calcium, hypochlorite, and chloride ions with no carbon-hydrogen skeleton.",
+        "smiles_notation": "[Ca+2].[Cl-].[O-][Cl]",
+        "pdb_id": null,
+        "quick_fact": "Bleaching powder is manufactured by passing chlorine gas over dry slaked lime (calcium hydroxide). It is a strong oxidizing agent that releases chlorine when reacted with acids.",
+        "color": "Dull white powder with a strong, pungent odor of chlorine",
+        "properties": "Physical state: Solid powder\nStrong odor of chlorine gas due to continuous slow decomposition in moist air\nPowerful oxidizing agent\nSoluble in water, releasing active chlorine species",
+        "uses": "Used for disinfecting drinking water and swimming pools to kill microbes\nUsed for bleaching cotton, linen, wood pulp, and dirty clothes in laundry\nUsed as an oxidizing agent in chemical laboratories and industrial manufacturing"
+      },
+      "calcium hypochlorite": {
+        "common_name": "Bleaching Powder",
+        "iupac_name": "Calcium hypochlorite",
+        "chemical_formula": "CaOCl2",
+        "molecular_weight": "142.98 g/mol",
+        "chemical_type": "Inorganic Mixed Salt / Disinfectant",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt composed of calcium, hypochlorite, and chloride ions with no carbon-hydrogen skeleton.",
+        "smiles_notation": "[Ca+2].[Cl-].[O-][Cl]",
+        "pdb_id": null,
+        "quick_fact": "Bleaching powder is manufactured by passing chlorine gas over dry slaked lime (calcium hydroxide). It is a strong oxidizing agent that releases chlorine when reacted with acids.",
+        "color": "Dull white powder with a strong, pungent odor of chlorine",
+        "properties": "Physical state: Solid powder\nStrong odor of chlorine gas due to continuous slow decomposition in moist air\nPowerful oxidizing agent\nSoluble in water, releasing active chlorine species",
+        "uses": "Used for disinfecting drinking water and swimming pools to kill microbes\nUsed for bleaching cotton, linen, wood pulp, and dirty clothes in laundry\nUsed as an oxidizing agent in chemical laboratories and industrial manufacturing"
+      },
+      "paracetamol": {
+        "common_name": "Paracetamol (Acetaminophen)",
+        "iupac_name": "N-(4-hydroxyphenyl)acetamide",
+        "chemical_formula": "C8H9NO2",
+        "molecular_weight": "151.16 g/mol",
+        "chemical_type": "Pharmaceutical / Analgesic Drug",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound because it contains a benzene ring linked covalently to carbon-based structures with hydrogen, nitrogen, and oxygen atoms.",
+        "smiles_notation": "CC(=O)NC1=CC=C(O)C=C1",
+        "pdb_id": null,
+        "quick_fact": "Paracetamol is a widely used over-the-counter medicine that helps reduce fever (antipyretic) and relieve mild to moderate pain (analgesic).",
+        "color": "White crystalline powder"
+      },
+      "acetaminophen": {
+        "common_name": "Paracetamol (Acetaminophen)",
+        "iupac_name": "N-(4-hydroxyphenyl)acetamide",
+        "chemical_formula": "C8H9NO2",
+        "molecular_weight": "151.16 g/mol",
+        "chemical_type": "Pharmaceutical / Analgesic Drug",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound because it contains a benzene ring linked covalently to carbon-based structures with hydrogen, nitrogen, and oxygen atoms.",
+        "smiles_notation": "CC(=O)NC1=CC=C(O)C=C1",
+        "pdb_id": null,
+        "quick_fact": "Paracetamol is a widely used over-the-counter medicine that helps reduce fever (antipyretic) and relieve mild to moderate pain (analgesic).",
+        "color": "White crystalline powder"
+      },
+      "aspirin": {
+        "common_name": "Aspirin",
+        "iupac_name": "2-acetoxybenzoic acid",
+        "chemical_formula": "C9H8O4",
+        "molecular_weight": "180.16 g/mol",
+        "chemical_type": "NSAID / Pharmaceutical Drug",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound synthesized from salicylic acid, possessing a carbon-based aromatic framework (benzene derivative).",
+        "smiles_notation": "CC(=O)OC1=CC=CC=C1C(=O)O",
+        "pdb_id": null,
+        "quick_fact": "Aspirin is used to reduce pain, fever, and inflammation, and is often prescribed in low doses to prevent blood clots and heart attacks.",
+        "color": "White crystalline solid"
+      },
+      "blue vitriol": {
+        "common_name": "Blue Vitriol (Copper Sulfate Pentahydrate)",
+        "iupac_name": "Copper(II) sulfate pentahydrate",
+        "chemical_formula": "CuSO4.5H2O",
+        "molecular_weight": "249.69 g/mol",
+        "chemical_type": "Transition Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic salt consisting of copper cations and sulfate anions, without any carbon or carbon-hydrogen covalent bonds.",
+        "smiles_notation": "[Cu+2].[O-]S(=O)(=O)[O-].O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Commonly asked in NEET/JEE, its beautiful blue color is due to d-d transition of copper ions surrounded by water molecules, and it loses its color when heated to form white anhydrous Copper(II) Sulfate.",
+        "color": "Bright blue crystals"
+      },
+      "copper sulfate pentahydrate": {
+        "common_name": "Blue Vitriol (Copper Sulfate Pentahydrate)",
+        "iupac_name": "Copper(II) sulfate pentahydrate",
+        "chemical_formula": "CuSO4.5H2O",
+        "molecular_weight": "249.69 g/mol",
+        "chemical_type": "Transition Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic salt consisting of copper cations and sulfate anions, without any carbon or carbon-hydrogen covalent bonds.",
+        "smiles_notation": "[Cu+2].[O-]S(=O)(=O)[O-].O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Commonly asked in NEET/JEE, its beautiful blue color is due to d-d transition of copper ions surrounded by water molecules, and it loses its color when heated to form white anhydrous Copper(II) Sulfate.",
+        "color": "Bright blue crystals"
+      },
+      "cuso4": {
+        "common_name": "Copper(II) Sulfate (Cupric Sulfate)",
+        "iupac_name": "Copper(II) sulfate",
+        "chemical_formula": "CuSO4",
+        "molecular_weight": "159.61 g/mol",
+        "chemical_type": "Transition Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic salt consisting of copper cations and sulfate anions, without any carbon or carbon-hydrogen covalent bonds.",
+        "smiles_notation": "[Cu+2].[O-]S(=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "The anhydrous (water-free) form is an off-white/greyish-white powder. It readily absorbs water from the air to turn into the familiar bright blue Copper Sulfate Pentahydrate (Blue Vitriol), which is why anhydrous copper sulfate is used as a simple test for the presence of water.",
+        "color": "White to grey-white powder (anhydrous)"
+      },
+      "sodium stearate": {
+        "common_name": "Sodium Stearate (Soap)",
+        "iupac_name": "Sodium octadecanoate",
+        "chemical_formula": "C18H35NaO2",
+        "molecular_weight": "306.46 g/mol",
+        "chemical_type": "Saturated Fatty Acid Salt / Soap",
+        "classification": "Organic",
+        "classification_reason": "It is classified as an organic compound because it features a long 18-carbon aliphatic fatty acid chain derived from stearic acid.",
+        "smiles_notation": "CCCCCCCCCCCCCCCCCC(=O)[O-].[Na+]",
+        "pdb_id": null,
+        "quick_fact": "This is a major component of laundry soap, formed by saponification of triglycerides. In hard water, it forms insoluble scum with Calcium and Magnesium ions.",
+        "color": "White fine powder"
+      },
+      "hemoglobin": {
+        "common_name": "Hemoglobin",
+        "iupac_name": "Hemoglobin macromolecule",
+        "chemical_formula": "C2952H4664N812O832S8Fe4",
+        "molecular_weight": "64,500 g/mol",
+        "chemical_type": "Metalloprotein / Globular biological macromolecule",
+        "classification": "Organic",
+        "classification_reason": "It is a complex organic biomolecule consisting of continuous amino acid polypeptide chains and iron-containing carbon heme ring structures.",
+        "smiles_notation": "Complex macromolecule chain",
+        "pdb_id": "1A3N",
+        "quick_fact": "Crucial protein in red blood cells that transports oxygen from the lungs to the body tissues. One of the most studied proteins in biophysics and medicine (RCSB PDB ID: 1A3N).",
+        "color": "Deep dark red solid or solution"
+      },
+      "glucose": {
+        "common_name": "Glucose (Dextrose)",
+        "iupac_name": "(2R,3S,4R,5R)-2,3,4,5,6-pentahydroxyhexanal",
+        "chemical_formula": "C6H12O6",
+        "molecular_weight": "180.16 g/mol",
+        "chemical_type": "Monosaccharide / Carbohydrate",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound because it constitutes a six-carbon sugar skeleton possessing covalent carbon-carbon, carbon-hydrogen, and carbon-oxygen single bonds.",
+        "smiles_notation": "C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O",
+        "pdb_id": null,
+        "quick_fact": "Glucose is the primary source of energy for cellular respiration in living organisms, generated by plants during photosynthesis.",
+        "color": "White sweet crystalline powder"
+      },
+      "fructose": {
+        "common_name": "Fructose (Fruit Sugar)",
+        "iupac_name": "(3S,4R,5R)-1,3,4,5,6-Pentahydroxyhexan-2-one",
+        "chemical_formula": "C6H12O6",
+        "molecular_weight": "180.16 g/mol",
+        "chemical_type": "Monosaccharide / Ketohexose Carbohydrate",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound built on a six-carbon sugar skeleton containing a ketone functional group along with several hydroxyl groups, classifying it as a ketohexose (isomeric with glucose, an aldohexose).",
+        "smiles_notation": "C1[C@H]([C@H]([C@@H](C(O1)(CO)O)O)O)O",
+        "pdb_id": null,
+        "quick_fact": "Fructose is the sweetest of all naturally occurring sugars. It is abundant in fruits and honey, and unlike glucose it is absorbed and metabolized mainly by the liver rather than being used directly by most body cells.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: Odorless white crystalline solid, sweeter-tasting than both glucose and sucrose\nSolubility: Highly soluble in water\nStructure: Predominantly exists in a stable five-membered (furanose) or six-membered (pyranose) cyclic hemiketal ring form in solution\nStability: Caramelizes and browns at lower temperatures than glucose",
+        "uses": "Natural sweetener in fruits, honey, and high-fructose corn syrup used in the food and beverage industry\nStudied in biochemistry as the primary example of a ketose sugar, contrasted with aldose sugars like glucose\nIntravenous fructose solutions historically used in some clinical nutrition settings"
+      },
+      "maltose": {
+        "common_name": "Maltose (Malt Sugar)",
+        "iupac_name": "(2R,3S,4S,5R,6R)-2-(Hydroxymethyl)-6-[(2R,3S,4R,5R)-4,5,6-trihydroxy-2-(hydroxymethyl)oxan-3-yl]oxyoxane-3,4,5-triol",
+        "chemical_formula": "C12H22O11",
+        "molecular_weight": "342.30 g/mol",
+        "chemical_type": "Disaccharide Carbohydrate",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound formed from two glucose monosaccharide units joined by a glycosidic bond, giving it a carbon-ring skeleton with multiple hydroxyl functional groups.",
+        "smiles_notation": "C([C@@H]1[C@H]([C@@H]([C@H]([C@H](O1)O[C@@H]2[C@H](OC([C@@H]([C@H]2O)O)O)CO)O)O)O)O",
+        "pdb_id": null,
+        "quick_fact": "Maltose is produced when the enzyme amylase breaks down starch, both during human digestion and during the malting process used in brewing beer and whisky, which is where it gets the name 'malt sugar'.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid, less sweet-tasting than sucrose\nSolubility: Freely soluble in water\nStructure: Two D-glucose units joined by an alpha-1,4-glycosidic bond\nHydrolysis: Broken down into two molecules of glucose by the enzyme maltase during digestion",
+        "uses": "Key intermediate sugar in the brewing and distilling industry, produced during the malting of barley\nFood industry sweetener and browning agent, notably in malted milk products and confectionery\nBiochemical substrate used to study carbohydrate-digesting enzymes such as maltase and amylase"
+      },
+      "ammonium chloride": {
+        "common_name": "Ammonium Chloride (Sal Ammoniac)",
+        "iupac_name": "Azanium Chloride",
+        "chemical_formula": "NH4Cl",
+        "molecular_weight": "53.49 g/mol",
+        "chemical_type": "Ammonium Halide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of the ammonium cation (NH4+) and chloride anion (Cl-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[Cl-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium chloride is historically called 'sal ammoniac' and is used as the electrolyte paste inside ordinary zinc-carbon dry cell batteries.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid, colorless in solution\nSolubility: Highly soluble in water, dissolving endothermically (cools the solution)\nAcidity: Mildly acidic salt (pH ~5) due to hydrolysis of the ammonium ion\nSublimation: Sublimes directly from solid to vapor on strong heating",
+        "uses": "Electrolyte paste in dry cell (Leclanché) batteries\nFlux in soldering and galvanizing to clean metal surfaces before coating\nExpectorant ingredient in cough medicines and nitrogen source in fertilizers"
+      },
+      "ammonium sulfate": {
+        "common_name": "Ammonium Sulfate",
+        "iupac_name": "Diazanium Sulfate",
+        "chemical_formula": "(NH4)2SO4",
+        "molecular_weight": "132.14 g/mol",
+        "chemical_type": "Ammonium Sulfate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of two ammonium cations (NH4+) and one sulfate anion (SO4^2-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[NH4+].[O-]S(=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium sulfate is one of the most widely used nitrogen fertilizers in the world, prized for also supplying sulfur, an essential secondary plant nutrient.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid\nSolubility: Highly soluble in water\nAcidity: Mildly acidic salt (pH ~5 - 5.5) due to hydrolysis of the ammonium ion\nStability: Decomposes on strong heating rather than melting cleanly",
+        "uses": "Major nitrogen-and-sulfur agricultural fertilizer for alkaline soils\nProtein precipitating (\"salting out\") agent in biochemistry and vaccine purification\nFlame-retardant additive and food additive (flour treatment agent)"
+      },
+      "ammonium nitrate": {
+        "common_name": "Ammonium Nitrate",
+        "iupac_name": "Azanium Nitrate",
+        "chemical_formula": "NH4NO3",
+        "molecular_weight": "80.04 g/mol",
+        "chemical_type": "Ammonium Nitrate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of the ammonium cation (NH4+) and nitrate anion (NO3-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[O-][N+](=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium nitrate decomposes into nitrous oxide and water vapor when heated gently, but can detonate explosively under strong shock or intense heat -- a property responsible for several major industrial disasters.",
+        "color": "White or grey crystalline solid",
+        "properties": "Physical state: White crystalline solid\nSolubility: Extremely soluble in water, dissolving strongly endothermically\nAcidity: Mildly acidic salt (pH ~5 - 5.5) due to hydrolysis of the ammonium ion\nThermal behavior: Decomposes to N2O and H2O on gentle heating; can detonate under confinement or intense heat",
+        "uses": "High-nitrogen agricultural fertilizer, the most widely used nitrogen fertilizer worldwide\nOxidizer component in industrial and mining explosives (ANFO)\nEndothermic dissolution used in instant cold packs for first-aid treatment"
+      },
+      "ammonium carbonate": {
+        "common_name": "Ammonium Carbonate (Smelling Salts)",
+        "iupac_name": "Diazanium Carbonate",
+        "chemical_formula": "(NH4)2CO3",
+        "molecular_weight": "96.09 g/mol",
+        "chemical_type": "Ammonium Carbonate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "Although it contains carbon, the carbon is present as a carbonate group (CO3^2-), which is systematically classified as inorganic rather than treated as an organic carbon skeleton.",
+        "smiles_notation": "[NH4+].[NH4+].[O-]C(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Historically known as 'smelling salts', ammonium carbonate slowly releases pungent ammonia gas at room temperature and was used to revive people who had fainted.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid with a strong ammonia odor\nSolubility: Soluble in water, decomposing slowly as it dissolves\nAcidity: Mildly basic in solution (pH ~8.5) since carbonate hydrolysis dominates over ammonium hydrolysis\nStability: Unstable at room temperature, slowly releasing ammonia and carbon dioxide gas",
+        "uses": "Traditional 'smelling salts' to revive people from fainting or dizziness\nLeavening (raising) agent in older baking recipes, especially flat cookies and crackers\nBuffering and pH-adjusting reagent in analytical chemistry"
+      },
+      "ammonium bicarbonate": {
+        "common_name": "Ammonium Bicarbonate",
+        "iupac_name": "Azanium Hydrogen Carbonate",
+        "chemical_formula": "NH4HCO3",
+        "molecular_weight": "79.06 g/mol",
+        "chemical_type": "Ammonium Bicarbonate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "Although it contains carbon, the carbon is present as a bicarbonate group (HCO3-), which is systematically classified as inorganic rather than treated as an organic carbon skeleton.",
+        "smiles_notation": "[NH4+].OC(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium bicarbonate fully decomposes into ammonia, water vapor, and carbon dioxide gas on baking, leaving behind no solid residue at all -- making it a popular leavening agent for thin, crisp baked goods.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid with a faint ammonia odor\nSolubility: Soluble in water\nAcidity: Mildly basic in solution (pH ~8)\nStability: Decomposes completely into gaseous products below 60°C, leaving no residue",
+        "uses": "Leavening agent in flatbreads, crackers, and traditional cookies (leaves no chemical aftertaste since it fully evaporates)\nBuffering agent and nitrogen source in biochemical and pharmaceutical manufacturing\nFire-extinguishing powder component"
+      },
+      "ammonium phosphate": {
+        "common_name": "Ammonium Phosphate (Diammonium Phosphate)",
+        "iupac_name": "Diazanium Hydrogen Phosphate",
+        "chemical_formula": "(NH4)2HPO4",
+        "molecular_weight": "132.06 g/mol",
+        "chemical_type": "Ammonium Phosphate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of ammonium cations (NH4+) and a hydrogen phosphate anion (HPO4^2-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[NH4+].[O-]P(=O)([O-])O",
+        "pdb_id": null,
+        "quick_fact": "Diammonium phosphate (DAP) is the world's most widely used phosphate fertilizer, supplying crops with both nitrogen and phosphorus in a single granule.",
+        "color": "White or grey crystalline solid",
+        "properties": "Physical state: White crystalline solid\nSolubility: Highly soluble in water\nAcidity: Mildly basic in solution (pH ~8)\nStability: Releases ammonia gas on prolonged exposure to air or on heating",
+        "uses": "World's most common phosphorus-and-nitrogen agricultural fertilizer (DAP)\nFire retardant coating in wood products and fireworks\nYeast nutrient in winemaking and brewing"
+      },
+      "ammonium dichromate": {
+        "common_name": "Ammonium Dichromate",
+        "iupac_name": "Diazanium Dichromate",
+        "chemical_formula": "(NH4)2Cr2O7",
+        "molecular_weight": "252.07 g/mol",
+        "chemical_type": "Ammonium Dichromate Salt / Oxidizer",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of ammonium cations (NH4+) and a dichromate anion (Cr2O7^2-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[NH4+].[O-][Cr](=O)(=O)O[Cr](=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium dichromate is famous for the 'volcano' demonstration: when ignited, it self-sustains an exothermic decomposition into a large, glowing pile of green chromium(III) oxide ash, nitrogen gas, and steam.",
+        "color": "Bright orange-red crystalline solid",
+        "properties": "Physical state: Bright orange crystalline solid\nSolubility: Soluble in water, giving a mildly acidic orange solution (pH ~4)\nOxidizing power: Strong oxidizer due to chromium in the +6 oxidation state\nThermal behavior: Undergoes vigorous self-sustaining exothermic decomposition on ignition",
+        "uses": "Classic 'volcano' lecture demonstration of exothermic decomposition\nOxidizing agent in pyrotechnics, photoengraving, and lithography\nSource of green chromium(III) oxide pigment"
+      },
+      "ammonium sulfide": {
+        "common_name": "Ammonium Sulfide",
+        "iupac_name": "Diazanium Sulfide",
+        "chemical_formula": "(NH4)2S",
+        "molecular_weight": "68.15 g/mol",
+        "chemical_type": "Ammonium Sulfide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of ammonium cations (NH4+) and a sulfide anion (S^2-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[NH4+].[S-2]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium sulfide solution has an intensely foul, rotten-egg-like odor from dissolved hydrogen sulfide and is used in qualitative inorganic analysis to selectively precipitate heavy metal sulfides.",
+        "color": "Yellow aqueous solution (unstable as a pure solid)",
+        "properties": "Physical state: Typically handled as a yellow aqueous solution; the pure solid is unstable\nSolubility: Freely soluble in water\nAcidity: Basic in solution (pH ~9 - 9.5) due to strong sulfide ion hydrolysis\nOdor: Strong, foul odor resembling rotten eggs",
+        "uses": "Reagent in qualitative inorganic analysis to precipitate heavy metal sulfides (group-II/IV cation tests)\nSepia/browning toner in black-and-white photographic development\nReducing agent in some organic synthesis reactions"
+      },
+      "ammonium acetate": {
+        "common_name": "Ammonium Acetate",
+        "iupac_name": "Azanium Acetate",
+        "chemical_formula": "CH3COONH4",
+        "molecular_weight": "77.08 g/mol",
+        "chemical_type": "Ammonium Carboxylate Salt",
+        "classification": "Organic",
+        "classification_reason": "It is an ammonium salt of acetic acid, a carboxylic acid, giving it a carbon-hydrogen (-CH3) organic backbone rather than a purely inorganic ionic framework.",
+        "smiles_notation": "[NH4+].CC(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium acetate is unusual among ammonium salts because its aqueous solution is almost perfectly neutral (pH ~7), since the weakly acidic ammonium ion and weakly basic acetate ion neutralize each other's hydrolysis effects.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline, hygroscopic solid\nSolubility: Highly soluble in water\nAcidity: Almost perfectly neutral in solution (pH ~7), unlike most other ammonium salts\nStability: Volatile -- sublimes/decomposes readily on heating",
+        "uses": "Volatile buffer in mass spectrometry and chromatography (LC-MS) since it leaves no residue on evaporation\nMeat curing and food preservative (E264)\nAnalytical reagent for precipitating proteins"
+      },
+      "ammonium oxalate": {
+        "common_name": "Ammonium Oxalate",
+        "iupac_name": "Diazanium Oxalate",
+        "chemical_formula": "(NH4)2C2O4",
+        "molecular_weight": "124.10 g/mol",
+        "chemical_type": "Ammonium Dicarboxylate Salt",
+        "classification": "Organic",
+        "classification_reason": "It is an ammonium salt of oxalic acid, a dicarboxylic acid, giving it an organic carbon-carbon backbone (C2O4^2-) rather than a purely inorganic ionic framework.",
+        "smiles_notation": "[NH4+].[NH4+].[O-]C(=O)C(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium oxalate is used as an anticoagulant in blood samples because the oxalate ion binds tightly to calcium ions in blood plasma, blocking the calcium-dependent clotting cascade.",
+        "color": "White crystalline solid",
+        "properties": "Physical state: White crystalline solid\nSolubility: Moderately soluble in water\nAcidity: Weakly acidic to near-neutral in solution (pH ~6)\nReactivity: Forms an insoluble white precipitate (calcium oxalate) with calcium ions",
+        "uses": "Anticoagulant in laboratory blood collection tubes (binds plasma calcium)\nAnalytical reagent for gravimetric determination of calcium\nRust and mineral-stain remover for wood, metal, and stone surfaces"
+      },
+      "ammonium iodide": {
+        "common_name": "Ammonium Iodide",
+        "iupac_name": "Azanium Iodide",
+        "chemical_formula": "NH4I",
+        "molecular_weight": "144.94 g/mol",
+        "chemical_type": "Ammonium Halide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of the ammonium cation (NH4+) and iodide anion (I-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[I-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium iodide slowly darkens on exposure to light and air as trace iodide oxidizes to elemental iodine, similar to how silver halides darken in photographic film.",
+        "color": "White or yellowish crystalline solid",
+        "properties": "Physical state: White crystalline solid, yellows slightly on exposure to light and air\nSolubility: Extremely soluble in water\nAcidity: Mildly acidic salt (pH ~5) due to hydrolysis of the ammonium ion\nStability: Slowly oxidizes, releasing traces of iodine",
+        "uses": "Iodine source in some pharmaceutical and veterinary formulations\nElectrolyte additive in specialty dry-cell battery formulations\nAnalytical and photographic chemistry reagent"
+      },
+      "ammonium bromide": {
+        "common_name": "Ammonium Bromide",
+        "iupac_name": "Azanium Bromide",
+        "chemical_formula": "NH4Br",
+        "molecular_weight": "97.94 g/mol",
+        "chemical_type": "Ammonium Halide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic salt of the ammonium cation (NH4+) and bromide anion (Br-) with no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[Br-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium bromide was historically used as a mild sedative and anticonvulsant in 19th and early 20th century medicine, before safer modern drugs replaced bromide-based treatments.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: White crystalline solid\nSolubility: Highly soluble in water\nAcidity: Mildly acidic salt (pH ~5) due to hydrolysis of the ammonium ion\nStability: Stable at room temperature; sublimes on strong heating",
+        "uses": "Historical sedative and anticonvulsant medicine (now obsolete)\nPhotographic emulsion and flame-retardant textile treatment component\nAnalytical chemistry reagent and bromide ion source"
+      },
+      "ammonium thiocyanate": {
+        "common_name": "Ammonium Thiocyanate",
+        "iupac_name": "Azanium Thiocyanate",
+        "chemical_formula": "NH4SCN",
+        "molecular_weight": "76.12 g/mol",
+        "chemical_type": "Ammonium Pseudohalide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "Although it contains carbon, the carbon is present as part of the thiocyanate pseudohalide group (SCN-), which -- like cyanide -- is systematically classified as inorganic rather than treated as an organic carbon skeleton.",
+        "smiles_notation": "[NH4+].[S-]C#N",
+        "pdb_id": null,
+        "quick_fact": "Ammonium thiocyanate solution is famous in qualitative analysis for turning blood-red immediately on contact with iron(III) ions, forming the complex ion [Fe(SCN)]^2+ -- a extremely sensitive test for Fe3+.",
+        "color": "White or colorless crystalline solid",
+        "properties": "Physical state: White crystalline, hygroscopic solid\nSolubility: Highly soluble in water, dissolving strongly endothermically\nAcidity: Mildly acidic in solution (pH ~4.5 - 5)\nReactivity: Forms an intense blood-red complex with iron(III) ions, used as a sensitive Fe3+ test",
+        "uses": "Extremely sensitive qualitative test reagent for detecting iron(III) ions (blood-red complex)\nEndothermic dissolution used in some instant cold packs\nIntermediate in herbicide, dye, and pharmaceutical manufacturing"
+      },
+      "ammonium hydroxide": {
+        "common_name": "Ammonium Hydroxide (Aqueous Ammonia)",
+        "iupac_name": "Azanium Hydroxide",
+        "chemical_formula": "NH4OH",
+        "molecular_weight": "35.05 g/mol",
+        "chemical_type": "Weak Base / Ammonium Hydroxide Solution",
+        "classification": "Inorganic",
+        "classification_reason": "It is the ionic hydroxide of the ammonium cation (NH4+) formed when ammonia gas dissolves in water, containing no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[NH4+].[OH-]",
+        "pdb_id": null,
+        "quick_fact": "Ammonium hydroxide does not really exist as a stable, isolable compound -- it is simply the name given to ammonia gas (NH3) dissolved in water, existing mostly as NH3 molecules with only a small fraction ionized to NH4+ and OH-.",
+        "color": "Colorless solution with a pungent, sharp odor",
+        "properties": "Physical state: Colorless aqueous solution with a very pungent odor\nBasicity: Weak base (pH ~11.6 for ~0.1 M) -- only partially ionizes in water\nVolatility: Readily releases ammonia gas, especially when warmed\nReactivity: Forms deep blue complexes with copper(II) salts in excess",
+        "uses": "Household glass cleaner and general-purpose cleaning solution\nLaboratory reagent for precipitating metal hydroxides and forming complex ions (e.g. deep blue copper-ammonia complex)\npH-adjusting and buffering agent in water treatment and food processing"
+      },
+      "baking soda": {
+        "common_name": "Baking Soda (Sodium Bicarbonate)",
+        "iupac_name": "Sodium hydrogen carbonate",
+        "chemical_formula": "NaHCO3",
+        "molecular_weight": "84.01 g/mol",
+        "chemical_type": "Alkali Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is classified as inorganic because it is dry mineral carbonate salt of mineral origin that lacks covalent carbon-hydrogen or carbon-carbon frameworks.",
+        "smiles_notation": "[Na+].OC(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "It undergoes thermal decomposition to release carbon dioxide gas, causing dough to rise in baking. It is also an effective antacid.",
+        "color": "White crystalline powder"
+      },
+      "nahco3": {
+        "common_name": "Baking Soda (Sodium Bicarbonate)",
+        "iupac_name": "Sodium hydrogen carbonate",
+        "chemical_formula": "NaHCO3",
+        "molecular_weight": "84.01 g/mol",
+        "chemical_type": "Alkali Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is classified as inorganic because it is dry mineral carbonate salt of mineral origin that lacks covalent carbon-hydrogen or carbon-carbon frameworks.",
+        "smiles_notation": "[Na+].OC(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "It undergoes thermal decomposition to release carbon dioxide gas, causing dough to rise in baking. It is also an effective antacid.",
+        "color": "White crystalline powder"
+      },
+      "dna": {
+        "common_name": "DNA (Deoxyribonucleic Acid)",
+        "iupac_name": "Deoxyribonucleic acid polymer",
+        "chemical_formula": "Polymer of nucleotides",
+        "molecular_weight": "Variable (Complex polymer)",
+        "chemical_type": "Nucleic Acid / Biomolecule polymer",
+        "classification": "Organic",
+        "classification_reason": "It is an organic macromolecular polymer built from nucleotides containing a strong carbon skeleton of repeating sugar-phosphate molecules and nitrogenous bases.",
+        "smiles_notation": "Complex macromolecule chain",
+        "pdb_id": "1D11",
+        "quick_fact": "It is the hereditary material in humans and almost all other organisms, carrying instructions for build and maintenance of life.",
+        "color": "White or off-white fibrous substance"
+      },
+      "penicillin": {
+        "common_name": "Penicillin G",
+        "iupac_name": "(2S,5R,6R)-3,3-dimethyl-7-oxo-6-[(2-phenylacetyl)amino]-4-thia-1-azabicyclo[3.2.0]heptane-2-carboxylic acid",
+        "chemical_formula": "C16H18N2O4S",
+        "molecular_weight": "334.39 g/mol",
+        "chemical_type": "Beta-Lactam Antibiotic",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound with a structural carbon skeleton consisting of a fused thiazolidine ring and a beta-lactam ring linked to nitrogen and oxygen atoms.",
+        "smiles_notation": "CC1(C(N2C(S1)C(C2=O)NC(=O)CC3=CC=CC=C3)C(=O)O)C",
+        "pdb_id": null,
+        "quick_fact": "Discovered by Alexander Fleming in 1928, it was the world's first effective antibiotic, revolutionizing modern medicine against bacterial infections.",
+        "color": "White to beige crystalline powder"
+      },
+      "green vitriol": {
+        "common_name": "Green Vitriol (Iron(II) Sulfate Heptahydrate)",
+        "iupac_name": "Iron(II) sulfate heptahydrate",
+        "chemical_formula": "FeSO4.7H2O",
+        "molecular_weight": "278.02 g/mol",
+        "chemical_type": "Transition Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of iron cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Fe+2].[O-]S(=O)(=O)[O-].O.O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Usually asked in boards, green vitriol decomposes upon heating to form solid ferric oxide along with sulfur dioxide and sulfur trioxide gases with a pungent smell.",
+        "color": "Light green heptahydrate crystals"
+      },
+      "iron sulfate heptahydrate": {
+        "common_name": "Green Vitriol (Iron(II) Sulfate Heptahydrate)",
+        "iupac_name": "Iron(II) sulfate heptahydrate",
+        "chemical_formula": "FeSO4.7H2O",
+        "molecular_weight": "278.02 g/mol",
+        "chemical_type": "Transition Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of iron cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Fe+2].[O-]S(=O)(=O)[O-].O.O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Usually asked in boards, green vitriol decomposes upon heating to form solid ferric oxide along with sulfur dioxide and sulfur trioxide gases with a pungent smell.",
+        "color": "Light green heptahydrate crystals"
+      },
+      "feso4": {
+        "common_name": "Iron(II) Sulfate (Ferrous Sulfate)",
+        "iupac_name": "Iron(2+) sulfate",
+        "chemical_formula": "FeSO4",
+        "molecular_weight": "151.91 g/mol",
+        "chemical_type": "Transition Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic salt consisting of iron cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Fe+2].[O-]S(=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "The anhydrous (water-free) form is a white to pale grey-brown powder. In moist air it readily absorbs water to form the familiar pale green Iron(II) Sulfate Heptahydrate (Green Vitriol), the form most commonly seen in the lab.",
+        "color": "White to grey-brown powder (anhydrous)"
+      },
+      "zinc sulfate heptahydrate": {
+        "common_name": "Zinc Sulfate Heptahydrate (White Vitriol)",
+        "iupac_name": "Zinc sulfate heptahydrate",
+        "chemical_formula": "ZnSO4.7H2O",
+        "molecular_weight": "287.60 g/mol",
+        "chemical_type": "Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of zinc cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Zn+2].[O-]S(=O)(=O)[O-].O.O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Also historically called White Vitriol, this is the crystalline form of zinc sulfate most commonly seen and weighed out in the lab. It loses its water of crystallization on heating to leave anhydrous Zinc Sulfate behind.",
+        "color": "Colorless to white crystals"
+      },
+      "magnesium sulfate heptahydrate": {
+        "common_name": "Magnesium Sulfate Heptahydrate (Epsom Salt)",
+        "iupac_name": "Magnesium sulfate heptahydrate",
+        "chemical_formula": "MgSO4.7H2O",
+        "molecular_weight": "246.48 g/mol",
+        "chemical_type": "Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of magnesium cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Mg+2].[O-]S(=O)(=O)[O-].O.O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Best known as Epsom Salt, this hydrate is widely used in bath soaks and as a soil/plant magnesium supplement. It effloresces (loses water to air) on prolonged exposure to dry conditions.",
+        "color": "White crystalline solid"
+      },
+      "epsom salt": {
+        "common_name": "Magnesium Sulfate Heptahydrate (Epsom Salt)",
+        "iupac_name": "Magnesium sulfate heptahydrate",
+        "chemical_formula": "MgSO4.7H2O",
+        "molecular_weight": "246.48 g/mol",
+        "chemical_type": "Metal Salt / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of magnesium cations and polyatomic sulfate anions without any organic carbon framework.",
+        "smiles_notation": "[Mg+2].[O-]S(=O)(=O)[O-].O.O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "Best known as Epsom Salt, this hydrate is widely used in bath soaks and as a soil/plant magnesium supplement. It effloresces (loses water to air) on prolonged exposure to dry conditions.",
+        "color": "White crystalline solid"
+      },
+      "barium chloride dihydrate": {
+        "common_name": "Barium Chloride Dihydrate",
+        "iupac_name": "Barium chloride dihydrate",
+        "chemical_formula": "BaCl2.2H2O",
+        "molecular_weight": "244.26 g/mol",
+        "chemical_type": "Metal Halide / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of barium cations and chloride anions without any organic carbon framework.",
+        "smiles_notation": "[Ba+2].[Cl-].[Cl-].O.O",
+        "pdb_id": null,
+        "quick_fact": "This is the crystalline, lab-shelf form of barium chloride; the anhydrous salt is obtained only after careful heating/drying, since barium chloride is otherwise hygroscopic and readily reabsorbs moisture.",
+        "color": "White crystalline solid"
+      },
+      "copper(ii) chloride dihydrate": {
+        "common_name": "Copper(II) Chloride Dihydrate",
+        "iupac_name": "Copper(II) chloride dihydrate",
+        "chemical_formula": "CuCl2.2H2O",
+        "molecular_weight": "170.48 g/mol",
+        "chemical_type": "Metal Halide / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of copper cations and chloride anions without any organic carbon framework.",
+        "smiles_notation": "[Cu+2].[Cl-].[Cl-].O.O",
+        "pdb_id": null,
+        "quick_fact": "This blue-green crystalline hydrate is the form of copper(II) chloride most often stocked and weighed out in the lab; the anhydrous salt is a distinct yellow-brown solid.",
+        "color": "Blue-green crystals"
+      },
+      "iron(iii) chloride hexahydrate": {
+        "common_name": "Iron(III) Chloride Hexahydrate",
+        "iupac_name": "Iron(III) chloride hexahydrate",
+        "chemical_formula": "FeCl3.6H2O",
+        "molecular_weight": "270.30 g/mol",
+        "chemical_type": "Metal Halide / Hydrate",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic hydrated salt consisting of iron cations and chloride anions without any organic carbon framework.",
+        "smiles_notation": "[Fe+3].[Cl-].[Cl-].[Cl-].O.O.O.O.O.O",
+        "pdb_id": null,
+        "quick_fact": "This yellow-brown deliquescent (moisture-absorbing) crystalline hydrate is the common lab and industrial form of ferric chloride, widely used as a water-treatment coagulant and a PCB-etching solution.",
+        "color": "Yellow-brown crystals"
+      },
+      "water": {
+        "common_name": "Water",
+        "iupac_name": "Oxidane",
+        "chemical_formula": "H2O",
+        "molecular_weight": "18.015 g/mol",
+        "chemical_type": "Hydrogen Oxide / Solvent",
+        "classification": "Inorganic",
+        "classification_reason": "Water does not contain any carbon atoms, so it is classified as an inorganic compound.",
+        "smiles_notation": "O",
+        "pdb_id": null,
+        "quick_fact": "Water is known as the universal solvent due to its polar nature and ability to dissolve many substances.",
+        "color": "Colorless liquid"
+      },
+      "h2o": {
+        "common_name": "Water",
+        "iupac_name": "Oxidane",
+        "chemical_formula": "H2O",
+        "molecular_weight": "18.015 g/mol",
+        "chemical_type": "Hydrogen Oxide / Solvent",
+        "classification": "Inorganic",
+        "classification_reason": "Water does not contain any carbon atoms, so it is classified as an inorganic compound.",
+        "smiles_notation": "O",
+        "pdb_id": null,
+        "quick_fact": "Water is known as the universal solvent due to its polar nature and ability to dissolve many substances.",
+        "color": "Colorless liquid"
+      },
+      "ethanol": {
+        "common_name": "Ethanol (Ethyl Alcohol)",
+        "iupac_name": "Ethanol",
+        "chemical_formula": "C2H5OH",
+        "molecular_weight": "46.07 g/mol",
+        "chemical_type": "Primary Alcohol",
+        "classification": "Organic",
+        "classification_reason": "Ethanol contains a covalent carbon-carbon and carbon-hydrogen framework, classifying it as organic.",
+        "smiles_notation": "CCO",
+        "pdb_id": null,
+        "quick_fact": "Ethanol is produced naturally by yeast fermentation of sugars and is widely used as a disinfectant and fuel.",
+        "color": "Colorless liquid"
+      },
+      "c2h5oh": {
+        "common_name": "Ethanol (Ethyl Alcohol)",
+        "iupac_name": "Ethanol",
+        "chemical_formula": "C2H5OH",
+        "molecular_weight": "46.07 g/mol",
+        "chemical_type": "Primary Alcohol",
+        "classification": "Organic",
+        "classification_reason": "Ethanol contains a covalent carbon-carbon and carbon-hydrogen framework, classifying it as organic.",
+        "smiles_notation": "CCO",
+        "pdb_id": null,
+        "quick_fact": "Ethanol is produced naturally by yeast fermentation of sugars and is widely used as a disinfectant and fuel.",
+        "color": "Colorless liquid"
+      },
+      "acetic acid": {
+        "common_name": "Acetic Acid (Vinegar)",
+        "iupac_name": "Acetic acid",
+        "chemical_formula": "CH3COOH",
+        "molecular_weight": "60.05 g/mol",
+        "chemical_type": "Carboxylic Acid",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon framework with an organic methyl and carboxyl group.",
+        "smiles_notation": "CC(=O)O",
+        "pdb_id": null,
+        "quick_fact": "A 5-8% solution of acetic acid in water is called vinegar, commonly used in food preservation and cooking.",
+        "color": "Colorless liquid"
+      },
+      "ethanoic acid": {
+        "common_name": "Acetic Acid (Vinegar)",
+        "iupac_name": "Acetic acid",
+        "chemical_formula": "CH3COOH",
+        "molecular_weight": "60.05 g/mol",
+        "chemical_type": "Carboxylic Acid",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon framework with an organic methyl and carboxyl group.",
+        "smiles_notation": "CC(=O)O",
+        "pdb_id": null,
+        "quick_fact": "A 5-8% solution of acetic acid in water is called vinegar, commonly used in food preservation and cooking.",
+        "color": "Colorless liquid"
+      },
+      "ch3cooh": {
+        "common_name": "Acetic Acid (Vinegar)",
+        "iupac_name": "Acetic acid",
+        "chemical_formula": "CH3COOH",
+        "molecular_weight": "60.05 g/mol",
+        "chemical_type": "Carboxylic Acid",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon framework with an organic methyl and carboxyl group.",
+        "smiles_notation": "CC(=O)O",
+        "pdb_id": null,
+        "quick_fact": "A 5-8% solution of acetic acid in water is called vinegar, commonly used in food preservation and cooking.",
+        "color": "Colorless liquid"
+      },
+      "hydrochloric acid": {
+        "common_name": "Hydrochloric Acid (Muriatic Acid)",
+        "iupac_name": "Hydrogen chloride",
+        "chemical_formula": "HCl",
+        "molecular_weight": "36.46 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrochloric acid is a hydrogen halide without any carbon atoms, so it is inorganic.",
+        "smiles_notation": "Cl",
+        "pdb_id": null,
+        "quick_fact": "Hydrochloric acid is a major component of gastric acid produced naturally in our stomachs to digest food.",
+        "color": "Colorless or slightly yellowish liquid"
+      },
+      "hcl": {
+        "common_name": "Hydrochloric Acid (Muriatic Acid)",
+        "iupac_name": "Hydrogen chloride",
+        "chemical_formula": "HCl",
+        "molecular_weight": "36.46 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrochloric acid is a hydrogen halide without any carbon atoms, so it is inorganic.",
+        "smiles_notation": "Cl",
+        "pdb_id": null,
+        "quick_fact": "Hydrochloric acid is a major component of gastric acid produced naturally in our stomachs to digest food.",
+        "color": "Colorless or slightly yellowish liquid"
+      },
+      "sodium hydroxide": {
+        "common_name": "Sodium Hydroxide (Caustic Soda)",
+        "iupac_name": "Sodium hydroxide",
+        "chemical_formula": "NaOH",
+        "molecular_weight": "39.997 g/mol",
+        "chemical_type": "Alkali / Strong Base",
+        "classification": "Inorganic",
+        "classification_reason": "NaOH contains sodium, oxygen, and hydrogen but no carbon atoms, making it inorganic.",
+        "smiles_notation": "[Na+].[OH-]",
+        "pdb_id": null,
+        "quick_fact": "Caustic soda is highly hygroscopic, meaning it rapidly absorbs water and carbon dioxide from the air.",
+        "color": "White crystalline solid (pellets)"
+      },
+      "naoh": {
+        "common_name": "Sodium Hydroxide (Caustic Soda)",
+        "iupac_name": "Sodium hydroxide",
+        "chemical_formula": "NaOH",
+        "molecular_weight": "39.997 g/mol",
+        "chemical_type": "Alkali / Strong Base",
+        "classification": "Inorganic",
+        "classification_reason": "NaOH contains sodium, oxygen, and hydrogen but no carbon atoms, making it inorganic.",
+        "smiles_notation": "[Na+].[OH-]",
+        "pdb_id": null,
+        "quick_fact": "Caustic soda is highly hygroscopic, meaning it rapidly absorbs water and carbon dioxide from the air.",
+        "color": "White crystalline solid (pellets)"
+      },
+      "carbon dioxide": {
+        "common_name": "Carbon Dioxide (Dry Ice)",
+        "iupac_name": "Carbon dioxide",
+        "chemical_formula": "CO2",
+        "molecular_weight": "44.01 g/mol",
+        "chemical_type": "Carbon Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "Even though it contains carbon, carbon dioxide is systematically classified as inorganic because it lacks hydrogen atoms (C-H bonds).",
+        "smiles_notation": "O=C=O",
+        "pdb_id": null,
+        "quick_fact": "Solid carbon dioxide is called Dry Ice, which sublimates directly from solid to gas at -78.5°C.",
+        "color": "Colorless gas"
+      },
+      "co2": {
+        "common_name": "Carbon Dioxide (Dry Ice)",
+        "iupac_name": "Carbon dioxide",
+        "chemical_formula": "CO2",
+        "molecular_weight": "44.01 g/mol",
+        "chemical_type": "Carbon Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "Even though it contains carbon, carbon dioxide is systematically classified as inorganic because it lacks hydrogen atoms (C-H bonds).",
+        "smiles_notation": "O=C=O",
+        "pdb_id": null,
+        "quick_fact": "Solid carbon dioxide is called Dry Ice, which sublimates directly from solid to gas at -78.5°C.",
+        "color": "Colorless gas"
+      },
+      "oxygen": {
+        "common_name": "Oxygen Gas",
+        "iupac_name": "Molecular oxygen",
+        "chemical_formula": "O2",
+        "molecular_weight": "31.998 g/mol",
+        "chemical_type": "Diatomic Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Oxygen contains only oxygen atoms and zero carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "O=O",
+        "pdb_id": null,
+        "quick_fact": "Oxygen makes up about 21% of the Earth's atmosphere by volume and is produced by photosynthesis.",
+        "color": "Colorless gas"
+      },
+      "o2": {
+        "common_name": "Oxygen Gas",
+        "iupac_name": "Molecular oxygen",
+        "chemical_formula": "O2",
+        "molecular_weight": "31.998 g/mol",
+        "chemical_type": "Diatomic Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Oxygen contains only oxygen atoms and zero carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "O=O",
+        "pdb_id": null,
+        "quick_fact": "Oxygen makes up about 21% of the Earth's atmosphere by volume and is produced by photosynthesis.",
+        "color": "Colorless gas"
+      },
+      "hydrogen": {
+        "common_name": "Hydrogen Gas",
+        "iupac_name": "Molecular hydrogen",
+        "chemical_formula": "H2",
+        "molecular_weight": "2.016 g/mol",
+        "chemical_type": "Diatomic Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrogen contains no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[H][H]",
+        "pdb_id": null,
+        "quick_fact": "Hydrogen is the most abundant chemical substance in the universe, making up about 75% of all baryonic mass.",
+        "color": "Colorless gas"
+      },
+      "h2": {
+        "common_name": "Hydrogen Gas",
+        "iupac_name": "Molecular hydrogen",
+        "chemical_formula": "H2",
+        "molecular_weight": "2.016 g/mol",
+        "chemical_type": "Diatomic Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrogen contains no carbon atoms, classifying it as inorganic.",
+        "smiles_notation": "[H][H]",
+        "pdb_id": null,
+        "quick_fact": "Hydrogen is the most abundant chemical substance in the universe, making up about 75% of all baryonic mass.",
+        "color": "Colorless gas"
+      },
+      "iron": {
+        "common_name": "Iron Metal",
+        "iupac_name": "Iron",
+        "chemical_formula": "Fe",
+        "molecular_weight": "55.845 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Iron is an elemental transition metal with no carbon or hydrogen atoms, so it is inorganic.",
+        "smiles_notation": "[Fe]",
+        "pdb_id": null,
+        "quick_fact": "Iron is the most common element on Earth by mass, forming much of Earth's outer and inner core.",
+        "color": "Lustrous silver-gray metal"
+      },
+      "fe": {
+        "common_name": "Iron Metal",
+        "iupac_name": "Iron",
+        "chemical_formula": "Fe",
+        "molecular_weight": "55.845 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Iron is an elemental transition metal with no carbon or hydrogen atoms, so it is inorganic.",
+        "smiles_notation": "[Fe]",
+        "pdb_id": null,
+        "quick_fact": "Iron is the most common element on Earth by mass, forming much of Earth's outer and inner core.",
+        "color": "Lustrous silver-gray metal"
+      },
+      "sodium chloride": {
+        "common_name": "Table Salt (Sodium Chloride)",
+        "iupac_name": "Sodium chloride",
+        "chemical_formula": "NaCl",
+        "molecular_weight": "58.44 g/mol",
+        "chemical_type": "Alkali Metal Halide",
+        "classification": "Inorganic",
+        "classification_reason": "It contains sodium and chlorine ions, lacking carbon, hence strictly inorganic.",
+        "smiles_notation": "[Na+].[Cl-]",
+        "pdb_id": null,
+        "quick_fact": "Salt is essential for cellular life and nerve impulse transmission in all animals.",
+        "color": "White cubic crystals"
+      },
+      "nacl": {
+        "common_name": "Table Salt (Sodium Chloride)",
+        "iupac_name": "Sodium chloride",
+        "chemical_formula": "NaCl",
+        "molecular_weight": "58.44 g/mol",
+        "chemical_type": "Alkali Metal Halide",
+        "classification": "Inorganic",
+        "classification_reason": "It contains sodium and chlorine ions, lacking carbon, hence strictly inorganic.",
+        "smiles_notation": "[Na+].[Cl-]",
+        "pdb_id": null,
+        "quick_fact": "Salt is essential for cellular life and nerve impulse transmission in all animals.",
+        "color": "White cubic crystals"
+      },
+      "calcium carbonate": {
+        "common_name": "Limestone (Calcium Carbonate)",
+        "iupac_name": "Calcium carbonate",
+        "chemical_formula": "CaCO3",
+        "molecular_weight": "100.09 g/mol",
+        "chemical_type": "Alkaline Earth Metal Carbonate",
+        "classification": "Inorganic",
+        "classification_reason": "Metal carbonates are systematically classified as inorganic salts because they lack C-H framework.",
+        "smiles_notation": "[Ca+2].[O-]C(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Calcium carbonate forms the shells of marine organisms, snails, and eggshells.",
+        "color": "White chalky solid"
+      },
+      "caco3": {
+        "common_name": "Limestone (Calcium Carbonate)",
+        "iupac_name": "Calcium carbonate",
+        "chemical_formula": "CaCO3",
+        "molecular_weight": "100.09 g/mol",
+        "chemical_type": "Alkaline Earth Metal Carbonate",
+        "classification": "Inorganic",
+        "classification_reason": "Metal carbonates are systematically classified as inorganic salts because they lack C-H framework.",
+        "smiles_notation": "[Ca+2].[O-]C(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Calcium carbonate forms the shells of marine organisms, snails, and eggshells.",
+        "color": "White chalky solid"
+      },
+      "copper": {
+        "common_name": "Copper Metal",
+        "iupac_name": "Copper",
+        "chemical_formula": "Cu",
+        "molecular_weight": "63.546 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "It is an elemental transition metal with no carbon or hydrogen atoms, so it is inorganic.",
+        "smiles_notation": "[Cu]",
+        "pdb_id": null,
+        "quick_fact": "Copper has extremely high thermal and electrical conductivity, surpassed only by silver.",
+        "color": "Reddish-brown metallic solid"
+      },
+      "cu": {
+        "common_name": "Copper Metal",
+        "iupac_name": "Copper",
+        "chemical_formula": "Cu",
+        "molecular_weight": "63.546 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "It is an elemental transition metal with no carbon or hydrogen atoms, so it is inorganic.",
+        "smiles_notation": "[Cu]",
+        "pdb_id": null,
+        "quick_fact": "Copper has extremely high thermal and electrical conductivity, surpassed only by silver.",
+        "color": "Reddish-brown metallic solid"
+      },
+      "copper oxide": {
+        "common_name": "Copper(II) Oxide (Cupric Oxide)",
+        "iupac_name": "Copper(II) oxide",
+        "chemical_formula": "CuO",
+        "molecular_weight": "79.545 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metal oxide consisting of copper cations and oxide anions, with no carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Cu]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black solid that occurs naturally as the mineral tenorite. It is used in ceramics as a pigment and as a catalyst.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water and alcohol, soluble in ammonium chloride and potassium cyanide. Thermally stable below 1026°C.",
+        "uses": "Used as a pigment in ceramics to produce blue, green, and red glazes. Also used as a catalyst, in wood preservatives, and in batteries."
+      },
+      "copper(ii) oxide": {
+        "common_name": "Copper(II) Oxide (Cupric Oxide)",
+        "iupac_name": "Copper(II) oxide",
+        "chemical_formula": "CuO",
+        "molecular_weight": "79.545 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metal oxide consisting of copper cations and oxide anions, with no carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Cu]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black solid that occurs naturally as the mineral tenorite. It is used in ceramics as a pigment and as a catalyst.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water and alcohol, soluble in ammonium chloride and potassium cyanide. Thermally stable below 1026°C.",
+        "uses": "Used as a pigment in ceramics to produce blue, green, and red glazes. Also used as a catalyst, in wood preservatives, and in batteries."
+      },
+      "cupric oxide": {
+        "common_name": "Copper(II) Oxide (Cupric Oxide)",
+        "iupac_name": "Copper(II) oxide",
+        "chemical_formula": "CuO",
+        "molecular_weight": "79.545 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metal oxide consisting of copper cations and oxide anions, with no carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Cu]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black solid that occurs naturally as the mineral tenorite. It is used in ceramics as a pigment and as a catalyst.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water and alcohol, soluble in ammonium chloride and potassium cyanide. Thermally stable below 1026°C.",
+        "uses": "Used as a pigment in ceramics to produce blue, green, and red glazes. Also used as a catalyst, in wood preservatives, and in batteries."
+      },
+      "cuo": {
+        "common_name": "Copper(II) Oxide (Cupric Oxide)",
+        "iupac_name": "Copper(II) oxide",
+        "chemical_formula": "CuO",
+        "molecular_weight": "79.545 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metal oxide consisting of copper cations and oxide anions, with no carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Cu]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black solid that occurs naturally as the mineral tenorite. It is used in ceramics as a pigment and as a catalyst.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water and alcohol, soluble in ammonium chloride and potassium cyanide. Thermally stable below 1026°C.",
+        "uses": "Used as a pigment in ceramics to produce blue, green, and red glazes. Also used as a catalyst, in wood preservatives, and in batteries."
+      },
+      "copper(i) oxide": {
+        "common_name": "Copper(I) Oxide (Cuprous Oxide)",
+        "iupac_name": "Copper(I) oxide",
+        "chemical_formula": "Cu2O",
+        "molecular_weight": "143.09 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of monovalent copper(I) ions and divalent oxygen ions, with no carbon.",
+        "smiles_notation": "[Cu]O[Cu]",
+        "pdb_id": null,
+        "quick_fact": "It is a red or brown solid that occurs naturally as the mineral cuprite. It was one of the first semiconductor materials discovered.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water and organic solvents, soluble in hydrochloric acid and ammonium hydroxide.",
+        "uses": "Commonly used as an active ingredient in antifouling paints for ship hulls, as a red pigment in glass/ceramics, and in solar cells."
+      },
+      "cuprous oxide": {
+        "common_name": "Copper(I) Oxide (Cuprous Oxide)",
+        "iupac_name": "Copper(I) oxide",
+        "chemical_formula": "Cu2O",
+        "molecular_weight": "143.09 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of monovalent copper(I) ions and divalent oxygen ions, with no carbon.",
+        "smiles_notation": "[Cu]O[Cu]",
+        "pdb_id": null,
+        "quick_fact": "It is a red or brown solid that occurs naturally as the mineral cuprite. It was one of the first semiconductor materials discovered.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water and organic solvents, soluble in hydrochloric acid and ammonium hydroxide.",
+        "uses": "Commonly used as an active ingredient in antifouling paints for ship hulls, as a red pigment in glass/ceramics, and in solar cells."
+      },
+      "cu2o": {
+        "common_name": "Copper(I) Oxide (Cuprous Oxide)",
+        "iupac_name": "Copper(I) oxide",
+        "chemical_formula": "Cu2O",
+        "molecular_weight": "143.09 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of monovalent copper(I) ions and divalent oxygen ions, with no carbon.",
+        "smiles_notation": "[Cu]O[Cu]",
+        "pdb_id": null,
+        "quick_fact": "It is a red or brown solid that occurs naturally as the mineral cuprite. It was one of the first semiconductor materials discovered.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water and organic solvents, soluble in hydrochloric acid and ammonium hydroxide.",
+        "uses": "Commonly used as an active ingredient in antifouling paints for ship hulls, as a red pigment in glass/ceramics, and in solar cells."
+      },
+      "iron oxide": {
+        "common_name": "Iron(III) Oxide (Hematite / Rust)",
+        "iupac_name": "Iron(III) oxide",
+        "chemical_formula": "Fe2O3",
+        "molecular_weight": "159.69 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic compound consisting of ferric cations and oxide anions, lacking any carbon atoms.",
+        "smiles_notation": "O=[Fe]O[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is one of the three main oxides of iron, found in nature as hematite. It is the main source of iron for the steel industry.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water, soluble in strong mineral acids like hydrochloric or sulfuric acid.",
+        "uses": "Used as a red pigment in paints and plastics, as a polishing agent (jeweler's rouge), and as a magnetic recording material."
+      },
+      "iron(iii) oxide": {
+        "common_name": "Iron(III) Oxide (Hematite / Rust)",
+        "iupac_name": "Iron(III) oxide",
+        "chemical_formula": "Fe2O3",
+        "molecular_weight": "159.69 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic compound consisting of ferric cations and oxide anions, lacking any carbon atoms.",
+        "smiles_notation": "O=[Fe]O[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is one of the three main oxides of iron, found in nature as hematite. It is the main source of iron for the steel industry.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water, soluble in strong mineral acids like hydrochloric or sulfuric acid.",
+        "uses": "Used as a red pigment in paints and plastics, as a polishing agent (jeweler's rouge), and as a magnetic recording material."
+      },
+      "ferric oxide": {
+        "common_name": "Iron(III) Oxide (Hematite / Rust)",
+        "iupac_name": "Iron(III) oxide",
+        "chemical_formula": "Fe2O3",
+        "molecular_weight": "159.69 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic compound consisting of ferric cations and oxide anions, lacking any carbon atoms.",
+        "smiles_notation": "O=[Fe]O[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is one of the three main oxides of iron, found in nature as hematite. It is the main source of iron for the steel industry.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water, soluble in strong mineral acids like hydrochloric or sulfuric acid.",
+        "uses": "Used as a red pigment in paints and plastics, as a polishing agent (jeweler's rouge), and as a magnetic recording material."
+      },
+      "fe2o3": {
+        "common_name": "Iron(III) Oxide (Hematite / Rust)",
+        "iupac_name": "Iron(III) oxide",
+        "chemical_formula": "Fe2O3",
+        "molecular_weight": "159.69 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic compound consisting of ferric cations and oxide anions, lacking any carbon atoms.",
+        "smiles_notation": "O=[Fe]O[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is one of the three main oxides of iron, found in nature as hematite. It is the main source of iron for the steel industry.",
+        "color": "Reddish-brown powder",
+        "properties": "Insoluble in water, soluble in strong mineral acids like hydrochloric or sulfuric acid.",
+        "uses": "Used as a red pigment in paints and plastics, as a polishing agent (jeweler's rouge), and as a magnetic recording material."
+      },
+      "iron(ii) oxide": {
+        "common_name": "Iron(II) Oxide",
+        "iupac_name": "Iron(II) oxide",
+        "chemical_formula": "FeO",
+        "molecular_weight": "71.844 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of divalent iron cations and oxygen anions, with no carbon.",
+        "smiles_notation": "[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black-colored powder that occurs naturally as the rare mineral wüstite. It is a non-stoichiometric compound.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water, highly reactive in oxygen to oxidize to ferric oxide or magnetite.",
+        "uses": "Used as a pigment in cosmetics, in ceramics and glazes, and in green-tinted glassware."
+      },
+      "ferrous oxide": {
+        "common_name": "Iron(II) Oxide",
+        "iupac_name": "Iron(II) oxide",
+        "chemical_formula": "FeO",
+        "molecular_weight": "71.844 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of divalent iron cations and oxygen anions, with no carbon.",
+        "smiles_notation": "[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black-colored powder that occurs naturally as the rare mineral wüstite. It is a non-stoichiometric compound.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water, highly reactive in oxygen to oxidize to ferric oxide or magnetite.",
+        "uses": "Used as a pigment in cosmetics, in ceramics and glazes, and in green-tinted glassware."
+      },
+      "feo": {
+        "common_name": "Iron(II) Oxide",
+        "iupac_name": "Iron(II) oxide",
+        "chemical_formula": "FeO",
+        "molecular_weight": "71.844 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic metallic oxide consisting of divalent iron cations and oxygen anions, with no carbon.",
+        "smiles_notation": "[Fe]=O",
+        "pdb_id": null,
+        "quick_fact": "It is a black-colored powder that occurs naturally as the rare mineral wüstite. It is a non-stoichiometric compound.",
+        "color": "Black crystalline powder",
+        "properties": "Insoluble in water, highly reactive in oxygen to oxidize to ferric oxide or magnetite.",
+        "uses": "Used as a pigment in cosmetics, in ceramics and glazes, and in green-tinted glassware."
+      },
+      "sulfuric acid": {
+        "common_name": "Sulfuric Acid (Oil of Vitriol)",
+        "iupac_name": "Sulfuric acid",
+        "chemical_formula": "H2SO4",
+        "molecular_weight": "98.08 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "It contains hydrogen, sulfur, and oxygen but no carbon, making it inorganic.",
+        "smiles_notation": "OS(=O)(=O)O",
+        "pdb_id": null,
+        "quick_fact": "Sulfuric acid is highly corrosive and has a very strong affinity for water, acting as an excellent dehydrating agent.",
+        "color": "Colorless, viscous oily liquid"
+      },
+      "h2so4": {
+        "common_name": "Sulfuric Acid (Oil of Vitriol)",
+        "iupac_name": "Sulfuric acid",
+        "chemical_formula": "H2SO4",
+        "molecular_weight": "98.08 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "It contains hydrogen, sulfur, and oxygen but no carbon, making it inorganic.",
+        "smiles_notation": "OS(=O)(=O)O",
+        "pdb_id": null,
+        "quick_fact": "Sulfuric acid is highly corrosive and has a very strong affinity for water, acting as an excellent dehydrating agent.",
+        "color": "Colorless, viscous oily liquid"
+      },
+      "ammonia": {
+        "common_name": "Ammonia Gas",
+        "iupac_name": "Ammonia",
+        "chemical_formula": "NH3",
+        "molecular_weight": "17.031 g/mol",
+        "chemical_type": "Pnictogen Hydride",
+        "classification": "Inorganic",
+        "classification_reason": "Ammonia consists of nitrogen and hydrogen and contains no carbon, making it inorganic.",
+        "smiles_notation": "N",
+        "pdb_id": null,
+        "quick_fact": "Ammonia is crucial for manufacturing fertilizers, supporting about half of the global food supply.",
+        "color": "Colorless gas"
+      },
+      "nh3": {
+        "common_name": "Ammonia Gas",
+        "iupac_name": "Ammonia",
+        "chemical_formula": "NH3",
+        "molecular_weight": "17.031 g/mol",
+        "chemical_type": "Pnictogen Hydride",
+        "classification": "Inorganic",
+        "classification_reason": "Ammonia consists of nitrogen and hydrogen and contains no carbon, making it inorganic.",
+        "smiles_notation": "N",
+        "pdb_id": null,
+        "quick_fact": "Ammonia is crucial for manufacturing fertilizers, supporting about half of the global food supply.",
+        "color": "Colorless gas"
+      },
+      "calcium oxide": {
+        "common_name": "Quicklime (Calcium Oxide)",
+        "iupac_name": "Calcium oxide",
+        "chemical_formula": "CaO",
+        "molecular_weight": "56.077 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic mineral compound containing calcium and oxygen, with no carbon.",
+        "smiles_notation": "[Ca+2].[O-2]",
+        "pdb_id": null,
+        "quick_fact": "Calcium oxide reacts intensely with water to produce slaked lime, emitting significant heat.",
+        "color": "White to pale yellow/gray crystalline solid"
+      },
+      "cao": {
+        "common_name": "Quicklime (Calcium Oxide)",
+        "iupac_name": "Calcium oxide",
+        "chemical_formula": "CaO",
+        "molecular_weight": "56.077 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic mineral compound containing calcium and oxygen, with no carbon.",
+        "smiles_notation": "[Ca+2].[O-2]",
+        "pdb_id": null,
+        "quick_fact": "Calcium oxide reacts intensely with water to produce slaked lime, emitting significant heat.",
+        "color": "White to pale yellow/gray crystalline solid"
+      },
+      "calcium hydroxide": {
+        "common_name": "Slaked Lime (Calcium Hydroxide)",
+        "iupac_name": "Calcium hydroxide",
+        "chemical_formula": "Ca(OH)2",
+        "molecular_weight": "74.093 g/mol",
+        "chemical_type": "Metal Hydroxide / Base",
+        "classification": "Inorganic",
+        "classification_reason": "It contains calcium, oxygen, and hydrogen ions with no carbon.",
+        "smiles_notation": "[Ca+2].[OH-].[OH-]",
+        "pdb_id": null,
+        "quick_fact": "A saturated aqueous solution of calcium hydroxide is called Limewater, which turns milky-white in the presence of carbon dioxide.",
+        "color": "White powder or colorless solution"
+      },
+      "ca(oh)2": {
+        "common_name": "Slaked Lime (Calcium Hydroxide)",
+        "iupac_name": "Calcium hydroxide",
+        "chemical_formula": "Ca(OH)2",
+        "molecular_weight": "74.093 g/mol",
+        "chemical_type": "Metal Hydroxide / Base",
+        "classification": "Inorganic",
+        "classification_reason": "It contains calcium, oxygen, and hydrogen ions with no carbon.",
+        "smiles_notation": "[Ca+2].[OH-].[OH-]",
+        "pdb_id": null,
+        "quick_fact": "A saturated aqueous solution of calcium hydroxide is called Limewater, which turns milky-white in the presence of carbon dioxide.",
+        "color": "White powder or colorless solution"
+      },
+      "methane": {
+        "common_name": "Methane (Natural Gas)",
+        "iupac_name": "Methane",
+        "chemical_formula": "CH4",
+        "molecular_weight": "16.04 g/mol",
+        "chemical_type": "Alkane Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "Methane is the simplest possible organic compound, containing a central carbon covalently bonded to four hydrogen atoms.",
+        "smiles_notation": "C",
+        "pdb_id": null,
+        "quick_fact": "Methane is a potent greenhouse gas, with a warming potential more than 25 times greater than carbon dioxide.",
+        "color": "Colorless gas"
+      },
+      "ch4": {
+        "common_name": "Methane (Natural Gas)",
+        "iupac_name": "Methane",
+        "chemical_formula": "CH4",
+        "molecular_weight": "16.04 g/mol",
+        "chemical_type": "Alkane Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "Methane is the simplest possible organic compound, containing a central carbon covalently bonded to four hydrogen atoms.",
+        "smiles_notation": "C",
+        "pdb_id": null,
+        "quick_fact": "Methane is a potent greenhouse gas, with a warming potential more than 25 times greater than carbon dioxide.",
+        "color": "Colorless gas"
+      },
+      "benzene": {
+        "common_name": "Benzene",
+        "iupac_name": "Benzene",
+        "chemical_formula": "C6H6",
+        "molecular_weight": "78.11 g/mol",
+        "chemical_type": "Aromatic Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a highly stable covalent aromatic hexagonal carbon-hydrogen ring.",
+        "smiles_notation": "C1=CC=CC=C1",
+        "pdb_id": null,
+        "quick_fact": "Benzene's ring structure was discovered by August Kekulé, who envisioned a snake biting its own tail in a dream.",
+        "color": "Colorless liquid"
+      },
+      "c6h6": {
+        "common_name": "Benzene",
+        "iupac_name": "Benzene",
+        "chemical_formula": "C6H6",
+        "molecular_weight": "78.11 g/mol",
+        "chemical_type": "Aromatic Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a highly stable covalent aromatic hexagonal carbon-hydrogen ring.",
+        "smiles_notation": "C1=CC=CC=C1",
+        "pdb_id": null,
+        "quick_fact": "Benzene's ring structure was discovered by August Kekulé, who envisioned a snake biting its own tail in a dream.",
+        "color": "Colorless liquid"
+      },
+      "acetone": {
+        "common_name": "Acetone (Propanone)",
+        "iupac_name": "Propan-2-one",
+        "chemical_formula": "CH3COCH3",
+        "molecular_weight": "58.08 g/mol",
+        "chemical_type": "Ketone",
+        "classification": "Organic",
+        "classification_reason": "It consists of a central carbonyl carbon covalently bonded to two methyl groups.",
+        "smiles_notation": "CC(=O)C",
+        "pdb_id": null,
+        "quick_fact": "Acetone is the primary active ingredient in nail polish removers and is a highly effective solvent.",
+        "color": "Colorless liquid"
+      },
+      "propanone": {
+        "common_name": "Acetone (Propanone)",
+        "iupac_name": "Propan-2-one",
+        "chemical_formula": "CH3COCH3",
+        "molecular_weight": "58.08 g/mol",
+        "chemical_type": "Ketone",
+        "classification": "Organic",
+        "classification_reason": "It consists of a central carbonyl carbon covalently bonded to two methyl groups.",
+        "smiles_notation": "CC(=O)C",
+        "pdb_id": null,
+        "quick_fact": "Acetone is the primary active ingredient in nail polish removers and is a highly effective solvent.",
+        "color": "Colorless liquid"
+      },
+      "ch3coch3": {
+        "common_name": "Acetone (Propanone)",
+        "iupac_name": "Propan-2-one",
+        "chemical_formula": "CH3COCH3",
+        "molecular_weight": "58.08 g/mol",
+        "chemical_type": "Ketone",
+        "classification": "Organic",
+        "classification_reason": "It consists of a central carbonyl carbon covalently bonded to two methyl groups.",
+        "smiles_notation": "CC(=O)C",
+        "pdb_id": null,
+        "quick_fact": "Acetone is the primary active ingredient in nail polish removers and is a highly effective solvent.",
+        "color": "Colorless liquid"
+      },
+      "sodium metal": {
+        "common_name": "Sodium Metal",
+        "iupac_name": "Sodium",
+        "chemical_formula": "Na",
+        "molecular_weight": "22.99 g/mol",
+        "chemical_type": "Alkali Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Elemental sodium lacks carbon-hydrogen covalent chains and is strictly inorganic.",
+        "smiles_notation": "[Na]",
+        "pdb_id": null,
+        "quick_fact": "Sodium metal reacts violently with water to form sodium hydroxide and flammable hydrogen gas, storing it in kerosene is necessary.",
+        "color": "Soft silvery metal"
+      },
+      "na": {
+        "common_name": "Sodium Metal",
+        "iupac_name": "Sodium",
+        "chemical_formula": "Na",
+        "molecular_weight": "22.99 g/mol",
+        "chemical_type": "Alkali Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Elemental sodium lacks carbon-hydrogen covalent chains and is strictly inorganic.",
+        "smiles_notation": "[Na]",
+        "pdb_id": null,
+        "quick_fact": "Sodium metal reacts violently with water to form sodium hydroxide and flammable hydrogen gas, storing it in kerosene is necessary.",
+        "color": "Soft silvery metal"
+      },
+      "propene": {
+        "common_name": "Propene Gas",
+        "iupac_name": "Prop-1-ene",
+        "chemical_formula": "C3H6",
+        "molecular_weight": "42.08 g/mol",
+        "chemical_type": "Alkene Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "Propene features a three-carbon hydrocarbon chain with a covalent carbon-carbon double bond, qualifying as organic.",
+        "smiles_notation": "CC=C",
+        "pdb_id": null,
+        "quick_fact": "Propene is the second most important starting material in the petrochemical industry after ethylene.",
+        "color": "Colorless gas"
+      },
+      "c3h6": {
+        "common_name": "Propene Gas",
+        "iupac_name": "Prop-1-ene",
+        "chemical_formula": "C3H6",
+        "molecular_weight": "42.08 g/mol",
+        "chemical_type": "Alkene Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "Propene features a three-carbon hydrocarbon chain with a covalent carbon-carbon double bond, qualifying as organic.",
+        "smiles_notation": "CC=C",
+        "pdb_id": null,
+        "quick_fact": "Propene is the second most important starting material in the petrochemical industry after ethylene.",
+        "color": "Colorless gas"
+      },
+      "hydrogen bromide": {
+        "common_name": "Hydrogen Bromide",
+        "iupac_name": "Hydrogen bromide",
+        "chemical_formula": "HBr",
+        "molecular_weight": "80.91 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrogen bromide lacks any carbon atoms in its chemical formula and is inorganic.",
+        "smiles_notation": "Br",
+        "pdb_id": null,
+        "quick_fact": "HBr is a strong mineral acid widely used to synthesize organobromine compounds and promote hydrobromination.",
+        "color": "Colorless gas or solution"
+      },
+      "hbr": {
+        "common_name": "Hydrogen Bromide",
+        "iupac_name": "Hydrogen bromide",
+        "chemical_formula": "HBr",
+        "molecular_weight": "80.91 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Hydrogen bromide lacks any carbon atoms in its chemical formula and is inorganic.",
+        "smiles_notation": "Br",
+        "pdb_id": null,
+        "quick_fact": "HBr is a strong mineral acid widely used to synthesize organobromine compounds and promote hydrobromination.",
+        "color": "Colorless gas or solution"
+      },
+      "zinc metal": {
+        "common_name": "Zinc Metal",
+        "iupac_name": "Zinc",
+        "chemical_formula": "Zn",
+        "molecular_weight": "65.38 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Zinc is an elemental transition metal with no carbon or hydrogen atoms, making it inorganic.",
+        "smiles_notation": "[Zn]",
+        "pdb_id": null,
+        "quick_fact": "Zinc is widely used to galvanize iron and steel to prevent rusting and corrosion.",
+        "color": "Bluish-pale gray metal"
+      },
+      "zn": {
+        "common_name": "Zinc Metal",
+        "iupac_name": "Zinc",
+        "chemical_formula": "Zn",
+        "molecular_weight": "65.38 g/mol",
+        "chemical_type": "Transition Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Zinc is an elemental transition metal with no carbon or hydrogen atoms, making it inorganic.",
+        "smiles_notation": "[Zn]",
+        "pdb_id": null,
+        "quick_fact": "Zinc is widely used to galvanize iron and steel to prevent rusting and corrosion.",
+        "color": "Bluish-pale gray metal"
+      },
+      "magnesium metal": {
+        "common_name": "Magnesium Metal",
+        "iupac_name": "Magnesium",
+        "chemical_formula": "Mg",
+        "molecular_weight": "24.305 g/mol",
+        "chemical_type": "Alkaline Earth Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Magnesium is a pure metal containing zero organic carbon chains, hence inorganic.",
+        "smiles_notation": "[Mg]",
+        "pdb_id": null,
+        "quick_fact": "Magnesium burns in air with an extremely bright, brilliant white light, producing magnesium oxide.",
+        "color": "Shiny gray metal ribbon"
+      },
+      "mg": {
+        "common_name": "Magnesium Metal",
+        "iupac_name": "Magnesium",
+        "chemical_formula": "Mg",
+        "molecular_weight": "24.305 g/mol",
+        "chemical_type": "Alkaline Earth Metal",
+        "classification": "Inorganic",
+        "classification_reason": "Magnesium is a pure metal containing zero organic carbon chains, hence inorganic.",
+        "smiles_notation": "[Mg]",
+        "pdb_id": null,
+        "quick_fact": "Magnesium burns in air with an extremely bright, brilliant white light, producing magnesium oxide.",
+        "color": "Shiny gray metal ribbon"
+      },
+      "magnesium oxide": {
+        "common_name": "Magnesium Oxide",
+        "iupac_name": "Magnesium oxide",
+        "chemical_formula": "MgO",
+        "molecular_weight": "40.30 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "MgO contains ionic bonds between magnesium cations and oxygen anions, lacking any carbon.",
+        "smiles_notation": "[Mg+2].[O-2]",
+        "pdb_id": null,
+        "quick_fact": "Formed by burning magnesium ribbon, it is an alkaline oxide that reacts with water to produce magnesium hydroxide.",
+        "color": "White powder"
+      },
+      "mgo": {
+        "common_name": "Magnesium Oxide",
+        "iupac_name": "Magnesium oxide",
+        "chemical_formula": "MgO",
+        "molecular_weight": "40.30 g/mol",
+        "chemical_type": "Metal Oxide",
+        "classification": "Inorganic",
+        "classification_reason": "MgO contains ionic bonds between magnesium cations and oxygen anions, lacking any carbon.",
+        "smiles_notation": "[Mg+2].[O-2]",
+        "pdb_id": null,
+        "quick_fact": "Formed by burning magnesium ribbon, it is an alkaline oxide that reacts with water to produce magnesium hydroxide.",
+        "color": "White powder"
+      },
+      "potassium iodide": {
+        "common_name": "Potassium Iodide",
+        "iupac_name": "Potassium iodide",
+        "chemical_formula": "KI",
+        "molecular_weight": "166.00 g/mol",
+        "chemical_type": "Alkali Metal Halide",
+        "classification": "Inorganic",
+        "classification_reason": "Potassium iodide is an ionic halide salt made from potassium and iodine, with no carbon.",
+        "smiles_notation": "[K+].[I-]",
+        "pdb_id": null,
+        "quick_fact": "Potassium iodide is used in emergency thyroid protection during radiation exposure and to prepare iodized table salt.",
+        "color": "White crystalline solid"
+      },
+      "ki": {
+        "common_name": "Potassium Iodide",
+        "iupac_name": "Potassium iodide",
+        "chemical_formula": "KI",
+        "molecular_weight": "166.00 g/mol",
+        "chemical_type": "Alkali Metal Halide",
+        "classification": "Inorganic",
+        "classification_reason": "Potassium iodide is an ionic halide salt made from potassium and iodine, with no carbon.",
+        "smiles_notation": "[K+].[I-]",
+        "pdb_id": null,
+        "quick_fact": "Potassium iodide is used in emergency thyroid protection during radiation exposure and to prepare iodized table salt.",
+        "color": "White crystalline solid"
+      },
+      "lead nitrate": {
+        "common_name": "Lead Nitrate",
+        "iupac_name": "Lead(II) nitrate",
+        "chemical_formula": "Pb(NO3)2",
+        "molecular_weight": "331.2 g/mol",
+        "chemical_type": "Heavy Metal Nitrate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic inorganic salt consisting of heavy metal lead cations and polyatomic nitrate anions.",
+        "smiles_notation": "[Pb+2].[O-]N(=O)=O.[O-]N(=O)=O",
+        "pdb_id": null,
+        "quick_fact": "Usually studied in double displacement reactions, it reacts with potassium iodide to form a bright yellow precipitate of lead iodide.",
+        "color": "White or colorless crystals"
+      },
+      "pb(no3)2": {
+        "common_name": "Lead Nitrate",
+        "iupac_name": "Lead(II) nitrate",
+        "chemical_formula": "Pb(NO3)2",
+        "molecular_weight": "331.2 g/mol",
+        "chemical_type": "Heavy Metal Nitrate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic inorganic salt consisting of heavy metal lead cations and polyatomic nitrate anions.",
+        "smiles_notation": "[Pb+2].[O-]N(=O)=O.[O-]N(=O)=O",
+        "pdb_id": null,
+        "quick_fact": "Usually studied in double displacement reactions, it reacts with potassium iodide to form a bright yellow precipitate of lead iodide.",
+        "color": "White or colorless crystals"
+      },
+      "lead iodide": {
+        "common_name": "Lead Iodide",
+        "iupac_name": "Lead(II) iodide",
+        "chemical_formula": "PbI2",
+        "molecular_weight": "461.01 g/mol",
+        "chemical_type": "Heavy Metal Halide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt with ionic bonds between lead metal cations and iodide anions.",
+        "smiles_notation": "[Pb+2].[I-].[I-]",
+        "pdb_id": null,
+        "quick_fact": "Often formed as a precipitate in school reactions, its brilliant yellow crystals are known as 'golden rain' under recrystallization.",
+        "color": "Bright yellow precipitate / powder"
+      },
+      "pbi2": {
+        "common_name": "Lead Iodide",
+        "iupac_name": "Lead(II) iodide",
+        "chemical_formula": "PbI2",
+        "molecular_weight": "461.01 g/mol",
+        "chemical_type": "Heavy Metal Halide Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an inorganic salt with ionic bonds between lead metal cations and iodide anions.",
+        "smiles_notation": "[Pb+2].[I-].[I-]",
+        "pdb_id": null,
+        "quick_fact": "Often formed as a precipitate in school reactions, its brilliant yellow crystals are known as 'golden rain' under recrystallization.",
+        "color": "Bright yellow precipitate / powder"
+      },
+      "silver nitrate": {
+        "common_name": "Silver Nitrate",
+        "iupac_name": "Silver nitrate",
+        "chemical_formula": "AgNO3",
+        "molecular_weight": "169.87 g/mol",
+        "chemical_type": "Precious Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It contains ionic coordination bonds between precious silver cations and nitrate anions.",
+        "smiles_notation": "[Ag+].[O-]N(=O)=O",
+        "pdb_id": null,
+        "quick_fact": "It is highly sensitive to light and is used in photographic film, Tollens' reagent tests, and to formulate medical cauterizers.",
+        "color": "White crystalline solid"
+      },
+      "agno3": {
+        "common_name": "Silver Nitrate",
+        "iupac_name": "Silver nitrate",
+        "chemical_formula": "AgNO3",
+        "molecular_weight": "169.87 g/mol",
+        "chemical_type": "Precious Metal Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It contains ionic coordination bonds between precious silver cations and nitrate anions.",
+        "smiles_notation": "[Ag+].[O-]N(=O)=O",
+        "pdb_id": null,
+        "quick_fact": "It is highly sensitive to light and is used in photographic film, Tollens' reagent tests, and to formulate medical cauterizers.",
+        "color": "White crystalline solid"
+      },
+      "chlorine gas": {
+        "common_name": "Chlorine Gas",
+        "iupac_name": "Dichlorine",
+        "chemical_formula": "Cl2",
+        "molecular_weight": "70.90 g/mol",
+        "chemical_type": "Diatomic Halogen Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Chlorine gas contains only chlorine atoms and lacks organic carbon compounds, hence inorganic.",
+        "smiles_notation": "ClCl",
+        "pdb_id": null,
+        "quick_fact": "Chlorine gas is a strong oxidizing agent used widely in water purification, sewage treatment, and bleaching.",
+        "color": "Pale greenish-yellow gas"
+      },
+      "cl2": {
+        "common_name": "Chlorine Gas",
+        "iupac_name": "Dichlorine",
+        "chemical_formula": "Cl2",
+        "molecular_weight": "70.90 g/mol",
+        "chemical_type": "Diatomic Halogen Gas",
+        "classification": "Inorganic",
+        "classification_reason": "Chlorine gas contains only chlorine atoms and lacks organic carbon compounds, hence inorganic.",
+        "smiles_notation": "ClCl",
+        "pdb_id": null,
+        "quick_fact": "Chlorine gas is a strong oxidizing agent used widely in water purification, sewage treatment, and bleaching.",
+        "color": "Pale greenish-yellow gas"
+      },
+      "nitric acid": {
+        "common_name": "Nitric Acid",
+        "iupac_name": "Nitric acid",
+        "chemical_formula": "HNO3",
+        "molecular_weight": "63.01 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Nitric acid is a strong mineral acid with no carbon framework.",
+        "smiles_notation": "O[N+](=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Highly corrosive, it reacts with metals to release nitrogen oxides instead of hydrogen gas due to its strong oxidizing nature.",
+        "color": "Colorless or yellow-tinted liquid"
+      },
+      "hno3": {
+        "common_name": "Nitric Acid",
+        "iupac_name": "Nitric acid",
+        "chemical_formula": "HNO3",
+        "molecular_weight": "63.01 g/mol",
+        "chemical_type": "Mineral Acid",
+        "classification": "Inorganic",
+        "classification_reason": "Nitric acid is a strong mineral acid with no carbon framework.",
+        "smiles_notation": "O[N+](=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Highly corrosive, it reacts with metals to release nitrogen oxides instead of hydrogen gas due to its strong oxidizing nature.",
+        "color": "Colorless or yellow-tinted liquid"
+      },
+      "bromine": {
+        "common_name": "Bromine (Bromine Water)",
+        "iupac_name": "Dibromine",
+        "chemical_formula": "Br2",
+        "molecular_weight": "159.808 g/mol",
+        "chemical_type": "Diatomic Halogen Element",
+        "classification": "Inorganic",
+        "classification_reason": "Bromine contains only bromine atoms and is inorganic.",
+        "smiles_notation": "BrBr",
+        "pdb_id": null,
+        "quick_fact": "Bromine is the only non-metallic element that is liquid at standard room temperature, evaporating into dark red corrosive fumes.",
+        "color": "Deep reddish-brown fuming liquid"
+      },
+      "br2": {
+        "common_name": "Bromine (Bromine Water)",
+        "iupac_name": "Dibromine",
+        "chemical_formula": "Br2",
+        "molecular_weight": "159.808 g/mol",
+        "chemical_type": "Diatomic Halogen Element",
+        "classification": "Inorganic",
+        "classification_reason": "Bromine contains only bromine atoms and is inorganic.",
+        "smiles_notation": "BrBr",
+        "pdb_id": null,
+        "quick_fact": "Bromine is the only non-metallic element that is liquid at standard room temperature, evaporating into dark red corrosive fumes.",
+        "color": "Deep reddish-brown fuming liquid"
+      },
+      "bromoethane": {
+        "common_name": "Bromoethane (Ethyl Bromide)",
+        "iupac_name": "Bromoethane",
+        "chemical_formula": "C2H5Br",
+        "molecular_weight": "108.97 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It consists of an ethyl carbon chain covalently bonded to a bromine halogen atom.",
+        "smiles_notation": "CCBr",
+        "pdb_id": null,
+        "quick_fact": "An excellent ethylating agent used in organic synthesis, commonly prepared by reacting ethanol with hydrobromic acid.",
+        "color": "Colorless volatile liquid with an ether-like odor",
+        "properties": "Physical state: Volatile liquid\nEthyl carbon chain covalently bonded to a bromine halogen atom\nInsoluble in water but highly miscible with organic solvents\nFlammable with volatile vapor emissions",
+        "uses": "Ethylating agent in organic synthesis of pharmaceuticals and agrochemicals\nHistorically used as an anesthetic\nIndustrial solvent and refrigerant"
+      },
+      "ethyl bromide": {
+        "common_name": "Bromoethane (Ethyl Bromide)",
+        "iupac_name": "Bromoethane",
+        "chemical_formula": "C2H5Br",
+        "molecular_weight": "108.97 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It consists of an ethyl carbon chain covalently bonded to a bromine halogen atom.",
+        "smiles_notation": "CCBr",
+        "pdb_id": null,
+        "quick_fact": "An excellent ethylating agent used in organic synthesis, commonly prepared by reacting ethanol with hydrobromic acid.",
+        "color": "Colorless volatile liquid with an ether-like odor",
+        "properties": "Physical state: Volatile liquid\nEthyl carbon chain covalently bonded to a bromine halogen atom\nInsoluble in water but highly miscible with organic solvents\nFlammable with volatile vapor emissions",
+        "uses": "Ethylating agent in organic synthesis of pharmaceuticals and agrochemicals\nHistorically used as an anesthetic\nIndustrial solvent and refrigerant"
+      },
+      "c2h5br": {
+        "common_name": "Bromoethane (Ethyl Bromide)",
+        "iupac_name": "Bromoethane",
+        "chemical_formula": "C2H5Br",
+        "molecular_weight": "108.97 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It consists of an ethyl carbon chain covalently bonded to a bromine halogen atom.",
+        "smiles_notation": "CCBr",
+        "pdb_id": null,
+        "quick_fact": "An excellent ethylating agent used in organic synthesis, commonly prepared by reacting ethanol with hydrobromic acid.",
+        "color": "Colorless volatile liquid with an ether-like odor",
+        "properties": "Physical state: Volatile liquid\nEthyl carbon chain covalently bonded to a bromine halogen atom\nInsoluble in water but highly miscible with organic solvents\nFlammable with volatile vapor emissions",
+        "uses": "Ethylating agent in organic synthesis of pharmaceuticals and agrochemicals\nHistorically used as an anesthetic\nIndustrial solvent and refrigerant"
+      },
+      "chloromethane": {
+        "common_name": "Chloromethane (Methyl Chloride)",
+        "iupac_name": "Chloromethane",
+        "chemical_formula": "CH3Cl",
+        "molecular_weight": "50.49 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon-hydrogen backbone with a chlorine atom substituted for a hydrogen.",
+        "smiles_notation": "CCl",
+        "pdb_id": null,
+        "quick_fact": "It is the simplest haloalkane, historically used as a refrigerant (refrigerant-40) and as a chemical intermediate.",
+        "color": "Colorless gas with a faintly sweet odor",
+        "properties": "Physical state: Gas at room temperature\nHighly flammable gas\nSlightly soluble in water\nHigh vapor pressure",
+        "uses": "Industrial methylating agent in organic synthesis\nPrecursor for silicone polymers\nSolvent in butyl rubber manufacturing"
+      },
+      "methyl chloride": {
+        "common_name": "Chloromethane (Methyl Chloride)",
+        "iupac_name": "Chloromethane",
+        "chemical_formula": "CH3Cl",
+        "molecular_weight": "50.49 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon-hydrogen backbone with a chlorine atom substituted for a hydrogen.",
+        "smiles_notation": "CCl",
+        "pdb_id": null,
+        "quick_fact": "It is the simplest haloalkane, historically used as a refrigerant (refrigerant-40) and as a chemical intermediate.",
+        "color": "Colorless gas with a faintly sweet odor",
+        "properties": "Physical state: Gas at room temperature\nHighly flammable gas\nSlightly soluble in water\nHigh vapor pressure",
+        "uses": "Industrial methylating agent in organic synthesis\nPrecursor for silicone polymers\nSolvent in butyl rubber manufacturing"
+      },
+      "ch3cl": {
+        "common_name": "Chloromethane (Methyl Chloride)",
+        "iupac_name": "Chloromethane",
+        "chemical_formula": "CH3Cl",
+        "molecular_weight": "50.49 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent carbon-hydrogen backbone with a chlorine atom substituted for a hydrogen.",
+        "smiles_notation": "CCl",
+        "pdb_id": null,
+        "quick_fact": "It is the simplest haloalkane, historically used as a refrigerant (refrigerant-40) and as a chemical intermediate.",
+        "color": "Colorless gas with a faintly sweet odor",
+        "properties": "Physical state: Gas at room temperature\nHighly flammable gas\nSlightly soluble in water\nHigh vapor pressure",
+        "uses": "Industrial methylating agent in organic synthesis\nPrecursor for silicone polymers\nSolvent in butyl rubber manufacturing"
+      },
+      "bromomethane": {
+        "common_name": "Bromomethane (Methyl Bromide)",
+        "iupac_name": "Bromomethane",
+        "chemical_formula": "CH3Br",
+        "molecular_weight": "94.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound with a central carbon atom covalently bonded to three hydrogens and one bromine.",
+        "smiles_notation": "CBr",
+        "pdb_id": null,
+        "quick_fact": "A powerful soil fumigant and pesticide whose use is strictly controlled under the Montreal Protocol due to its ozone-depleting potential.",
+        "color": "Colorless, odorless gas (toxic)",
+        "properties": "Physical state: Gas or liquefied gas\nHighly toxic and ozone-depleting substance\nSparingly soluble in water but highly soluble in organic solvents\nNon-flammable under standard conditions",
+        "uses": "Pest fumigant for agricultural soil and quarantine applications\nMethylating agent in organic chemical synthesis\nHistorically used as a high-efficiency fire extinguisher solvent"
+      },
+      "methyl bromide": {
+        "common_name": "Bromomethane (Methyl Bromide)",
+        "iupac_name": "Bromomethane",
+        "chemical_formula": "CH3Br",
+        "molecular_weight": "94.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound with a central carbon atom covalently bonded to three hydrogens and one bromine.",
+        "smiles_notation": "CBr",
+        "pdb_id": null,
+        "quick_fact": "A powerful soil fumigant and pesticide whose use is strictly controlled under the Montreal Protocol due to its ozone-depleting potential.",
+        "color": "Colorless, odorless gas (toxic)",
+        "properties": "Physical state: Gas or liquefied gas\nHighly toxic and ozone-depleting substance\nSparingly soluble in water but highly soluble in organic solvents\nNon-flammable under standard conditions",
+        "uses": "Pest fumigant for agricultural soil and quarantine applications\nMethylating agent in organic chemical synthesis\nHistorically used as a high-efficiency fire extinguisher solvent"
+      },
+      "ch3br": {
+        "common_name": "Bromomethane (Methyl Bromide)",
+        "iupac_name": "Bromomethane",
+        "chemical_formula": "CH3Br",
+        "molecular_weight": "94.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is an organic compound with a central carbon atom covalently bonded to three hydrogens and one bromine.",
+        "smiles_notation": "CBr",
+        "pdb_id": null,
+        "quick_fact": "A powerful soil fumigant and pesticide whose use is strictly controlled under the Montreal Protocol due to its ozone-depleting potential.",
+        "color": "Colorless, odorless gas (toxic)",
+        "properties": "Physical state: Gas or liquefied gas\nHighly toxic and ozone-depleting substance\nSparingly soluble in water but highly soluble in organic solvents\nNon-flammable under standard conditions",
+        "uses": "Pest fumigant for agricultural soil and quarantine applications\nMethylating agent in organic chemical synthesis\nHistorically used as a high-efficiency fire extinguisher solvent"
+      },
+      "iodomethane": {
+        "common_name": "Iodomethane (Methyl Iodide)",
+        "iupac_name": "Iodomethane",
+        "chemical_formula": "CH3I",
+        "molecular_weight": "141.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent methyl group bound to an iodine atom.",
+        "smiles_notation": "CI",
+        "pdb_id": null,
+        "quick_fact": "A highly reactive methylating agent in organic synthesis, undergoing very rapid SN2 substitution reactions.",
+        "color": "Colorless liquid (turns reddish-brown in light)",
+        "properties": "Physical state: Heavy volatile liquid\nDense liquid with high refractive index\nReacts extremely fast in nucleophilic substitution reactions\nLight sensitive, decomposes to release molecular iodine",
+        "uses": "Universal methylating agent in organic chemical research\nPrecursor for manufacturing acetic acid in the Monsanto process\nInsecticide and pesticide soil fumigant"
+      },
+      "methyl iodide": {
+        "common_name": "Iodomethane (Methyl Iodide)",
+        "iupac_name": "Iodomethane",
+        "chemical_formula": "CH3I",
+        "molecular_weight": "141.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent methyl group bound to an iodine atom.",
+        "smiles_notation": "CI",
+        "pdb_id": null,
+        "quick_fact": "A highly reactive methylating agent in organic synthesis, undergoing very rapid SN2 substitution reactions.",
+        "color": "Colorless liquid (turns reddish-brown in light)",
+        "properties": "Physical state: Heavy volatile liquid\nDense liquid with high refractive index\nReacts extremely fast in nucleophilic substitution reactions\nLight sensitive, decomposes to release molecular iodine",
+        "uses": "Universal methylating agent in organic chemical research\nPrecursor for manufacturing acetic acid in the Monsanto process\nInsecticide and pesticide soil fumigant"
+      },
+      "ch3i": {
+        "common_name": "Iodomethane (Methyl Iodide)",
+        "iupac_name": "Iodomethane",
+        "chemical_formula": "CH3I",
+        "molecular_weight": "141.94 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a covalent methyl group bound to an iodine atom.",
+        "smiles_notation": "CI",
+        "pdb_id": null,
+        "quick_fact": "A highly reactive methylating agent in organic synthesis, undergoing very rapid SN2 substitution reactions.",
+        "color": "Colorless liquid (turns reddish-brown in light)",
+        "properties": "Physical state: Heavy volatile liquid\nDense liquid with high refractive index\nReacts extremely fast in nucleophilic substitution reactions\nLight sensitive, decomposes to release molecular iodine",
+        "uses": "Universal methylating agent in organic chemical research\nPrecursor for manufacturing acetic acid in the Monsanto process\nInsecticide and pesticide soil fumigant"
+      },
+      "dichloromethane": {
+        "common_name": "Dichloromethane (Methylene Chloride)",
+        "iupac_name": "Dichloromethane",
+        "chemical_formula": "CH2Cl2",
+        "molecular_weight": "84.93 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is a chlorinated hydrocarbon with a central carbon atom bonded to two hydrogen and two chlorine atoms.",
+        "smiles_notation": "C(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "A widely used volatile solvent known for its low toxicity compared to other chlorinated solvents, though still regulated.",
+        "color": "Colorless volatile liquid with a sweet, penetrating ether-like odor",
+        "properties": "Physical state: Volatile liquid\nLow boiling point (39.6°C)\nHighly volatile and weakly flammable\nImmiscible with water but miscible with most organic solvents",
+        "uses": "Industrial paint remover and degreaser solvent\nProcess solvent for decaffeinating coffee and tea\nLaboratory extraction solvent in chemical research\nFoaming agent in polyurethane foam manufacturing"
+      },
+      "methylene chloride": {
+        "common_name": "Dichloromethane (Methylene Chloride)",
+        "iupac_name": "Dichloromethane",
+        "chemical_formula": "CH2Cl2",
+        "molecular_weight": "84.93 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is a chlorinated hydrocarbon with a central carbon atom bonded to two hydrogen and two chlorine atoms.",
+        "smiles_notation": "C(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "A widely used volatile solvent known for its low toxicity compared to other chlorinated solvents, though still regulated.",
+        "color": "Colorless volatile liquid with a sweet, penetrating ether-like odor",
+        "properties": "Physical state: Volatile liquid\nLow boiling point (39.6°C)\nHighly volatile and weakly flammable\nImmiscible with water but miscible with most organic solvents",
+        "uses": "Industrial paint remover and degreaser solvent\nProcess solvent for decaffeinating coffee and tea\nLaboratory extraction solvent in chemical research\nFoaming agent in polyurethane foam manufacturing"
+      },
+      "ch2cl2": {
+        "common_name": "Dichloromethane (Methylene Chloride)",
+        "iupac_name": "Dichloromethane",
+        "chemical_formula": "CH2Cl2",
+        "molecular_weight": "84.93 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is a chlorinated hydrocarbon with a central carbon atom bonded to two hydrogen and two chlorine atoms.",
+        "smiles_notation": "C(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "A widely used volatile solvent known for its low toxicity compared to other chlorinated solvents, though still regulated.",
+        "color": "Colorless volatile liquid with a sweet, penetrating ether-like odor",
+        "properties": "Physical state: Volatile liquid\nLow boiling point (39.6°C)\nHighly volatile and weakly flammable\nImmiscible with water but miscible with most organic solvents",
+        "uses": "Industrial paint remover and degreaser solvent\nProcess solvent for decaffeinating coffee and tea\nLaboratory extraction solvent in chemical research\nFoaming agent in polyurethane foam manufacturing"
+      },
+      "iodoform": {
+        "common_name": "Iodoform (Triiodomethane)",
+        "iupac_name": "Triiodomethane",
+        "chemical_formula": "CHI3",
+        "molecular_weight": "393.73 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a single carbon atom covalently bonded to a hydrogen and three iodine atoms.",
+        "smiles_notation": "C(I)(I)I",
+        "pdb_id": null,
+        "quick_fact": "Formed during the classic iodoform test for methyl ketones and acetaldehyde, exhibiting a highly distinctive antiseptic smell.",
+        "color": "Pale yellow crystalline solid",
+        "properties": "Physical state: Crystalline solid\nDistinctive sweet, medicinal, hospital-like odor\nHighly insoluble in water\nSublimes at room temperature",
+        "uses": "Historically used as an antiseptic for wounds and burns\nComponent in dental paste for root canal treatments\nReagent in organic synthesis"
+      },
+      "triiodomethane": {
+        "common_name": "Iodoform (Triiodomethane)",
+        "iupac_name": "Triiodomethane",
+        "chemical_formula": "CHI3",
+        "molecular_weight": "393.73 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a single carbon atom covalently bonded to a hydrogen and three iodine atoms.",
+        "smiles_notation": "C(I)(I)I",
+        "pdb_id": null,
+        "quick_fact": "Formed during the classic iodoform test for methyl ketones and acetaldehyde, exhibiting a highly distinctive antiseptic smell.",
+        "color": "Pale yellow crystalline solid",
+        "properties": "Physical state: Crystalline solid\nDistinctive sweet, medicinal, hospital-like odor\nHighly insoluble in water\nSublimes at room temperature",
+        "uses": "Historically used as an antiseptic for wounds and burns\nComponent in dental paste for root canal treatments\nReagent in organic synthesis"
+      },
+      "chi3": {
+        "common_name": "Iodoform (Triiodomethane)",
+        "iupac_name": "Triiodomethane",
+        "chemical_formula": "CHI3",
+        "molecular_weight": "393.73 g/mol",
+        "chemical_type": "Alkyl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a single carbon atom covalently bonded to a hydrogen and three iodine atoms.",
+        "smiles_notation": "C(I)(I)I",
+        "pdb_id": null,
+        "quick_fact": "Formed during the classic iodoform test for methyl ketones and acetaldehyde, exhibiting a highly distinctive antiseptic smell.",
+        "color": "Pale yellow crystalline solid",
+        "properties": "Physical state: Crystalline solid\nDistinctive sweet, medicinal, hospital-like odor\nHighly insoluble in water\nSublimes at room temperature",
+        "uses": "Historically used as an antiseptic for wounds and burns\nComponent in dental paste for root canal treatments\nReagent in organic synthesis"
+      },
+      "chlorobenzene": {
+        "common_name": "Chlorobenzene",
+        "iupac_name": "Chlorobenzene",
+        "chemical_formula": "C6H5Cl",
+        "molecular_weight": "112.56 g/mol",
+        "chemical_type": "Aryl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It has a halogen chlorine atom attached directly to a covalent aromatic benzene ring skeleton.",
+        "smiles_notation": "C1=CC=C(C=C1)Cl",
+        "pdb_id": null,
+        "quick_fact": "A classic aryl halide that does not undergo nucleophilic substitution under standard conditions due to partial double bond character of C-Cl bond.",
+        "color": "Colorless clear liquid with an almond-like odor",
+        "properties": "Physical state: Liquid\nHigh boiling point (131°C)\nHighly stable aromatic ring\nImmiscible with water",
+        "uses": "High-boiling solvent in chemical synthesis and paint manufacturing\nPrecursor for producing pesticides (such as DDT historically)\nStarting material for phenol, aniline, and chlorobenzene derivatives"
+      },
+      "c6h5cl": {
+        "common_name": "Chlorobenzene",
+        "iupac_name": "Chlorobenzene",
+        "chemical_formula": "C6H5Cl",
+        "molecular_weight": "112.56 g/mol",
+        "chemical_type": "Aryl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It has a halogen chlorine atom attached directly to a covalent aromatic benzene ring skeleton.",
+        "smiles_notation": "C1=CC=C(C=C1)Cl",
+        "pdb_id": null,
+        "quick_fact": "A classic aryl halide that does not undergo nucleophilic substitution under standard conditions due to partial double bond character of C-Cl bond.",
+        "color": "Colorless clear liquid with an almond-like odor",
+        "properties": "Physical state: Liquid\nHigh boiling point (131°C)\nHighly stable aromatic ring\nImmiscible with water",
+        "uses": "High-boiling solvent in chemical synthesis and paint manufacturing\nPrecursor for producing pesticides (such as DDT historically)\nStarting material for phenol, aniline, and chlorobenzene derivatives"
+      },
+      "bromobenzene": {
+        "common_name": "Bromobenzene",
+        "iupac_name": "Bromobenzene",
+        "chemical_formula": "C6H5Br",
+        "molecular_weight": "157.01 g/mol",
+        "chemical_type": "Aryl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It consists of a bromine atom substituted onto an aromatic benzene ring.",
+        "smiles_notation": "C1=CC=C(C=C1)Br",
+        "pdb_id": null,
+        "quick_fact": "Commonly used to prepare the highly versatile phenylmagnesium bromide Grignard reagent in organic synthesis.",
+        "color": "Colorless or pale yellow liquid with a pleasant aromatic odor",
+        "properties": "Physical state: Dense liquid\nBoiling point: 156°C\nInsoluble in water\nPrecursor for Grignard reagent formation in anhydrous ether",
+        "uses": "Preparation of phenyl Grignard reagents for organic synthesis\nHigh-boiling industrial solvent\nAdditive in motor oil formulations"
+      },
+      "c6h5br": {
+        "common_name": "Bromobenzene",
+        "iupac_name": "Bromobenzene",
+        "chemical_formula": "C6H5Br",
+        "molecular_weight": "157.01 g/mol",
+        "chemical_type": "Aryl Halide / Halogenated Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It consists of a bromine atom substituted onto an aromatic benzene ring.",
+        "smiles_notation": "C1=CC=C(C=C1)Br",
+        "pdb_id": null,
+        "quick_fact": "Commonly used to prepare the highly versatile phenylmagnesium bromide Grignard reagent in organic synthesis.",
+        "color": "Colorless or pale yellow liquid with a pleasant aromatic odor",
+        "properties": "Physical state: Dense liquid\nBoiling point: 156°C\nInsoluble in water\nPrecursor for Grignard reagent formation in anhydrous ether",
+        "uses": "Preparation of phenyl Grignard reagents for organic synthesis\nHigh-boiling industrial solvent\nAdditive in motor oil formulations"
+      },
+      "chloroform": {
+        "common_name": "Chloroform (Trichloromethane)",
+        "iupac_name": "Trichloromethane",
+        "chemical_formula": "CHCl3",
+        "molecular_weight": "119.38 g/mol",
+        "chemical_type": "Trihalomethane Solvent",
+        "classification": "Organic",
+        "classification_reason": "It contains a carbon atom covalently bonded to hydrogen and chlorine atoms.",
+        "smiles_notation": "C(Cl)(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "Historically used as a general inhalant anesthetic, it has a sweet-smelling volatile vapor and acts as a powerful non-polar solvent.",
+        "color": "Colorless heavy liquid",
+        "properties": "Physical state: Volatile, dense liquid\nBoiling point: 61.2°C\nInsoluble in water but highly miscible with alcohol and organic solvents\nNon-flammable under standard conditions but decomposes on heating to release phosgene gas\nSweet, heavy, characteristic anesthetic odor",
+        "uses": "Common laboratory and industrial solvent for fats, oils, and rubber\nPrecursor in the synthesis of Teflon precursors (Chlorodifluoromethane)\nHistorically used as a general anesthetic in surgical procedures"
+      },
+      "chcl3": {
+        "common_name": "Chloroform (Trichloromethane)",
+        "iupac_name": "Trichloromethane",
+        "chemical_formula": "CHCl3",
+        "molecular_weight": "119.38 g/mol",
+        "chemical_type": "Trihalomethane Solvent",
+        "classification": "Organic",
+        "classification_reason": "It contains a carbon atom covalently bonded to hydrogen and chlorine atoms.",
+        "smiles_notation": "C(Cl)(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "Historically used as a general inhalant anesthetic, it has a sweet-smelling volatile vapor and acts as a powerful non-polar solvent.",
+        "color": "Colorless heavy liquid",
+        "properties": "Physical state: Volatile, dense liquid\nBoiling point: 61.2°C\nInsoluble in water but highly miscible with alcohol and organic solvents\nNon-flammable under standard conditions but decomposes on heating to release phosgene gas\nSweet, heavy, characteristic anesthetic odor",
+        "uses": "Common laboratory and industrial solvent for fats, oils, and rubber\nPrecursor in the synthesis of Teflon precursors (Chlorodifluoromethane)\nHistorically used as a general anesthetic in surgical procedures"
+      },
+      "carbon tetrachloride": {
+        "common_name": "Carbon Tetrachloride",
+        "iupac_name": "Tetrachloromethane",
+        "chemical_formula": "CCl4",
+        "molecular_weight": "153.82 g/mol",
+        "chemical_type": "Chlorinated Solvent",
+        "classification": "Organic",
+        "classification_reason": "It contains a central carbon atom covalently bonded to four chlorine atoms, typical of organic halocarbons.",
+        "smiles_notation": "C(Cl)(Cl)(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "Formerly used in fire extinguishers and dry cleaning, it is highly hepatotoxic and acts as a strong non-polar organic solvent.",
+        "color": "Colorless heavy volatile liquid",
+        "properties": "Physical state: Dense, volatile liquid\nBoiling point: 76.72°C\nNon-flammable and stable under most conditions\nInsoluble in water but miscible with organic solvents\nHighly toxic and hepatotoxic, ozone-depleting substance",
+        "uses": "Historically used as an industrial solvent and dry-cleaning agent\nFormerly used as a fire extinguisher fluid (vaporizes to smother flames)\nPrecursor in the production of refrigerants and propellants (chlorofluorocarbons)"
+      },
+      "ccl4": {
+        "common_name": "Carbon Tetrachloride",
+        "iupac_name": "Tetrachloromethane",
+        "chemical_formula": "CCl4",
+        "molecular_weight": "153.82 g/mol",
+        "chemical_type": "Chlorinated Solvent",
+        "classification": "Organic",
+        "classification_reason": "It contains a central carbon atom covalently bonded to four chlorine atoms, typical of organic halocarbons.",
+        "smiles_notation": "C(Cl)(Cl)(Cl)Cl",
+        "pdb_id": null,
+        "quick_fact": "Formerly used in fire extinguishers and dry cleaning, it is highly hepatotoxic and acts as a strong non-polar organic solvent.",
+        "color": "Colorless heavy volatile liquid",
+        "properties": "Physical state: Dense, volatile liquid\nBoiling point: 76.72°C\nNon-flammable and stable under most conditions\nInsoluble in water but miscible with organic solvents\nHighly toxic and hepatotoxic, ozone-depleting substance",
+        "uses": "Historically used as an industrial solvent and dry-cleaning agent\nFormerly used as a fire extinguisher fluid (vaporizes to smother flames)\nPrecursor in the production of refrigerants and propellants (chlorofluorocarbons)"
+      },
+      "ethene": {
+        "common_name": "Ethene Gas (Ethylene)",
+        "iupac_name": "Ethene",
+        "chemical_formula": "C2H4",
+        "molecular_weight": "28.05 g/mol",
+        "chemical_type": "Alkene Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is the simplest alkene containing a carbon-carbon double bond with covalent carbon-hydrogen linkage.",
+        "smiles_notation": "C=C",
+        "pdb_id": null,
+        "quick_fact": "Ethene is a natural plant hormone that regulates fruit ripening and flower opening.",
+        "color": "Colorless sweet-smelling gas"
+      },
+      "c2h4": {
+        "common_name": "Ethene Gas (Ethylene)",
+        "iupac_name": "Ethene",
+        "chemical_formula": "C2H4",
+        "molecular_weight": "28.05 g/mol",
+        "chemical_type": "Alkene Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It is the simplest alkene containing a carbon-carbon double bond with covalent carbon-hydrogen linkage.",
+        "smiles_notation": "C=C",
+        "pdb_id": null,
+        "quick_fact": "Ethene is a natural plant hormone that regulates fruit ripening and flower opening.",
+        "color": "Colorless sweet-smelling gas"
+      },
+      "acetylene": {
+        "common_name": "Acetylene Gas (Ethyne)",
+        "iupac_name": "Ethyne",
+        "chemical_formula": "C2H2",
+        "molecular_weight": "26.04 g/mol",
+        "chemical_type": "Alkyne Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a triple bond linking two carbon atoms covalently, each bound to a hydrogen atom.",
+        "smiles_notation": "C#C",
+        "pdb_id": null,
+        "quick_fact": "Acetylene burns with oxygen to produce an extremely hot flame of over 3000°C, used in oxy-acetylene welding.",
+        "color": "Colorless gas"
+      },
+      "ethyne": {
+        "common_name": "Acetylene Gas (Ethyne)",
+        "iupac_name": "Ethyne",
+        "chemical_formula": "C2H2",
+        "molecular_weight": "26.04 g/mol",
+        "chemical_type": "Alkyne Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a triple bond linking two carbon atoms covalently, each bound to a hydrogen atom.",
+        "smiles_notation": "C#C",
+        "pdb_id": null,
+        "quick_fact": "Acetylene burns with oxygen to produce an extremely hot flame of over 3000°C, used in oxy-acetylene welding.",
+        "color": "Colorless gas"
+      },
+      "c2h2": {
+        "common_name": "Acetylene Gas (Ethyne)",
+        "iupac_name": "Ethyne",
+        "chemical_formula": "C2H2",
+        "molecular_weight": "26.04 g/mol",
+        "chemical_type": "Alkyne Hydrocarbon",
+        "classification": "Organic",
+        "classification_reason": "It contains a triple bond linking two carbon atoms covalently, each bound to a hydrogen atom.",
+        "smiles_notation": "C#C",
+        "pdb_id": null,
+        "quick_fact": "Acetylene burns with oxygen to produce an extremely hot flame of over 3000°C, used in oxy-acetylene welding.",
+        "color": "Colorless gas"
+      },
+      "glycerol": {
+        "common_name": "Glycerol (Glycerine)",
+        "iupac_name": "Propane-1,2,3-triol",
+        "chemical_formula": "C3H8O3",
+        "molecular_weight": "92.09 g/mol",
+        "chemical_type": "Polyol Alcohol",
+        "classification": "Organic",
+        "classification_reason": "It is a trivalent organic polyol containing a central propane chain with three hydroxyl groups.",
+        "smiles_notation": "C(C(CO)O)O",
+        "pdb_id": null,
+        "quick_fact": "Glycerol is non-toxic, sweet-tasting, and highly hygroscopic, widely used in cosmetics, medicines, and food.",
+        "color": "Viscous colorless odorless liquid"
+      },
+      "glycerine": {
+        "common_name": "Glycerol (Glycerine)",
+        "iupac_name": "Propane-1,2,3-triol",
+        "chemical_formula": "C3H8O3",
+        "molecular_weight": "92.09 g/mol",
+        "chemical_type": "Polyol Alcohol",
+        "classification": "Organic",
+        "classification_reason": "It is a trivalent organic polyol containing a central propane chain with three hydroxyl groups.",
+        "smiles_notation": "C(C(CO)O)O",
+        "pdb_id": null,
+        "quick_fact": "Glycerol is non-toxic, sweet-tasting, and highly hygroscopic, widely used in cosmetics, medicines, and food.",
+        "color": "Viscous colorless odorless liquid"
+      },
+      "c3h8o3": {
+        "common_name": "Glycerol (Glycerine)",
+        "iupac_name": "Propane-1,2,3-triol",
+        "chemical_formula": "C3H8O3",
+        "molecular_weight": "92.09 g/mol",
+        "chemical_type": "Polyol Alcohol",
+        "classification": "Organic",
+        "classification_reason": "It is a trivalent organic polyol containing a central propane chain with three hydroxyl groups.",
+        "smiles_notation": "C(C(CO)O)O",
+        "pdb_id": null,
+        "quick_fact": "Glycerol is non-toxic, sweet-tasting, and highly hygroscopic, widely used in cosmetics, medicines, and food.",
+        "color": "Viscous colorless odorless liquid"
+      },
+      "formaldehyde": {
+        "common_name": "Formaldehyde (Formalin)",
+        "iupac_name": "Methanal",
+        "chemical_formula": "HCHO",
+        "molecular_weight": "30.03 g/mol",
+        "chemical_type": "Simple Aldehyde",
+        "classification": "Organic",
+        "classification_reason": "It consists of a central carbon atom with a double bond to oxygen and single bonds to two hydrogens.",
+        "smiles_notation": "C=O",
+        "pdb_id": null,
+        "quick_fact": "Its 37% aqueous solution is called Formalin, which is widely used to preserve biological tissue specimens.",
+        "color": "Colorless pungent gas or solution"
+      },
+      "hcho": {
+        "common_name": "Formaldehyde (Formalin)",
+        "iupac_name": "Methanal",
+        "chemical_formula": "HCHO",
+        "molecular_weight": "30.03 g/mol",
+        "chemical_type": "Simple Aldehyde",
+        "classification": "Organic",
+        "classification_reason": "It consists of a central carbon atom with a double bond to oxygen and single bonds to two hydrogens.",
+        "smiles_notation": "C=O",
+        "pdb_id": null,
+        "quick_fact": "Its 37% aqueous solution is called Formalin, which is widely used to preserve biological tissue specimens.",
+        "color": "Colorless pungent gas or solution"
+      },
+      "benzoic acid": {
+        "common_name": "Benzoic Acid",
+        "iupac_name": "Benzoic acid",
+        "chemical_formula": "C6H5COOH",
+        "molecular_weight": "122.12 g/mol",
+        "chemical_type": "Aromatic Carboxylic Acid",
+        "classification": "Organic",
+        "classification_reason": "It features a carboxyl group attached directly to an aromatic benzene carbon ring.",
+        "smiles_notation": "C1=CC=C(C=C1)C(=O)O",
+        "pdb_id": null,
+        "quick_fact": "Benzoic acid is widely used as a food preservative because its salts inhibit the growth of mold, yeast, and bacteria.",
+        "color": "White crystalline solid"
+      },
+      "c6h5cooh": {
+        "common_name": "Benzoic Acid",
+        "iupac_name": "Benzoic acid",
+        "chemical_formula": "C6H5COOH",
+        "molecular_weight": "122.12 g/mol",
+        "chemical_type": "Aromatic Carboxylic Acid",
+        "classification": "Organic",
+        "classification_reason": "It features a carboxyl group attached directly to an aromatic benzene carbon ring.",
+        "smiles_notation": "C1=CC=C(C=C1)C(=O)O",
+        "pdb_id": null,
+        "quick_fact": "Benzoic acid is widely used as a food preservative because its salts inhibit the growth of mold, yeast, and bacteria.",
+        "color": "White crystalline solid"
+      },
+      "sodium sulfate": {
+        "common_name": "Sodium Sulfate",
+        "iupac_name": "Sodium sulfate",
+        "chemical_formula": "Na2SO4",
+        "molecular_weight": "142.04 g/mol",
+        "chemical_type": "Alkali Metal Sulfate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic sodium salt of sulfuric acid, lacking any carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Na+].[Na+].[O-]S(=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Historically known as Glauber's salt in its decahydrate form, it is used in the manufacture of detergents and paper pulping.",
+        "color": "White crystalline powder"
+      },
+      "na2so4": {
+        "common_name": "Sodium Sulfate",
+        "iupac_name": "Sodium sulfate",
+        "chemical_formula": "Na2SO4",
+        "molecular_weight": "142.04 g/mol",
+        "chemical_type": "Alkali Metal Sulfate Salt",
+        "classification": "Inorganic",
+        "classification_reason": "It is an ionic sodium salt of sulfuric acid, lacking any carbon or carbon-hydrogen bonds.",
+        "smiles_notation": "[Na+].[Na+].[O-]S(=O)(=O)[O-]",
+        "pdb_id": null,
+        "quick_fact": "Historically known as Glauber's salt in its decahydrate form, it is used in the manufacture of detergents and paper pulping.",
+        "color": "White crystalline powder"
+      }
+    };
+
+    // Check for alkanes, alkenes, alkynes dynamically first to ensure 100% accurate structural coverage
+    const parseHydrocarbon = (qStr: string) => {
+      const q = qStr.trim().toLowerCase();
+      
+      // Try matching formula: C{n}H{m} or CH4
+      const formulaRegex = /^c([0-9]*)h([0-9]*)$/i;
+      const match = q.match(formulaRegex);
+      
+      let n = 0;
+      let h = 0;
+      let series: "alkane" | "alkene" | "alkyne" | null = null;
+      
+      if (match) {
+        n = match[1] === "" ? 1 : parseInt(match[1]);
+        h = parseInt(match[2]);
+        
+        if (h === 2 * n + 2) series = "alkane";
+        else if (h === 2 * n && n >= 2) series = "alkene";
+        else if (h === 2 * n - 2 && n >= 2) series = "alkyne";
+      } else if (q === "ch4") {
+        n = 1;
+        h = 4;
+        series = "alkane";
+      } else {
+        // Normalize name to strip position indicators like "1-butene" -> "butene", "hex-1-ene" -> "hexene"
+        // Replace all numbers, dashes, and extra spaces, and prefix like iso-/neo-/n-
+        const stemClean = q.replace(/[0-9\-]+/g, "").replace(/\s+/g, "").replace(/^(iso|neo|n-)/, "");
+        
+        const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+        for (let i = 0; i < prefixes.length; i++) {
+          const p = prefixes[i];
+          if (stemClean.startsWith(p)) {
+            n = i + 1;
+            const suffix = stemClean.slice(p.length);
+            if (suffix === "ane") {
+              series = "alkane";
+              h = 2 * n + 2;
+            } else if (suffix === "ene" || suffix === "ylene") {
+              if (n >= 2) {
+                series = "alkene";
+                h = 2 * n;
+              }
+            } else if (suffix === "yne") {
+              if (n >= 2) {
+                series = "alkyne";
+                h = 2 * n - 2;
+              }
+            }
+            break;
+          }
+        }
+        
+        // Check common synonyms
+        if (!series) {
+          if (q === "ethylene" || q === "ethene") {
+            n = 2; h = 4; series = "alkene";
+          } else if (q === "acetylene" || q === "ethyne") {
+            n = 2; h = 2; series = "alkyne";
+          } else if (q === "propylene" || q === "propene") {
+            n = 3; h = 6; series = "alkene";
+          } else if (q === "butylene" || q === "butene") {
+            n = 4; h = 8; series = "alkene";
+          }
+        }
+      }
+
+      if (!series || n <= 0) return null;
+
+      const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+      const prefixName = prefixes[n - 1] || "carbon";
+      const capitalizedPrefix = prefixName.charAt(0).toUpperCase() + prefixName.slice(1);
+      const iupacName = capitalizedPrefix + (series === "alkane" ? "ane" : (series === "alkene" ? "ene" : "yne"));
+      
+      let commonName = iupacName;
+      if (n === 2 && series === "alkene") commonName = "Ethylene";
+      else if (n === 2 && series === "alkyne") commonName = "Acetylene";
+      else if (n === 3 && series === "alkene") commonName = "Propylene";
+      else if (n === 4 && series === "alkene") commonName = "Butylene";
+
+      const formula = n === 1 ? `CH${h}` : `C${n}H${h}`;
+      const weight = (n * 12.011 + h * 1.008).toFixed(2) + " g/mol";
+      const type = `${series.charAt(0).toUpperCase() + series.slice(1)} Hydrocarbon`;
+
+      let smiles = "C";
+      if (series === "alkane") {
+        smiles = n === 1 ? "C" : "C".repeat(n);
+      } else if (series === "alkene") {
+        smiles = n === 2 ? "C=C" : "C=CC" + "C".repeat(n - 3);
+      } else {
+        smiles = n === 2 ? "C#C" : "C#CC" + "C".repeat(n - 3);
+      }
+
+      let propertiesList = "";
+      if (series === "alkane") {
+        const state = n <= 4 ? "Colorless, highly flammable gas at room temperature" : (n <= 17 ? "Colorless, volatile liquid" : "Waxy white solid");
+        propertiesList = `Physical state: ${state}\nSaturated aliphatic hydrocarbon chain with high relative molecular stability\nHypothetically solid or gas dependent on ambient chain length\nHighly hydrophobic and insoluble in water\nVery soluble in non-polar organic solvents like ether or chloroform\nLow density compared to water`;
+      } else if (series === "alkene") {
+        const state = n <= 4 ? "Colorless, flammable gas with a sweet odor" : (n <= 15 ? "Colorless liquid with characteristic sweet/petroleum odor" : "Waxy solid");
+        propertiesList = `Physical state: ${state}\nUnsaturated aliphatic hydrocarbon containing a reactive carbon-carbon double bond\nInsoluble in polar solvents (hydrophobic)\nSoluble in organic solvents such as benzene or ethanol\nSubject to electrophilic addition reactions across the double bond`;
+      } else {
+        const state = n <= 4 ? "Colorless gas with a distinct ethereal odor" : (n <= 15 ? "Colorless liquid" : "Waxy solid");
+        propertiesList = `Physical state: ${state}\nUnsaturated aliphatic hydrocarbon containing a highly reactive carbon-carbon triple bond\nWeakly acidic terminal C-H bond (for terminal alkynes)\nHydrophobic and insoluble in water\nHighly endothermic compound with a very high heat of combustion`;
+      }
+
+      let usesList = "";
+      if (series === "alkane") {
+        if (n === 1) usesList = "Primary component of natural gas for domestic and industrial heating\nFeedstock for steam reforming to produce hydrogen gas\nFuel for electricity generation in gas turbines";
+        else if (n === 2) usesList = "Feedstock in chemical industry for ethylene cracking\nRefrigerant in low-temperature systems\nFuel gas additive";
+        else if (n === 3) usesList = "Liquefied petroleum gas (LPG) fuel for heating and cooking\nPropellant in aerosol sprays\nFeedstock for petrochemical production";
+        else if (n === 4) usesList = "LPG component and lighter fuel\nFeedstock for synthetic rubber and high-octane gasoline blending\nAerosol propellant";
+        else if (n <= 8) usesList = "Primary component of gasoline fuel for internal combustion engines\nIndustrial solvent for extracting organic oils\nLaboratory solvent for chromatography";
+        else usesList = "Component of diesel, kerosene, and aviation jet fuels\nRaw material for lubricating oils and anti-corrosive coatings\nParaffin wax for candles and food packaging";
+      } else if (series === "alkene") {
+        if (n === 2) usesList = "Precursor for polyethylene plastic production (the most common plastic)\nPlant hormone to accelerate fruit ripening\nStarting material for industrial ethanol and ethylene glycol synthesis";
+        else if (n === 3) usesList = "Monomer for polypropylene plastics used in packaging and textiles\nSynthesis of acrylonitrile and propylene oxide\nFeedstock for acetone and isopropyl alcohol";
+        else usesList = "Monomer for specialized co-polymer plastics and synthetic rubber\nStarting material for industrial plasticizers and synthetic lubricants\nIntermediate in surfactant and detergent manufacturing";
+      } else {
+        if (n === 2) usesList = "Fuel for oxy-acetylene welding and metal cutting torches\nStarting material for vinyl chloride monomer and synthetic polymers\nChemical synthesis intermediate in classic organic synthesis";
+        else usesList = "Intermediate in complex organic synthesis and pharmaceutical drug design\nStarting material for specialty polymers and conductive plastics\nResearch reagent for studying transition-metal-catalyzed alkyne coupling reactions";
+      }
+
+      return {
+        "common_name": commonName,
+        "iupac_name": iupacName,
+        "chemical_formula": formula,
+        "molecular_weight": weight,
+        "chemical_type": type,
+        "classification": "Organic",
+        "classification_reason": `It is an organic compound containing only carbon and hydrogen atoms belonging to the homologous series of ${series}s.`,
+        "smiles_notation": smiles,
+        "pdb_id": null,
+        "quick_fact": `${commonName} (${formula}) is a fundamental ${series} hydrocarbon with ${n} carbon atoms, demonstrating characteristic physical and chemical trends of its homologous group.`,
+        "properties": propertiesList,
+        "uses": usesList,
+        "color": n <= 4 ? "Colorless gas" : "Colorless liquid"
+      };
+    };
+
+    // Cyclic hydrocarbons (cycloalkanes and cycloalkenes) -- e.g. cyclopropane, cyclobutane,
+    // cyclohexane, cyclopropene, cyclohexene. parseHydrocarbon above only recognizes straight-chain
+    // names (its prefix list is matched against the START of the name, so "cyclopropane" never
+    // matches "prop"), which is why every "cyclo-" compound previously returned "not found". Ring
+    // compounds are only ever recognized here by name, never by bare formula, because a cycloalkane
+    // and the corresponding straight-chain alkene share the same molecular formula (e.g. cyclopropane
+    // and propene are both C3H6) and would otherwise be ambiguous.
+    const parseCyclicHydrocarbon = (qStr: string) => {
+      const q = qStr.trim().toLowerCase().replace(/\s+/g, "");
+      if (!q.startsWith("cyclo")) return null;
+
+      const stemClean = q.slice("cyclo".length).replace(/[0-9\-]+/g, "");
+
+      const prefixes = ["prop", "but", "pent", "hex", "hept", "oct", "non", "dec"];
+      let n = 0;
+      let series: "cycloalkane" | "cycloalkene" | null = null;
+
+      for (let i = 0; i < prefixes.length; i++) {
+        const p = prefixes[i];
+        if (stemClean.startsWith(p)) {
+          n = i + 3; // cyclopropane (3-membered ring) is the smallest possible cycloalkane/-ene
+          const suffix = stemClean.slice(p.length);
+          if (suffix === "ane") {
+            series = "cycloalkane";
+          } else if (suffix === "ene" || suffix === "ylene") {
+            series = "cycloalkene";
+          }
+          break;
+        }
+      }
+
+      if (!series || n < 3) return null;
+
+      const prefixName = prefixes[n - 3];
+      const iupacName = `Cyclo${prefixName}${series === "cycloalkane" ? "ane" : "ene"}`;
+      const commonName = iupacName;
+
+      const h = series === "cycloalkane" ? 2 * n : 2 * n - 2;
+      const formula = `C${n}H${h}`;
+      const weight = (n * 12.011 + h * 1.008).toFixed(2) + " g/mol";
+      const type = series === "cycloalkane" ? "Cycloalkane (Saturated Cyclic Hydrocarbon)" : "Cycloalkene (Unsaturated Cyclic Hydrocarbon)";
+
+      const smiles = series === "cycloalkane"
+        ? "C1" + "C".repeat(n - 2) + "C1"
+        : "C1=C" + "C".repeat(n - 3) + "C1";
+
+      const state = n <= 4 ? "Colorless, flammable gas at room temperature" : (n <= 8 ? "Colorless, volatile liquid" : "Colorless liquid or low-melting solid");
+      const propertiesList = series === "cycloalkane"
+        ? `Physical state: ${state}\nSaturated hydrocarbon ring containing only carbon-carbon single bonds\nSmaller rings (3- and 4-membered) exhibit significant angle/ring strain, making them more reactive than their straight-chain isomers\nHydrophobic and insoluble in water; soluble in non-polar organic solvents`
+        : `Physical state: ${state}\nUnsaturated hydrocarbon ring containing one carbon-carbon double bond\n${n === 3 ? "Cyclopropene is exceptionally strained and highly reactive due to the double bond forced into a three-membered ring." : "Undergoes characteristic addition reactions across the ring double bond, similar to open-chain alkenes."}\nHydrophobic and insoluble in water; soluble in non-polar organic solvents`;
+
+      const usesList = series === "cycloalkane"
+        ? (n === 3
+          ? "Historically used as an inhaled general anesthetic (now discontinued due to its flammability)\nModel compound for studying ring strain in organic chemistry"
+          : n === 6
+          ? "Major industrial solvent and precursor in the manufacture of nylon (via oxidation to adipic acid and cyclohexanone)\nParaffin-type solvent for paints, varnishes, and resins"
+          : "Non-polar laboratory and industrial solvent\nModel compound for studying cyclic hydrocarbon conformations and ring strain")
+        : (n === 6
+          ? "Chemical intermediate in the synthesis of adipic acid, maleic acid, and cyclohexanol\nMonomer-related feedstock in polymer and nylon precursor production"
+          : "Chemical intermediate and monomer feedstock in specialty organic synthesis\nResearch compound for studying reactivity trends of cyclic alkenes");
+
+      return {
+        "common_name": commonName,
+        "iupac_name": iupacName,
+        "chemical_formula": formula,
+        "molecular_weight": weight,
+        "chemical_type": type,
+        "classification": "Organic",
+        "classification_reason": `It is an organic compound containing only carbon and hydrogen atoms arranged in a closed ring, belonging to the homologous series of ${series}s.`,
+        "smiles_notation": smiles,
+        "pdb_id": null,
+        "quick_fact": `${commonName} (${formula}) is a ${n}-membered ${series === "cycloalkane" ? "saturated" : "unsaturated"} carbocyclic ring hydrocarbon${n <= 4 ? ", one of the most ring-strained hydrocarbons known" : ""}.`,
+        "properties": propertiesList,
+        "uses": usesList,
+        "color": n <= 4 ? "Colorless gas" : "Colorless liquid"
+      };
+    };
+
+    // Check for alcohols dynamically to ensure 100% accurate structural coverage of methanol, propanol, butanol, etc.
+    const parseAlcohol = (qStr: string) => {
+      const q = qStr.trim().toLowerCase();
+      
+      // Try matching formulas like: CH3OH, C2H5OH, C3H7OH, C4H9OH, etc.
+      // Or general formula C{n}H{2n+2}O (e.g. CH4O, C2H6O, C3H8O, C4H10O)
+      const alcoholFormulaRegex1 = /^c([0-9]*)h([0-9]*)oh$/i;
+      const alcoholFormulaRegex2 = /^c([0-9]*)h([0-9]*)o$/i;
+      
+      let n = 0;
+      let h = 0;
+      let isAlcohol = false;
+
+      const match1 = q.match(alcoholFormulaRegex1);
+      const match2 = q.match(alcoholFormulaRegex2);
+
+      if (match1) {
+        n = match1[1] === "" ? 1 : parseInt(match1[1]);
+        h = parseInt(match1[2]);
+        // C_n H_{2n+1} OH
+        if (h === 2 * n + 1) {
+          isAlcohol = true;
+        }
+      } else if (match2) {
+        n = match2[1] === "" ? 1 : parseInt(match2[1]);
+        h = parseInt(match2[2]);
+        // C_n H_{2n+2} O
+        if (h === 2 * n + 2 && n >= 1) {
+          isAlcohol = true;
+        }
+      } else if (q === "ch3oh") {
+        n = 1;
+        h = 4;
+        isAlcohol = true;
+      } else if (q === "c2h5oh") {
+        n = 2;
+        h = 6;
+        isAlcohol = true;
+      } else {
+        // Normalize name: e.g. "1-propanol", "propan-1-ol", "isopropanol"
+        const stemClean = q.replace(/[0-9\-]+/g, "").replace(/\s+/g, "").replace(/^(iso|sec|tert|n-)/, "");
+        
+        const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+        for (let i = 0; i < prefixes.length; i++) {
+          const p = prefixes[i];
+          if (stemClean.startsWith(p)) {
+            const suffix = stemClean.slice(p.length);
+            if (suffix === "anol" || suffix === "ylalcohol" || suffix === "yl alcohol" || suffix === "ol") {
+              n = i + 1;
+              isAlcohol = true;
+              break;
+            }
+          }
+        }
+        
+        // Synonyms check
+        if (!isAlcohol) {
+          if (q === "wood alcohol" || q === "methyl alcohol" || q === "carbinol") {
+            n = 1; isAlcohol = true;
+          } else if (q === "grain alcohol" || q === "ethyl alcohol" || q === "spirit") {
+            n = 2; isAlcohol = true;
+          } else if (q === "rubbing alcohol" || q === "isopropyl alcohol" || q === "isopropanol") {
+            n = 3; isAlcohol = true;
+          }
+        }
+      }
+
+      if (!isAlcohol || n <= 0) return null;
+
+      const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+      const prefixName = prefixes[n - 1] || "carbon";
+      const capitalizedPrefix = prefixName.charAt(0).toUpperCase() + prefixName.slice(1);
+      
+      const iupacName = capitalizedPrefix + "anol";
+      let commonName = capitalizedPrefix + "anol";
+      if (n === 1) commonName = "Methanol";
+      else if (n === 2) commonName = "Ethanol";
+      else if (n === 3) {
+        if (q.includes("iso")) {
+          commonName = "Isopropyl Alcohol";
+        } else {
+          commonName = "Propanol";
+        }
+      } else if (n === 4) commonName = "Butanol";
+
+      const formula = n === 1 ? "CH3OH" : `C${n}H${2 * n + 1}OH`;
+      const weight = (n * 12.011 + (2 * n + 2) * 1.008 + 15.999).toFixed(2) + " g/mol";
+      const type = "Primary Alcohol";
+
+      let smiles = "CO";
+      if (n === 1) smiles = "CO";
+      else if (n === 2) smiles = "CCO";
+      else if (q.includes("isoprop") || q.includes("isopropyl") || (n === 3 && q.includes("2-ol"))) {
+        smiles = "CC(C)O";
+      } else {
+        smiles = "C".repeat(n) + "O";
+      }
+
+      const state = n <= 11 ? "Colorless, highly volatile liquid" : "Waxy white solid";
+      const waterSolubility = n <= 3 ? "Completely miscible in water in all proportions due to hydrogen bonding" : (n === 4 ? "Moderately soluble in water (~7.3 g/100 mL)" : "Slightly soluble or insoluble in water due to dominating hydrophobic alkyl chain");
+
+      const propertiesList = `Physical state: ${state}\nOdor: Characteristic sweet, pungent, or spirituous alcohol odor\nSolubility: ${waterSolubility}\nForms strong intermolecular hydrogen bonds resulting in high boiling points compared to corresponding hydrocarbons\nFlammability: Highly flammable, burns with a clean blue or pale-blue flame\nAcidity: Extremely weak acid (pKa ~15.5-18), reacts with sodium metal to evolve hydrogen gas`;
+
+      let usesList = "";
+      if (n === 1) {
+        usesList = "Industrial solvent for paints, inks, varnishes, and chemical synthesis\nFeedstock for producing formaldehyde, acetic acid, and methyl esters\nDenaturant for industrial ethanol to make it unfit for human consumption\nAlternative clean-burning fuel or fuel additive in specialized internal combustion engines";
+      } else if (n === 2) {
+        usesList = "Primary active ingredient in alcoholic beverages and spirits\nUniversal industrial and laboratory solvent for polar and non-polar substances\nEssential component in hand sanitizers, disinfectants, and pharmaceutical preparations\nBiofuel (bioethanol) blended with gasoline to reduce fossil fuel carbon emissions";
+      } else if (n === 3) {
+        usesList = "Common rubbing alcohol antiseptic and disinfectant for skin and medical tools\nIndustrial solvent for dissolving oils, gums, resins, and alkaloids\nChemical intermediate for producing isopropyl esters and acetone\nDe-icing agent for windshields and fuel lines";
+      } else if (n === 4) {
+        usesList = "Industrial solvent for nitrocellulose, ethylcellulose, and resins\nStarting material for butyl esters (butyl acetate) used as artificial flavorings and solvents\nComponent in hydraulic brake fluids and industrial paint formulations\nPotential next-generation biofuel with energy density closer to gasoline";
+      } else {
+        usesList = "Solvent for extraction of essential oils, fragrances, and active pharmaceutical ingredients\nStarting material for plasticizers, lubricating oil additives, and surfactants\nFlavoring agent and perfume ingredient (particularly branched or longer-chain esters)\nChemical intermediate in organic synthesis";
+      }
+
+      return {
+        "common_name": commonName,
+        "iupac_name": iupacName,
+        "chemical_formula": formula,
+        "molecular_weight": weight,
+        "chemical_type": type,
+        "classification": "Organic",
+        "classification_reason": `It is an organic compound consisting of a saturated carbon framework linked to a polar hydroxyl (-OH) functional group.`,
+        "smiles_notation": smiles,
+        "pdb_id": null,
+        "quick_fact": `${commonName} (${formula}) is a key member of the homologous series of aliphatic alcohols, exhibiting characteristic trends in physical properties such as boiling point and water solubility as the carbon chain length increases.`,
+        "properties": propertiesList,
+        "uses": usesList,
+        "color": n <= 11 ? "Colorless liquid" : "White solid"
+      };
+    };
+
+    // Check for carboxylic acids dynamically to ensure complete organic homologous coverage
+    const parseCarboxylicAcid = (qStr: string) => {
+      const q = qStr.trim().toLowerCase();
+      
+      const acidFormulaRegex = /^c([0-9]*)h([0-9]*)o2$/i;
+      
+      let n = 0;
+      let isAcid = false;
+
+      const match = q.match(acidFormulaRegex);
+
+      if (match) {
+        n = match[1] === "" ? 1 : parseInt(match[1]);
+        const h = parseInt(match[2]);
+        // C_n H_{2n} O_2 (isomeric esters / carboxylic acids)
+        if (h === 2 * n && n >= 1) {
+          isAcid = true;
+        }
+      } else {
+        const stemClean = q.replace(/[0-9\-]+/g, "").replace(/\s+/g, "").replace(/^(iso|n-)/, "");
+        
+        const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+        for (let i = 0; i < prefixes.length; i++) {
+          const p = prefixes[i];
+          if (stemClean.startsWith(p)) {
+            const suffix = stemClean.slice(p.length);
+            if (suffix === "anoicacid" || suffix === "anoic acid" || suffix === "icacid" || suffix === "ic acid") {
+              n = i + 1;
+              isAcid = true;
+              break;
+            }
+          }
+        }
+        
+        // Common names
+        if (!isAcid) {
+          if (q === "formic acid" || q === "methanoic acid") {
+            n = 1; isAcid = true;
+          } else if (q === "acetic acid" || q === "ethanoic acid" || q === "vinegar") {
+            n = 2; isAcid = true;
+          } else if (q === "propionic acid" || q === "propanoic acid") {
+            n = 3; isAcid = true;
+          } else if (q === "butyric acid" || q === "butanoic acid") {
+            n = 4; isAcid = true;
+          }
+        }
+      }
+
+      if (!isAcid || n <= 0) return null;
+
+      const prefixes = ["meth", "eth", "prop", "but", "pent", "hex", "hept", "oct", "non", "dec", "undec", "dodec", "tridec", "tetradec", "pentadec", "hexadec", "heptadec", "octadec", "nonadec", "icos"];
+      const prefixName = prefixes[n - 1] || "carbon";
+      const capitalizedPrefix = prefixName.charAt(0).toUpperCase() + prefixName.slice(1);
+      
+      const iupacName = capitalizedPrefix + "anoic acid";
+      let commonName = iupacName;
+      if (n === 1) commonName = "Formic Acid";
+      else if (n === 2) commonName = "Acetic Acid";
+      else if (n === 3) commonName = "Propionic Acid";
+      else if (n === 4) commonName = "Butyric Acid";
+
+      const formula = n === 1 ? "HCOOH" : (n === 2 ? "CH3COOH" : `C${n - 1}H${2 * n - 1}COOH`);
+      const weight = (n * 12.011 + (2 * n) * 1.008 + 31.998).toFixed(2) + " g/mol";
+      const type = "Carboxylic Acid";
+
+      let smiles = "C(=O)O";
+      if (n === 1) smiles = "C(=O)O";
+      else smiles = "C".repeat(n - 1) + "C(=O)O";
+
+      const state = n <= 9 ? "Colorless liquid" : "Waxy solid";
+      const smell = n === 1 ? "Pungent, penetrating odor" : (n === 2 ? "Sharp, vinegar-like odor" : (n === 4 ? "Unpleasant, rancid-butter odor" : "Sour, pungent odor"));
+      const propertiesList = `Physical state: ${state}\nOdor: ${smell}\nSolubility: Lower acids (n=1 to 4) are completely miscible in water due to powerful hydrogen bonding\nAcidity: Weak Brønsted-Lowry acid, partially dissociates in aqueous solution to release hydronium ions\nBoiling Point: Exceptionally high boiling points due to the formation of stable hydrogen-bonded dimers in gas and liquid phases`;
+
+      let usesList = "";
+      if (n === 1) {
+        usesList = "Preservative and antibacterial agent in livestock feed\nCoagulant in the production of natural rubber\nActive agent in leather tanning and textile dyeing processes\nDecalcifying agent and component in industrial cleaners";
+      } else if (n === 2) {
+        usesList = "Main component of vinegar (~4-8% aqueous solution) used in culinary applications\nPrecursor for manufacturing vinyl acetate monomer (VAM) for adhesives and paints\nIndustrial solvent for purifying organic compounds and producing cellulose acetate\nStarting material for synthetic fibers and plastic bottles";
+      } else {
+        usesList = "Preservative for animal feed and grain storage\nChemical intermediate in the synthesis of esters, pharmaceuticals, and agricultural chemicals\nFlavoring agent and food additive (as propionates or butyrate derivatives)\nComponent in manufacturing synthetic perfumes and plastics";
+      }
+
+      return {
+        "common_name": commonName,
+        "iupac_name": iupacName,
+        "chemical_formula": formula,
+        "molecular_weight": weight,
+        "chemical_type": type,
+        "classification": "Organic",
+        "classification_reason": `It is an organic compound containing a carboxyl (-COOH) functional group attached to a carbon skeleton.`,
+        "smiles_notation": smiles,
+        "pdb_id": null,
+        "quick_fact": `${commonName} (${formula}) is a carboxylic acid, demonstrating characteristic acidity and physical dimer formation via robust double hydrogen bonds.`,
+        "properties": propertiesList,
+        "uses": usesList,
+        "color": n <= 9 ? "Colorless liquid" : "White solid"
+      };
+    };
+
+    const parseMultiFunctionalOrganic = (qStr: string) => {
+      const q = qStr.trim().toLowerCase();
+      const norm = (s: string) => s.replace(/[^a-z0-9]/g, "");
+      const qNorm = norm(q);
+      
+      if (qNorm === "c7h6o3" || qNorm === "salicylicacid" || q === "salicylic acid") {
+        return {
+          "common_name": "Salicylic Acid",
+          "iupac_name": "2-Hydroxybenzoic acid",
+          "chemical_formula": "C7H6O3",
+          "molecular_weight": "138.12 g/mol",
+          "chemical_type": "Beta Hydroxy Acid (BHA)",
+          "classification": "Organic",
+          "classification_reason": "Salicylic acid contains multiple functional groups: an organic carboxylic acid (-COOH) group and a phenolic hydroxyl (-OH) group attached to a benzene ring.",
+          "smiles_notation": "C1=CC=C(C(=C1)O)C(=O)O",
+          "pdb_id": null,
+          "quick_fact": "Salicylic acid is a precursor to aspirin and is widely used in skincare for acne treatment due to its lipophilic nature.",
+          "properties": "Physical state: White needle-like crystals or powder\nSolubility: Moderately soluble in hot water, highly soluble in ethanol and ether\nMelting Point: 159°C\nAcidity: Weak organic acid (pKa = 2.97), more acidic than benzoic acid due to intramolecular hydrogen bonding",
+          "uses": "Used as a key ingredient in cosmetic skincare products for exfoliation and acne therapy\nStarting material for the industrial synthesis of acetylsalicylic acid (aspirin)\nFood preservative and antiseptic agent in pharmaceuticals",
+          "color": "White crystalline solid"
+        };
+      }
+      
+      if (qNorm === "c3h6o3" || qNorm === "lacticacid" || q === "lactic acid") {
+        return {
+          "common_name": "Lactic Acid",
+          "iupac_name": "2-Hydroxypropanoic acid",
+          "chemical_formula": "C3H6O3",
+          "molecular_weight": "90.08 g/mol",
+          "chemical_type": "Alpha Hydroxy Acid (AHA)",
+          "classification": "Organic",
+          "classification_reason": "Lactic acid contains multiple functional groups: a carboxylic acid (-COOH) group and a secondary alcohol (-OH) group on the alpha carbon.",
+          "smiles_notation": "CC(C(=O)O)O",
+          "pdb_id": null,
+          "quick_fact": "Lactic acid is produced in human muscles during intense anaerobic exercise and is also the primary acid in sour milk products.",
+          "properties": "Physical state: Colorless syrupy liquid or low-melting white solid\nSolubility: Highly hygroscopic and completely miscible in water and ethanol\nAcidity: Weak organic acid (pKa = 3.86)\nOptically active: Exists as D-lactic acid and L-lactic acid enantiomers",
+          "uses": "Used in food industry as an acidulant, preservative, and flavoring agent in dairy and pickled foods\nKey component in anti-aging skincare products for skin hydration and peeling\nPrecursor for polylactic acid (PLA), a biodegradable plastic polymer",
+          "color": "Colorless syrupy liquid or white solid"
+        };
+      }
+
+      if (qNorm === "c6h8o7" || qNorm === "citricacid" || q === "citric acid") {
+        return {
+          "common_name": "Citric Acid",
+          "iupac_name": "2-Hydroxypropane-1,2,3-tricarboxylic acid",
+          "chemical_formula": "C6H8O7",
+          "molecular_weight": "192.12 g/mol",
+          "chemical_type": "Polyprotic Hydroxy Acid",
+          "classification": "Organic",
+          "classification_reason": "Citric acid contains multiple functional groups: one tertiary alcohol (-OH) group and three carboxylic acid (-COOH) groups on a branched carbon backbone.",
+          "smiles_notation": "C(C(=O)O)C(CC(=O)O)(C(=O)O)O",
+          "pdb_id": null,
+          "quick_fact": "Citric acid is a vital intermediate in the Krebs Cycle (citric acid cycle) of aerobic respiration in all living organisms.",
+          "properties": "Physical state: Colorless or white crystalline solid\nSolubility: Exceptionally soluble in water and ethanol\nAcidity: Weak triprotic acid (pKa1 = 3.13, pKa2 = 4.76, pKa3 = 6.40)\nFlavor: Strongly sour, citrus taste",
+          "uses": "Natural preservative and acidulant in beverages, candies, and sour foods\nBuffering and chelating agent in detergents and cosmetic cleaners\nAnticoagulant in medical blood storage by binding calcium ions",
+          "color": "White crystalline solid"
+        };
+      }
+
+      if (qNorm === "c9h8o4" || qNorm === "aspirin" || qNorm === "acetylsalicylicacid" || q === "aspirin" || q === "acetylsalicylic acid") {
+        return {
+          "common_name": "Aspirin",
+          "iupac_name": "2-Acetyloxybenzoic acid",
+          "chemical_formula": "C9H8O4",
+          "molecular_weight": "180.16 g/mol",
+          "chemical_type": "Ester / Carboxylic Acid",
+          "classification": "Organic",
+          "classification_reason": "Aspirin contains multiple functional groups: an ester (-COO-) group and a carboxylic acid (-COOH) group bound to an aromatic benzene ring.",
+          "smiles_notation": "CC(=O)OC1=CC=CC=C1C(=O)O",
+          "pdb_id": null,
+          "quick_fact": "Aspirin was first synthesized by Felix Hoffmann at Bayer in 1897 and remains one of the most widely used drugs in human history.",
+          "properties": "Physical state: White needle-like crystalline powder\nSolubility: Poorly soluble in cold water, highly soluble in ethanol and alkali solutions\nHydrolysis: Slowly decomposes in moist air into salicylic and acetic acids\nMelting Point: 136°C",
+          "uses": "Analgesic to relieve headaches, muscle pain, and joint swelling\nAntipyretic to reduce fever and anti-inflammatory to treat rheumatoid arthritis\nLow-dose cardiovascular medication to prevent blood clot formation and strokes",
+          "color": "White crystalline powder"
+        };
+      }
+
+      if (qNorm === "c8h9no2" || qNorm === "paracetamol" || qNorm === "acetaminophen" || q === "paracetamol" || q === "acetaminophen") {
+        return {
+          "common_name": "Paracetamol",
+          "iupac_name": "N-(4-hydroxyphenyl)acetamide",
+          "chemical_formula": "C8H9NO2",
+          "molecular_weight": "151.16 g/mol",
+          "chemical_type": "Amide / Phenol",
+          "classification": "Organic",
+          "classification_reason": "Paracetamol contains multiple functional groups: an amide (-NHCO-) linkage and a phenolic hydroxyl (-OH) group on a benzene ring.",
+          "smiles_notation": "CC(=O)NC1=CC=C(C=C1)O",
+          "pdb_id": null,
+          "quick_fact": "Unlike aspirin, paracetamol has minimal anti-inflammatory action but is highly effective for reducing fever and pain with excellent stomach tolerance.",
+          "properties": "Physical state: Odorless, slightly bitter white crystalline solid\nSolubility: Soluble in organic solvents and boiling water, sparingly soluble in cold water\nMelting Point: 169°C\nStability: Stable in dry conditions, hydrolyzes under strong acid/base heating",
+          "uses": "Over-the-counter analgesic (pain reliever) and antipyretic (fever reducer)\nUsed to treat mild-to-moderate headaches, toothaches, joint pain, and cold symptoms\nSafe alternative for patients sensitive to aspirin or NSAIDs",
+          "color": "White crystalline powder"
+        };
+      }
+
+      if (qNorm === "c2h5no2" || qNorm === "glycine" || q === "glycine") {
+        return {
+          "common_name": "Glycine",
+          "iupac_name": "2-Aminoacetic acid",
+          "chemical_formula": "C2H5NO2",
+          "molecular_weight": "75.07 g/mol",
+          "chemical_type": "Amino Acid",
+          "classification": "Organic",
+          "classification_reason": "Glycine contains multiple functional groups: a primary amine (-NH2) group and a carboxylic acid (-COOH) group attached to a single carbon atom.",
+          "smiles_notation": "C(C(=O)O)N",
+          "pdb_id": null,
+          "quick_fact": "Glycine is the simplest of the 20 standard amino acids used to build proteins, and is the only achiral amino acid because its alpha carbon is bound to two hydrogens.",
+          "properties": "Physical state: Sweet-tasting white crystalline solid\nZwitterionic structure: In solid and neutral solution, it exists as a zwitterion (+NH3-CH2-COO-)\nSolubility: Exceptionally soluble in water, insoluble in non-polar organic solvents\nMelting Point: Decomposes above 233°C",
+          "uses": "Core building block in cellular protein synthesis and collagen structure\nInhibitory neurotransmitter in the central nervous system (spinal cord and brainstem)\nBuffering agent in antacids, cosmetics, and biochemical research",
+          "color": "White crystalline solid"
+        };
+      }
+
+      if (qNorm === "c3h7no2" || qNorm === "alanine" || q === "alanine") {
+        return {
+          "common_name": "Alanine",
+          "iupac_name": "2-Aminopropanoic acid",
+          "chemical_formula": "C3H7NO2",
+          "molecular_weight": "89.09 g/mol",
+          "chemical_type": "Amino Acid",
+          "classification": "Organic",
+          "classification_reason": "Alanine contains multiple functional groups: a primary amine (-NH2) group and a carboxylic acid (-COOH) group bound to a central carbon with a methyl side chain.",
+          "smiles_notation": "CC(C(=O)O)N",
+          "pdb_id": null,
+          "quick_fact": "L-alanine is an essential amino acid produced in human metabolism and plays a central role in the glucose-alanine cycle connecting liver and muscles.",
+          "properties": "Physical state: Odorless white crystalline powder\nZwitterion state: Exists as +NH3-CH(CH3)-COO- at neutral physiological pH\nSolubility: Highly soluble in water, slightly soluble in ethanol\nMelting Point: 258°C with decomposition",
+          "uses": "Protein synthesis component in cell cultures and nutritional supplements\nKey player in amino acid metabolism, supplying nitrogen and carbon to muscles\nRaw material in organic synthesis and pharmaceutical drug design",
+          "color": "White crystalline solid"
+        };
+      }
+
+      if (qNorm === "c6h8o6" || qNorm === "ascorbicacid" || qNorm === "vitaminc" || q === "ascorbic acid" || q === "vitamin c") {
+        return {
+          "common_name": "Ascorbic Acid",
+          "iupac_name": "(5R)-[(1S)-1,2-dihydroxyethyl]-3,4-dihydroxyfuran-2(5H)-one",
+          "chemical_formula": "C6H8O6",
+          "molecular_weight": "176.12 g/mol",
+          "chemical_type": "Enol / Lactone / Vitamin",
+          "classification": "Organic",
+          "classification_reason": "Ascorbic acid contains multiple functional groups: four hydroxyl (-OH) groups (two of which form a reactive enediol system) and a cyclic ester (lactone) ring.",
+          "smiles_notation": "C(C(C1C(=C(C(=O)O1)O)O)O)O",
+          "pdb_id": null,
+          "quick_fact": "Humans cannot synthesize Vitamin C due to a mutation in the GULO gene, making it an essential dietary nutrient to prevent scurvy.",
+          "properties": "Physical state: White or pale-yellow crystals, sour taste\nSolubility: Soluble in water, moderately soluble in alcohol, insoluble in ether\nAcidity: Acidic behavior due to deprotonation of the enol hydroxyls (pKa1 = 4.17)\nRedox: Strong reducing agent, easily oxidized by light and heat",
+          "uses": "Essential dietary supplement (Vitamin C) for immune support and collagen synthesis\nAntioxidant food additive to prevent browning and spoilage of fruits and juices\nReducing agent in photographic developer solutions and biochemical assays",
+          "color": "White or pale-yellow crystals"
+        };
+      }
+
+      return null;
+    };
+
+    const multiFunctionalResult = parseMultiFunctionalOrganic(cleanQuery);
+    if (multiFunctionalResult) {
+      return res.json(enrichKYCResultWithStructureUrls(multiFunctionalResult, query));
+    }
+
+    const hydrocarbonResult = parseHydrocarbon(cleanQuery);
+    if (hydrocarbonResult) {
+      return res.json(enrichKYCResultWithStructureUrls(hydrocarbonResult, query));
+    }
+
+    const cyclicHydrocarbonResult = parseCyclicHydrocarbon(cleanQuery);
+    if (cyclicHydrocarbonResult) {
+      return res.json(enrichKYCResultWithStructureUrls(cyclicHydrocarbonResult, query));
+    }
+
+    const alcoholResult = parseAlcohol(cleanQuery);
+    if (alcoholResult) {
+      return res.json(enrichKYCResultWithStructureUrls(alcoholResult, query));
+    }
+
+    const acidResult = parseCarboxylicAcid(cleanQuery);
+    if (acidResult) {
+      return res.json(enrichKYCResultWithStructureUrls(acidResult, query));
+    }
+
+    // 1. Try exact or high-confidence match in OFFLINE_KYC_DB
+    let matchedItem = null;
+    const norm = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cleanNorm = norm(cleanQuery);
+
+    // Word-boundary-safe helpers for the fuzzy fallback stages below.
+    // Plain character-level substring checks are dangerous for chemical names: e.g. "uric acid"
+    // is literally a substring of "sulfuric acid" once spaces are stripped, which previously caused
+    // completely unrelated compounds to match. Comparing whole words instead of raw characters
+    // prevents "uric" from matching inside "sulfuric", "ethane" from matching inside "methane", etc.
+    const tokenize = (s: string): string[] =>
+      s.trim().toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+    const wordSetIsSubsetOf = (smaller: string[], bigger: string[]): boolean =>
+      smaller.length > 0 && smaller.every(w => bigger.includes(w));
+    const wordsMatch = (a: string, b: string): boolean => {
+      const wa = tokenize(a);
+      const wb = tokenize(b);
+      return wordSetIsSubsetOf(wa, wb) || wordSetIsSubsetOf(wb, wa);
+    };
+
+    for (const key of Object.keys(OFFLINE_KYC_DB)) {
+      const keyNorm = norm(key);
+      const commonNameNorm = norm(OFFLINE_KYC_DB[key].common_name || "");
+      const formulaNorm = norm(OFFLINE_KYC_DB[key].chemical_formula || "");
+      
+      if (keyNorm === cleanNorm || commonNameNorm === cleanNorm || formulaNorm === cleanNorm) {
+        matchedItem = { ...OFFLINE_KYC_DB[key] };
+        break;
+      }
+    }
+
+    // 1.5. If no exact match in OFFLINE_KYC_DB, try exact or high-confidence match in COMMON_NAMES_TO_FORMULA
+    if (!matchedItem) {
+      for (const name of Object.keys(COMMON_NAMES_TO_FORMULA)) {
+        const nameNorm = norm(name);
+        const formulaNorm = norm(COMMON_NAMES_TO_FORMULA[name].formula);
+        const iupacNorm = norm(COMMON_NAMES_TO_FORMULA[name].iupac);
+        
+        if (nameNorm === cleanNorm || formulaNorm === cleanNorm || iupacNorm === cleanNorm) {
+          const item = COMMON_NAMES_TO_FORMULA[name];
+          const classificationDetails = classifyFormula(item.formula);
+          const smiles = item.smiles || (item.classification === "Organic" || classificationDetails.classification === "Organic" ? "C1=CC=CC=C1" : "[Na+].[Cl-]");
+          const computedItemWeight = calculateMolecularWeight(item.formula);
+
+          matchedItem = {
+            "common_name": item.iupac,
+            "iupac_name": item.iupac,
+            "chemical_formula": item.formula,
+            "molecular_weight": computedItemWeight !== null ? `${computedItemWeight} g/mol` : "Not available for this formula",
+            "chemical_type": item.type,
+            "classification": item.classification || classificationDetails.classification,
+            "classification_reason": classificationDetails.reason,
+            "smiles_notation": smiles,
+            "pdb_id": null,
+            "quick_fact": `A standard high-yield inorganic/organic compound studied in secondary chemistry. Formula: ${item.formula}`,
+            "properties": item.classification === "Organic" 
+              ? "Physical crystalline\nSolid substance with high relative molecular stability\nSoluble in organic solvents" 
+              : "Physical crystalline\nInorganic mineral substance with standard physical crystalline framework",
+            "uses": item.classification === "Organic"
+              ? "General school and college-level chemical training\nTest-prep reactions\nGeneral scientific analysis"
+              : "Industrial chemical uses\nLaboratory reagent exercises\nEducational compound study",
+            "color": item.color
+          };
+          break;
+        }
+      }
+    }
+
+    // 1.8. Try parsing as a raw formula directly (e.g. CuSO4, Fe2O3, Cu2O) if it is valid
+    if (!matchedItem && isValidFormula(query)) {
+      const formula = query.trim();
+      const classificationDetails = classifyFormula(formula);
+      
+      // Guess type and color
+      let type = classificationDetails.classification === "Organic" ? "Organic Compound" : "Inorganic Compound";
+      let color = "Colorless or white substance";
+      if (formula.includes("SO4")) type = "Metal Sulfate";
+      else if (formula.includes("CO3")) type = "Metal Carbonate";
+      else if (formula.includes("NO3")) type = "Metal Nitrate";
+      else if (formula.endsWith("O") || formula.includes("O2") || formula.includes("O3")) type = "Metal Oxide";
+      else if (formula.includes("Cl") || formula.includes("Br") || formula.includes("I") || formula.includes("F")) type = "Metal Halide";
+      else if (formula.includes("OH")) type = "Metal Hydroxide / Base";
+
+      if (formula.includes("Cu")) color = "Bright blue or green crystals";
+      else if (formula.includes("Fe")) color = "Yellow-brown or reddish-brown solid";
+      else if (formula.includes("Ni")) color = "Green crystals";
+      else if (formula.includes("Co")) color = "Pink/red crystals";
+      else if (formula.includes("Cr")) color = "Orange or yellow crystals";
+
+      // IMPORTANT: the common/IUPAC name must be the real formula itself, not a fabricated
+      // "Chemical X" / "Systemic X" placeholder. Those fake names could never resolve on PubChem,
+      // which is why the structure image fell through every fallback and eventually rendered a
+      // hardcoded, completely unrelated SMILES (benzene for any unmatched organic formula, plain
+      // sodium chloride for any unmatched inorganic one) -- a real but totally wrong structure. Most
+      // raw formulas (e.g. "V2O5") actually do resolve directly on PubChem's name-lookup endpoint,
+      // so using the real formula here gives the structure image a genuine chance to be correct, and
+      // omitting a fabricated SMILES (left as "") means the frontend's fallback chain skips straight
+      // past it to the name/formula-based URLs instead of drawing an unrelated molecule.
+      const computedWeight = calculateMolecularWeight(formula);
+
+      matchedItem = {
+        "common_name": formula,
+        "iupac_name": formula,
+        "chemical_formula": formula,
+        "molecular_weight": computedWeight !== null ? `${computedWeight} g/mol (calculated)` : "Not available for this formula",
+        "chemical_type": type,
+        "classification": classificationDetails.classification,
+        "classification_reason": classificationDetails.reason,
+        "smiles_notation": "",
+        "pdb_id": null,
+        "quick_fact": `Compound with molecular formula ${formula}, parsed and classified from its formula. Its full name, structure, and detailed properties were not found in our curated database, so the values shown here are best-effort estimates.`,
+        "properties": `${classificationDetails.classification} chemical substance. Detailed physical properties were not found in our curated database for this specific formula.`,
+        "uses": "Not available in our curated database for this specific formula.",
+        "color": color
+      };
+    }
+
+    // 2. Whole-word fallback match ONLY if no exact match has succeeded anywhere.
+    // Uses word-set comparison (not raw substring) to avoid cross-matching unrelated
+    // compounds whose names merely happen to contain each other as character sequences.
+    //
+    // A crystalline/hydrate entry's name (e.g. "Green Vitriol (Iron(II) Sulfate Heptahydrate)")
+    // is always a word-superset of its plain anhydrous salt's name (e.g. "Iron(II) Sulfate"), so
+    // a subset-based fuzzy match would otherwise ALWAYS resolve a plain salt search to the hydrate
+    // entry -- exactly the "why does every salt show its crystallized form" bug. A query is only
+    // allowed to fuzzy-match a hydrate-formula entry when it actually says so itself (mentions
+    // hydration, or names the specific historical crystal name like "Vitriol"/"Epsom"/"Alum").
+    const queryImpliesHydrate = /HYDRATE|CRYSTAL|HYDROUS|VITRIOL|EPSOM|ALUM|GYPSUM|BORAX|MOHR|PLASTER OF PARIS|WASHING SODA/i.test(cleanQuery);
+    const isHydrateDbFormula = (f: string) => /[·.]\s*\d*\.?\d*\s*H2O/i.test(f || "");
+    if (!matchedItem && cleanNorm.length >= 3) {
+      for (const key of Object.keys(OFFLINE_KYC_DB)) {
+        if (isHydrateDbFormula(OFFLINE_KYC_DB[key].chemical_formula) && !queryImpliesHydrate) continue;
+        if (wordsMatch(cleanQuery, key) || wordsMatch(cleanQuery, OFFLINE_KYC_DB[key].common_name || "")) {
+          matchedItem = { ...OFFLINE_KYC_DB[key] };
+          break;
+        }
+      }
+    }
+
+    if (matchedItem) {
+      // Dynamic fallback injection for Properties and Uses if absent
+      const key = (matchedItem.common_name || "").toLowerCase();
+      if (!matchedItem.properties) {
+        if (key.includes("paracetamol") || key.includes("acetaminophen")) {
+          matchedItem.properties = "Soluble in organic solvents (like ethanol), stable under normal dry storage, neutral pH in solution, decomposes at very high temperatures.";
+          matchedItem.uses = "Self-administered over-the-counter medicine to reduce fever (antipyretic) and relieve mild/moderate headaches, muscle aches, or general pain.";
+        } else if (key.includes("aspirin")) {
+          matchedItem.properties = "White needle-like crystalline powder, slightly acidic taste, weakly soluble in water, forms salicylic acid and acetic acid on hydrolysis.";
+          matchedItem.uses = "Treats mild to moderate pain/fever, decreases swelling and redness of joints, and is used at low doses to prevent cardiorespiratory blood clotting.";
+        } else if (key.includes("cuso4") || key.includes("blue vitriol") || key.includes("copper sulfate")) {
+          matchedItem.properties = "Bright blue crystalline solids coordination hydrate. Dehydrates on heating from blue to anhydrous white powder. Very soluble in water.";
+          matchedItem.uses = "Educational test-reaction reagent, fungicide in grape agriculture, electroplating component, and mordant in structural textile dyeing.";
+        } else if (key.includes("stearate")) {
+          matchedItem.properties = "Aliphatic sodium carboxylate soap, amphipathic structure containing active hydrophilic head and long hydrophobic tail, forms insoluble scum with Ca2+/Mg2+.";
+          matchedItem.uses = "Primary active surfactant ingredient in laundry hand soaps, thickener in petroleum lubricants, and emulsion stabilizer in cosmetics.";
+        } else if (key.includes("hemoglobin")) {
+          matchedItem.properties = "Large tetrameric globular biological metalloprotein containing organic folded globins bound covalently to central iron-containing heme coordination disks.";
+          matchedItem.uses = "Primary physiological oxygen transport agent in eukaryotic erythrocyte cells, studied in biochemical protein coordination modeling.";
+        } else if (key.includes("glucose")) {
+          matchedItem.properties = "Hexose aldehyde monosaccharide sugar, highly soluble in polar solvents, sweet taste, crystallizes in open or closed hemiacetal ring conformations.";
+          matchedItem.uses = "Fundamental carbohydrate metabolic fuel source oxidized during cellular respiration to synthesize ATP energy inside living cells.";
+        } else if (key.includes("baking soda") || key.includes("nahco3") || key.includes("bicarbonate")) {
+          matchedItem.properties = "Alkaline white carbonate mineral crystalline powder, releases carbon dioxide gas upon thermal decomposition above 50°C and neutralization with acids.";
+          matchedItem.uses = "Essential food-grade leavening agent in baking doughs, antacid for immediate relief of stomach acidity, and buffer indicator in dry extinguishers.";
+        } else if (key.includes("dna")) {
+          matchedItem.properties = "Double-stranded right-handed helical macromolecular biopolymer composed of nitrogenous base pairs linked covalently to sugar-phosphate polymer backbones.";
+          matchedItem.uses = "Permanently archives physiological/hereditary genetic blueprints, directs cellular enzyme syntheses, and acts as the material basis of heredity.";
+        } else if (key.includes("penicillin")) {
+          matchedItem.properties = "Organic beta-lactam chemical compound with bicyclic ring system coupled to thiazolidine ring, sensitive to specific bacterial penicillinase enzymes.";
+          matchedItem.uses = "First discovered bacterial cell-wall synthesis inhibitor antibiotic, used to counter streptococci, pneumococci, and staphylococcal infections.";
+        } else if (key.includes("vitriol") || key.includes("feso4") || key.includes("iron sulfate")) {
+          matchedItem.properties = "Light-green crystalline heptahydrate salt. Thermally decomposes into ferric oxide, sulfur dioxide, and sulfur trioxide acidic toxic fumes.";
+          matchedItem.uses = "Medical iron-deficiency mineral supplement, industrial raw material for writing ink manufacture, and clarifying flocculant in wastewater purification.";
+        } else {
+          matchedItem.properties = "Physical crystalline\nSolid substance with high relative molecular stability\nStandard chemical geometry";
+          matchedItem.uses = "Educational chemistry research\nStoichiometry exercises\nExam preparation study";
+        }
+      }
+      return res.json(enrichKYCResultWithStructureUrls(matchedItem, query));
+    }
+
+    // 3. Try custom COMMON_NAMES_TO_FORMULA dictionary (whole-word match, see note above)
+    for (const name of Object.keys(COMMON_NAMES_TO_FORMULA)) {
+      if (norm(name) === cleanNorm || (cleanNorm.length >= 4 && wordsMatch(cleanQuery, name))) {
+        const item = COMMON_NAMES_TO_FORMULA[name];
+        const classificationDetails = classifyFormula(item.formula);
+        const smiles = item.smiles || (item.classification === "Organic" || classificationDetails.classification === "Organic" ? "C1=CC=CC=C1" : "[Na+].[Cl-]");
+        
+        return res.json(enrichKYCResultWithStructureUrls({
+          "common_name": item.iupac,
+          "iupac_name": item.iupac,
+          "chemical_formula": item.formula,
+          "molecular_weight": "80.00 g/mol",
+          "chemical_type": item.type,
+          "classification": item.classification || classificationDetails.classification,
+          "classification_reason": classificationDetails.reason,
+          "smiles_notation": smiles,
+          "pdb_id": null,
+          "quick_fact": `A standard high-yield inorganic/organic compound studied in secondary chemistry. Formula: ${item.formula}`,
+          "properties": item.classification === "Organic" 
+            ? "Physical crystalline\nSolid substance with high relative molecular stability\nSoluble in organic solvents" 
+            : "Physical crystalline\nInorganic mineral substance with standard physical crystalline framework",
+          "uses": "Educational chemistry research\nStoichiometry exercises\nExam preparation study",
+          "color": item.color
+        }, query));
+      }
+    }
+
+    // 3.8. Fallback to Gemini AI model search if live API key is defined
+    if (ai) {
+      try {
+        console.log(`[Gemini KYC] Querying AI model for multiple functional groups or custom compound: ${query}`);
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: `
+            Role & Objective:
+            You are the advanced chemical structure data retriever for the "Know Your Chemicals" app tool. Your sole responsibility is to provide accurate, high-quality, large-scale 2D structural diagram image URLs for ANY requested compound. You must seamlessly handle everything from basic compounds to highly complex organic molecules with multiple functional groups and advanced inorganic compounds using precise naming systems.
+
+            Language Constraint:
+            CRITICAL: You must respond ONLY in English. Do not use Hindi, Hinglish, or any other language under any circumstances. All JSON keys and text values must be strictly in professional English.
+
+            Dual-Naming Sourcing Strategy (No SMILES URLs):
+            - For Everyday/Common Compounds: If the compound has a globally recognized common name (e.g., Aspirin, Caffeine, Paracetamol, Water), you must provide BOTH its common name and its precise systematic IUPAC name. Construct the primary URL using the verified common name.
+            - For Complex & Multi-Functional Compounds: For complex organic compounds containing multiple functional groups (e.g., Salicylic Acid, Lactic Acid, Citric Acid, etc.), or specific inorganic molecules where common names fail or don't exist, you MUST determine and utilize the exact systematic IUPAC Name to build the structure URL. This ensures PubChem resolves the multi-functional layout without errors.
+
+            Image Size & Formatting Rules:
+            To ensure the structure is large, highly visible, zoomed-in, and perfectly fits the app's display box without shrinking, you must explicitly append the ?image_size=600x600 parameter to every constructed PubChem URL.
+
+            URL Construction Rules:
+            - Common Name URL Route: https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/[Common_Name]/PNG?image_size=600x600
+            - IUPAC Name URL Route: https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/[IUPAC_Name]/PNG?image_size=600x600
+
+            Strict Output Constraints:
+            - NEVER attempt to draw chemical structures using text characters or ASCII art.
+            - NEVER hallucinate or guess a structure link. Only build valid, standardized database URLs using sanitized names.
+
+            Analyze the following chemical or compound query: "${query}"
+            Identify if it contains multiple functional groups. If so, clearly outline all of them in the "classification_reason".
+            
+            Return the full detailed profile strictly as a JSON matching this TypeScript schema:
+            
+            interface KYCResult {
+              common_name: string; // Common name or query name capitalized (e.g. "Salicylic Acid")
+              iupac_name: string; // IUPAC systematic name (e.g. "2-hydroxybenzoic acid")
+              chemical_formula: string; // Standard molecular formula (e.g. "C7H6O3")
+              molecular_weight: string; // Molecular weight with units (e.g. "138.12 g/mol")
+              chemical_type: string; // Class of compound (e.g. "Beta Hydroxy Acid (BHA)")
+              classification: "Organic" | "Inorganic"; // Must be either "Organic" or "Inorganic"
+              classification_reason: string; // Explain the carbon framework, and identify all functional groups present in detail (e.g. contains both carboxylic acid and phenol functional groups)
+              smiles_notation: string; // Canonical SMILES string
+              pdb_id: string | null; // Leave as null or provide a valid PDB ID
+              quick_fact: string; // 1-2 sentences of interesting chemical or historical fact
+              color: string; // Physical color and state (e.g. "White needle-like crystals")
+              properties: string; // Multi-line physical properties (separated by \n)
+              uses: string; // Multi-line common uses and applications (separated by \n)
+              requested_compound: string; // Original search term entered by the user
+              primary_structure_url: string; // PubChem 2D PNG URL using the most reliable name with ?image_size=600x600
+              fallback_iupac_url: string; // PubChem 2D PNG URL using IUPAC systematic name with ?image_size=600x600
+              source_credit: string; // Set to "National Institutes of Health (NIH) - PubChem"
+              element_category?: "Metal" | "Non-metal" | "Metalloid"; // For pure elements of the periodic table
+              atomic_number?: number; // For pure elements of the periodic table
+              atomic_mass?: string; // For pure elements of the periodic table
+            }
+          `,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                common_name: { type: Type.STRING },
+                iupac_name: { type: Type.STRING },
+                chemical_formula: { type: Type.STRING },
+                molecular_weight: { type: Type.STRING },
+                chemical_type: { type: Type.STRING },
+                classification: { type: Type.STRING, enum: ["Organic", "Inorganic"] },
+                classification_reason: { type: Type.STRING },
+                smiles_notation: { type: Type.STRING },
+                pdb_id: { type: Type.STRING, nullable: true },
+                quick_fact: { type: Type.STRING },
+                color: { type: Type.STRING },
+                properties: { type: Type.STRING },
+                uses: { type: Type.STRING },
+                requested_compound: { type: Type.STRING },
+                primary_structure_url: { type: Type.STRING },
+                fallback_iupac_url: { type: Type.STRING },
+                source_credit: { type: Type.STRING },
+                element_category: { type: Type.STRING, enum: ["Metal", "Non-metal", "Metalloid"] },
+                atomic_number: { type: Type.INTEGER },
+                atomic_mass: { type: Type.STRING }
+              },
+              required: [
+                "common_name",
+                "iupac_name",
+                "chemical_formula",
+                "molecular_weight",
+                "chemical_type",
+                "classification",
+                "classification_reason",
+                "smiles_notation",
+                "quick_fact",
+                "color",
+                "properties",
+                "uses",
+                "requested_compound",
+                "primary_structure_url",
+                "fallback_iupac_url",
+                "source_credit"
+              ]
+            }
+          }
+        });
+        
+        const text = response.text?.trim();
+        if (text) {
+          const data = JSON.parse(text);
+          return res.json(enrichKYCResultWithStructureUrls(data, query));
+        }
+      } catch (err: any) {
+        console.error("[Gemini KYC Error] Falling back to 404", err);
+      }
+    }
+
+    // 4. If still not matched, do not analyze it. Return clear error.
+    return res.status(404).json({ error: "This compound is not in our database." });
+  });
+
+  // Request Registration OTP for the phone number
+  app.post("/api/otp/send", async (req, res) => {
+    const { email, phone } = req.body;
+    if (!email || !phone) {
+      return res.status(400).json({ error: "Email and Phone Number are both required to dispatch verification codes." });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    const phoneTrimmed = phone.trim();
+
+    const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
+    if (existingUser) {
+      return res.status(400).json({ error: "This email address is already registered inside Ray-Optica." });
+    }
+
+    // Generate random 4-digit mobile verification code
+    const phoneOtp = String(Math.floor(1000 + Math.random() * 9000));
+
+    // Store in-memory for 10-minutes duration
+    pendingOtps.set(emailNormalized, {
+      emailOtp: "", // unused
+      phoneOtp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      phone: phoneTrimmed
+    });
+
+    sendSimulatedEmail(
+      phoneTrimmed,
+      "💬 Mobile SMS Verification Code - Ray-Optica",
+      `[Ray-Optica Mobile Gateway] Your mobile verification code is: ${phoneOtp}. Valid for 10 minutes.`,
+      'otp'
+    );
+
+    console.log(`[OTP Generated] Phone OTP: ${phoneOtp} for ${emailNormalized}`);
+
+    return res.json({
+      success: true,
+      message: "Simulated Mobile SMS OTP code generated successfully!",
+      codes: {
+        phoneOtp
+      }
+    });
+  });
+
+  // User Profile registration (Requires Phone OTP + Phone Number)
+  app.post("/api/register", async (req, res) => {
+    const { name, email, password, phone, phoneOtp, studentClass } = req.body;
+
+    if (!name || !email || !password || !phone || !phoneOtp) {
+      return res.status(400).json({ error: "Please complete all fields and verify your phone number using the OTP prior to registering." });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    if (emailNormalized === "rohit13513@gmail.com") {
+      return res.status(400).json({ error: "Owner account is already bootstrapped. Please log in directly." });
+    }
+
+    const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
+    if (existingUser) {
+      return res.status(400).json({ error: "An account with this email address is already registered." });
+    }
+
+    // Verify OTP tokens
+    const pending = pendingOtps.get(emailNormalized);
+    if (!pending) {
+      return res.status(400).json({ error: "OTP sessions have expired or been misplaced. Please click 'Send Verification OTP' to dispatch codes again." });
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingOtps.delete(emailNormalized);
+      return res.status(400).json({ error: "Your OTP verification code has expired. Please request a new one." });
+    }
+
+    if (pending.phoneOtp !== String(phoneOtp).trim()) {
+      return res.status(400).json({ error: "Invalid Phone OTP. Please double-check your mobile simulation code and enter again." });
+    }
+
+    // OTP keys are valid! Discard pending session.
+    pendingOtps.delete(emailNormalized);
+
+    const targetPhone = phone.trim();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // User is created strictly with 'pending' status by direct instruction.
+    // "Whoever registers, their approval must first come to me via email."
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("users")
+      .insert({
+        name: name.trim(),
+        email: emailNormalized,
+        phone: targetPhone,
+        password_hash: passwordHash,
+        status: "pending", // ALWAYS pending first!
+        devices: [],
+        role: "student",
+        student_class: studentClass || "10th"
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error inserting new user:", insertError?.message);
+      return res.status(500).json({ error: "Failed to create account. Please try again." });
+    }
+
+    const newUser = mapUserRow(insertedRow);
+
+    // Send notification email to Rohit (Owner) with dynamic click-to-approve links
+    const requestHost = `${req.protocol}://${req.get('host')}`;
+    const appUrl = (process.env.APP_URL || requestHost || "").replace(/\/$/, "");
+    const approveUrl = `${appUrl}/api/user/approve-external?email=${encodeURIComponent(newUser.email)}`;
+
+    const textBody = `Hello Rohit,\n\nA new student has successfully completed verification and submitted their registration request:\n\n` +
+      `- Name: ${newUser.name}\n` +
+      `- Email Address: ${newUser.email}\n` +
+      `- Phone Number: ${newUser.phone}\n` +
+      `- Class Level: ${newUser.studentClass || "10th"}\n` +
+      `- Status: PENDING INBOX APPROVAL\n\n` +
+      `Review and approve this registration instantly:\n` +
+      `👉 Click Approve directly inside the platform or click here to approve via your email client:\n` +
+      `${approveUrl}\n\n` +
+      `Warm regards,\nRay-Optica System Daemon`;
+
+    const htmlBody = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #1e293b; background-color: #f8fafc; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+        <h2 style="color: #0f172a; margin-top: 0; font-size: 20px; font-weight: 700; border-bottom: 2px solid #22d3ee; padding-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          📚 New Ray-Optica Student Enrollment
+        </h2>
+        <p style="font-size: 15px; line-height: 1.5; color: #334155; margin-bottom: 20px;">
+          Hello Rohit, a new student has successfully completed verification/OTP validation and submitted an enrollment request:
+        </p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden;">
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; width: 35%; background-color: #f8fafc;">Full Name:</td>
+            <td style="padding: 12px 16px; font-size: 14px; color: #0f172a;">${newUser.name}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; background-color: #f8fafc;">Email Address:</td>
+            <td style="padding: 12px 16px; font-size: 14px; color: #0f172a;">${newUser.email}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; background-color: #f8fafc;">Phone Number:</td>
+            <td style="padding: 12px 16px; font-size: 14px; color: #0f172a;">${newUser.phone}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; background-color: #f8fafc;">Class:</td>
+            <td style="padding: 12px 16px; font-size: 14px; color: #0891b2; font-weight: 800;">Class ${newUser.studentClass || "10th"}</td>
+          </tr>
+        </table>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${approveUrl}" style="background-color: #0891b2; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(8, 145, 178, 0.3);">
+            ✅ APPROVE STUDENT NOW
+          </a>
+        </div>
+
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 0; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+          Note: If the button above doesn't open properly, copy and paste this URL direct into your web browser:<br/>
+          <a href="${approveUrl}" style="color: #0ea5e9; word-break: break-all;">${approveUrl}</a>
+        </p>
+      </div>
+    `;
+
+    sendSimulatedEmail(
+      "rohit13513@gmail.com",
+      `📝 Action Required: New Student Registry [${newUser.name}]`,
+      textBody,
+      'incoming',
+      htmlBody
+    );
+
+    return res.status(200).json({
+      message: "Registration completed after Phone OTP validation! Your profile is pending manual inbox review and approval by teacher Rohit. An email notification has been dispatched to Rohit.",
+      status: newUser.status,
+      user: newUser
+    });
+  });
+
+  // External GET entry point to approve students on a single click from incoming email CTA buttons
+  app.get("/api/user/approve-external", async (req, res) => {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).send("<h1>Missing mandatory email field</h1>");
+    }
+
+    const targetEmail = String(email).toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
+
+    if (!targetUser) {
+      return res.status(404).send(`<h1>Student profile associated with ${targetEmail} not found</h1>`);
+    }
+
+    await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
+
+    const congradsSubject = "🎉 Account Approved: Welcome to Ray-Optica!";
+    const congradsBody = `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray-Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the Ray-Optica portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray-Optica Team`;
+
+    // Notify student as well
+    sendSimulatedEmail(
+      targetEmail,
+      congradsSubject,
+      congradsBody,
+      'outgoing'
+    );
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Ray-Optica Approvals</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              background-color: #050912;
+              color: #f8fafc;
+              margin: 0;
+              padding: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              text-align: center;
+            }
+            .card {
+              background-color: #0b1329;
+              border: 1px solid #1e293b;
+              border-radius: 16px;
+              padding: 40px;
+              max-width: 480px;
+              box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            }
+            h1 {
+              color: #22d3ee;
+              font-size: 28px;
+              margin-bottom: 12px;
+            }
+            p {
+              color: #94a3b8;
+              font-size: 15px;
+              line-height: 1.6;
+              margin-bottom: 24px;
+            }
+            .badge {
+              display: inline-block;
+              background-color: #022c22;
+              color: #34d399;
+              font-weight: bold;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.1em;
+              padding: 6px 12px;
+              border-radius: 20px;
+              border: 1px solid #064e3b;
+              margin-bottom: 8px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="badge">Success</div>
+            <h1>Student Approved!</h1>
+            <p><strong>${targetUser.name}</strong> (${targetEmail}) has been successfully approved as a student on Ray-Optica. They can now access all resources, calculators, and simulators instantly!</p>
+            <p style="font-size: 13px; color: #475569;">You can safely close this browser window or return to the application layout.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  });
+
+  // Simulated direct email approval webhook for Rohit's Inbox Action Buttons
+  app.post("/api/simulated-email/approve", async (req, res) => {
+    const { studentEmail } = req.body;
+    if (!studentEmail) {
+      return res.status(400).json({ error: "Student email is required." });
+    }
+
+    const targetEmail = studentEmail.toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
+    if (!targetUser) {
+      return res.status(404).json({ error: "Student account not found in database." });
+    }
+
+    await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
+
+    // Send congrats notification email to Student
+    sendSimulatedEmail(
+      targetEmail,
+      "🎉 Account Approved: Welcome to Ray-Optica!",
+      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray-Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the Ray-Optica portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray-Optica Team`,
+      'outgoing'
+    );
+
+    return res.json({ success: true, message: `Successfully approved student: ${targetEmail}` });
+  });
+
+  // User Login & Device Limitation Gate
+  app.post("/api/login", async (req, res) => {
+    const { email, password, deviceId, deviceName } = req.body;
+
+    if (!email || !password || !deviceId) {
+      return res.status(400).json({ error: "Missing required parameters: email, password, and deviceId are mandatory." });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    const isTestAccount = emailNormalized === "test@rayoptica.com";
+    const { data: userRow } = await supabase.from("users").select("*").eq("email", emailNormalized).maybeSingle();
+
+    if (!userRow) {
+      return res.status(401).json({ error: "No user found with this email. Please check spelling or register." });
+    }
+
+    const passwordMatches = await bcrypt.compare(password, userRow.password_hash);
+    if (!passwordMatches) {
+      return res.status(401).json({ error: "Invalid password. Please try again." });
+    }
+
+    if (userRow.status === "pending") {
+      return res.status(403).json({ error: "Registration is pending approval. Please ask Rohit (Owner) to approve your account." });
+    }
+
+    if (userRow.status === "rejected") {
+      return res.status(403).json({ error: "Your access has been suspended or rejected by the owner." });
+    }
+
+    // Exquisite Device Type validation: Mobile Phone, Laptop, Tablet
+    const allowedDevices = ["Mobile Phone", "Laptop", "Tablet"];
+    if (!isTestAccount && userRow.role !== "admin" && (!deviceName || !allowedDevices.includes(deviceName))) {
+      return res.status(400).json({
+        error: "Access Denied: Ray-Optica is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
+      });
+    }
+
+    // Check device limitations
+    const devices: DeviceSession[] = userRow.devices || [];
+    const existingDeviceIdx = devices.findIndex((d) => d.deviceId === deviceId);
+
+    if (existingDeviceIdx !== -1) {
+      // Device is already registered, update last used timestamp
+      devices[existingDeviceIdx].lastUsed = new Date().toISOString();
+      if (deviceName) {
+        devices[existingDeviceIdx].deviceName = deviceName;
+      }
+    } else {
+      // New device is attempting to log in. Must check max limit of 3 (unless test account).
+      if (!isTestAccount && devices.length >= 3 && userRow.role !== "admin") {
+        return res.status(403).json({
+          error: "Permission Denied: This account is already authorized on the maximum of 3 devices. To log in here, please contact the owner to sign out or reset one of your devices."
+        });
+      }
+      // Add new device
+      devices.push({
+        deviceId,
+        deviceName: deviceName || "Laptop",
+        lastUsed: new Date().toISOString()
+      });
+    }
+
+    await supabase.from("users").update({ devices }).eq("email", emailNormalized);
+
+    // Return authenticated user state without payload password
+    const safeUser = mapUserRow({ ...userRow, devices });
+    return res.status(200).json({
+      message: "Login successful!",
+      user: safeUser
+    });
+  });
+
+  // ── HOMEWORK UPLOAD & REVIEW ──
+
+  // Student submits homework: one or more images (merged into a single PDF) or one PDF
+  app.post("/api/homework/upload", (req, res, next) => {
+    homeworkUpload.array("files", 10)(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded file(s)." });
+      next();
+    });
+  }, async (req, res) => {
+    const { email, subject, assignmentId } = req.body;
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (!email || files.length === 0) {
+      return res.status(400).json({ error: "Email and at least one homework file are required." });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", emailNormalized).maybeSingle();
+    if (!targetUser) {
+      return res.status(404).json({ error: "Student account not found." });
+    }
+    if (targetUser.status !== "approved") {
+      return res.status(403).json({ error: "Only approved students can submit homework." });
+    }
+
+    const pdfCount = files.filter((f) => f.mimetype === "application/pdf").length;
+    if (pdfCount > 0 && files.length > 1) {
+      return res.status(400).json({ error: "Please upload either multiple images or a single PDF, not a mix." });
+    }
+
+    let finalBuffer: Buffer;
+    let finalMimetype: string;
+    let finalExt: string;
+
+    if (files.length === 1) {
+      finalBuffer = files[0].buffer;
+      finalMimetype = files[0].mimetype;
+      finalExt = finalMimetype === "application/pdf" ? "pdf" : (finalMimetype.split("/")[1] || "jpg");
+    } else {
+      // Multiple images submitted together -- always merge into one PDF, one page per photo.
+      try {
+        finalBuffer = await mergeImagesToPdf(files.map((f) => ({ buffer: f.buffer })));
+      } catch (mergeErr: any) {
+        console.error("Error merging homework images into PDF:", mergeErr.message);
+        return res.status(500).json({ error: "Failed to combine the uploaded images into a PDF." });
+      }
+      finalMimetype = "application/pdf";
+      finalExt = "pdf";
+    }
+
+    const filePath = `${emailNormalized}/${Date.now()}-submission.${finalExt}`;
+
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, finalBuffer, {
+      contentType: finalMimetype,
+    });
+    if (uploadError) {
+      console.error("Homework file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload homework file. Please try again." });
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("homework_submissions")
+      .insert({
+        student_email: emailNormalized,
+        file_path: filePath,
+        subject: subject ? String(subject).trim() : null,
+        assignment_id: assignmentId ? String(assignmentId) : null,
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error saving homework submission record:", insertError?.message);
+      return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
+    }
+
+    return res.json({ success: true, submission: mapHomeworkRow(insertedRow) });
+  });
+
+  // Student views their own homework submission history
+  app.get("/api/homework/mine", async (req, res) => {
+    const email = String(req.query.email || "").toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: "Email is required." });
+
+    const { data: rows } = await supabase
+      .from("homework_submissions")
+      .select("*")
+      .eq("student_email", email)
+      .order("submitted_at", { ascending: false });
+
+    const submissions = await Promise.all((rows || []).map(async (r) => {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
+      return mapHomeworkRow(r, signed?.signedUrl);
+    }));
+
+    return res.json({ submissions });
+  });
+
+  // Admin views every student's homework submissions
+  app.get("/api/admin/homework", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    const [{ data: rows }, { data: userRows }, { data: assignmentRows }] = await Promise.all([
+      supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(300),
+      supabase.from("users").select("email, name"),
+      supabase.from("homework_assignments").select("id, title"),
+    ]);
+
+    const nameByEmail = new Map((userRows || []).map((u: any) => [u.email, u.name]));
+    const titleById = new Map((assignmentRows || []).map((a: any) => [a.id, a.title]));
+
+    const submissions = await Promise.all((rows || []).map(async (r) => {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
+      return {
+        ...mapHomeworkRow(r, signed?.signedUrl),
+        studentName: nameByEmail.get(r.student_email) || r.student_email,
+        assignmentTitle: r.assignment_id ? (titleById.get(r.assignment_id) || null) : null,
+      };
+    }));
+
+    return res.json({ submissions });
+  });
+
+  // Admin creates a homework assignment for students to see
+  app.post("/api/admin/homework/assign", (req, res, next) => {
+    homeworkUpload.single("file")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded file." });
+      next();
+    });
+  }, async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { title, description, subject, targetClass } = req.body;
+    if (!title) return res.status(400).json({ error: "Assignment title is required." });
+
+    let filePath: string | null = null;
+    if (req.file) {
+      const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      filePath = `assignments/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+      });
+      if (uploadError) {
+        console.error("Assignment file upload error:", uploadError.message);
+        return res.status(500).json({ error: "Failed to upload assignment file." });
+      }
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("homework_assignments")
+      .insert({
+        title: String(title).trim(),
+        description: description ? String(description).trim() : null,
+        subject: subject ? String(subject).trim() : null,
+        target_class: targetClass || "All",
+        file_path: filePath,
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error creating homework assignment:", insertError?.message);
+      return res.status(500).json({ error: "Failed to save homework assignment." });
+    }
+
+    let fileUrl: string | null = null;
+    if (filePath) {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(filePath, 3600);
+      fileUrl = signed?.signedUrl || null;
+    }
+
+    return res.json({ success: true, assignment: mapAssignmentRow(insertedRow, fileUrl) });
+  });
+
+  // Everyone (students + admin) can view the list of posted homework assignments
+  app.get("/api/homework/assignments", async (req, res) => {
+    const { data: rows } = await supabase
+      .from("homework_assignments")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    const assignments = await Promise.all((rows || []).map(async (r) => {
+      let fileUrl: string | null = null;
+      if (r.file_path) {
+        const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
+        fileUrl = signed?.signedUrl || null;
+      }
+      return mapAssignmentRow(r, fileUrl);
+    }));
+
+    return res.json({ assignments });
+  });
+
+  // Admin deletes a homework assignment
+  app.post("/api/admin/homework/delete-assignment", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Assignment id is required." });
+
+    await supabase.from("homework_assignments").delete().eq("id", id);
+    return res.json({ success: true });
+  });
+
+  // Publicly queryable simulated alerts for sandbox verification
+  app.get("/api/public/logs", async (req, res) => {
+    const { data: logRows } = await supabase
+      .from("email_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    return res.json({
+      emailLogs: (logRows || []).map((r) => ({
+        id: r.id, to: r.to_email, subject: r.subject, body: r.body, timestamp: r.created_at, type: r.type
+      }))
+    });
+  });
+
+  // ── ADMIN PROTECTED ENDPOINTS ──
+  // Checks admin authorization headers / payload parameter
+  function checkAdminAuth(req: express.Request, res: express.Response) {
+    const requester = (req.headers["x-admin-email"] as string || "").toLowerCase().trim();
+    if (requester !== "rohit13513@gmail.com") {
+      res.status(403).json({ error: "Forbidden: Rohit (Owner) privileges required to execute this operation." });
+      return false;
+    }
+    return true;
+  }
+
+  // Admin Dashboard Config read
+  app.get("/api/admin/dashboard", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    const [{ data: userRows }, { data: inviteRows }, { data: logRows }] = await Promise.all([
+      supabase.from("users").select("*"),
+      supabase.from("invite_codes").select("*").order("created_at", { ascending: false }),
+      supabase.from("email_logs").select("*").order("created_at", { ascending: false }).limit(200),
+    ]);
+
+    return res.json({
+      users: (userRows || []).map(mapUserRow),
+      inviteCodes: (inviteRows || []).map(mapInviteRow),
+      emailLogs: (logRows || []).map((r) => ({
+        id: r.id, to: r.to_email, subject: r.subject, body: r.body, timestamp: r.created_at, type: r.type
+      }))
+    });
+  });
+
+  // Approved a dynamic registration request
+  app.post("/api/admin/approve-user", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Target email parameter is required." });
+
+    const targetEmail = email.toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
+
+    // Send congrats notification email to Student
+    sendSimulatedEmail(
+      targetEmail,
+      "🎉 Account Approved: Welcome to Ray Optica",
+      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray Optica Academy`,
+      'outgoing'
+    );
+
+    return res.json({ success: true, message: `Successfully approved student: ${targetEmail}` });
+  });
+
+  // Suspended or Rejected a user registration / login
+  app.post("/api/admin/reject-user", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Target email parameter is required." });
+
+    const targetEmail = email.toLowerCase().trim();
+    if (targetEmail === "rohit13513@gmail.com") {
+      return res.status(400).json({ error: "Action blocked: The owner account cannot be suspended or rejected." });
+    }
+
+    const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    await supabase.from("users").update({ status: "rejected" }).eq("email", targetEmail);
+
+    // Send disapproval notification email to Student
+    sendSimulatedEmail(
+      targetEmail,
+      "🚫 Account Request Disapproved - Ray Optica",
+      `Dear ${targetUser.name},\n\nWe regret to inform you that your registration request for Ray Optica has been disapproved/suspended. If you believe this is a clerical error, please reach out to your instructor Rohit directly.\n\nBest regards,\nRay Optica Support`,
+      'outgoing'
+    );
+
+    return res.json({ success: true, message: `Successfully deactivated/rejected: ${targetEmail}` });
+  });
+
+  // Reset/Clear registered devices for a user
+  app.post("/api/admin/reset-devices", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Target email is required." });
+
+    const targetEmail = email.toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("email").eq("email", targetEmail).maybeSingle();
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    await supabase.from("users").update({ devices: [] }).eq("email", targetEmail);
+    return res.json({ success: true, message: `Cleared all registered devices for: ${targetEmail}` });
+  });
+
+  // Generate simple sharable Access Code (Invite Code)
+  app.post("/api/admin/create-invite", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { studentName } = req.body;
+    const nameStr = studentName ? String(studentName).trim() : "Custom Student Link";
+
+    // Generate clean simple code, like OPT-XXXX
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let randomPart = "";
+    for (let i = 0; i < 4; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const generatedCode = `OPT-${randomPart}`;
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("invite_codes")
+      .insert({ code: generatedCode, created_for: nameStr, status: "active" })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error creating invite code:", insertError?.message);
+      return res.status(500).json({ error: "Failed to create invite code." });
+    }
+
+    return res.json({ success: true, code: mapInviteRow(insertedRow) });
+  });
+
+  // Delete/Revoke invite rules
+  app.post("/api/admin/delete-invite", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: "Invite code parameter is mandatory." });
+
+    const targetCode = code.toUpperCase().trim();
+    const { data: existingInvite } = await supabase.from("invite_codes").select("code").eq("code", targetCode).maybeSingle();
+    if (!existingInvite) {
+      return res.status(404).json({ error: "Invite code not found." });
+    }
+
+    await supabase.from("invite_codes").delete().eq("code", targetCode);
+    return res.json({ success: true, message: `Successfully revoked code: ${targetCode}` });
+  });
+
+  // ── VITE MIDDLEWARE OR STATIC SERVER ──
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Optics App Server] Full-Stack listening at http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();

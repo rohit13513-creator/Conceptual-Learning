@@ -1,0 +1,339 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  background-color: #0d1321;
+}
+
+/* Custom scrollbars for a sleek tech feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.4);
+}
+
+/* Visible, polished scrollbar behavior for the topics navigation list */
+#learn-optics-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+#learn-optics-sidebar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+}
+#learn-optics-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.35);
+  border-radius: 3px;
+}
+#learn-optics-sidebar:hover::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.6);
+}
+#learn-optics-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.85);
+}
+
+/* ── LIGHT MODE COMPREHENSIVE OVERRIDES ── */
+html.light,
+html.light body,
+html.light .bg-\[\#060b14\],
+html.light .bg-\[\#0d1321\],
+html.light .bg-\[\#0d1424\],
+html.light .bg-\[\#070b14\],
+html.light .bg-slate-900,
+html.light .bg-slate-950,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-950\/90,
+html.light .bg-\[\#090e1a\],
+html.light .bg-\[\#0a0f1a\],
+html.light .bg-\[\#111827\],
+html.light .bg-\[\#0f172a\],
+html.light .bg-\[\#090f1d\],
+html.light .bg-\[\#11192e\],
+html.light .bg-\[\#0a101f\],
+html.light .bg-\[\#152033\],
+html.light .bg-\[\#15213d\],
+html.light .bg-\[\#0b1222\],
+html.light .bg-\[\#122b3f\],
+html.light .bg-\[\#080d19\],
+html.light .bg-\[\#0c1322\],
+html.light .bg-\[\#0e1628\],
+html.light .bg-\[\#111c34\],
+html.light .bg-\[\#1b2536\],
+html.light .bg-\[\#182235\],
+html.light .bg-\[\#202d46\],
+html.light .bg-\[\#121c2e\],
+html.light .bg-\[\#0c1017\],
+html.light .bg-zinc-900,
+html.light .bg-zinc-800,
+html.light .bg-neutral-900,
+html.light .bg-neutral-800,
+html.light .bg-gray-900,
+html.light .bg-gray-800 {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Card and dashboard panel backdrops */
+html.light .bg-slate-900\/80,
+html.light .bg-slate-950\/80,
+html.light .bg-\[\#0e1726\]\/85,
+html.light .bg-slate-900\/50,
+html.light .bg-slate-950\/40,
+html.light .bg-\[\#101726\]\/30,
+html.light .bg-\[\#101726\]\/40,
+html.light .bg-\[\#101726\]\/45,
+html.light .bg-\[\#070c17\]\/30,
+html.light .bg-\[\#0b1222\]\/40,
+html.light .bg-\[\#0b1222\]\/80,
+html.light .bg-\[\#0b1222\]\/50,
+html.light .bg-\[\#111626\]\/80,
+html.light .bg-slate-950\/50,
+html.light .bg-slate-950\/60,
+html.light .bg-slate-950\/70,
+html.light .bg-slate-950\/85,
+html.light .bg-\[\#0c101b\],
+html.light .bg-slate-900\/60,
+html.light .bg-slate-800,
+html.light .bg-slate-850,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/50,
+html.light .bg-\[\#152033\],
+html.light .bg-slate-900\/30,
+html.light .bg-slate-950\/30,
+html.light .bg-slate-950\/20,
+html.light .bg-slate-900\/20,
+html.light .bg-\[\#121c2e\]\/40,
+html.light .bg-\[\#121c2e\]\/60,
+html.light .bg-\[\#121c2e\]\/80,
+html.light .bg-\[\#0e1628\]\/60,
+html.light .bg-\[\#1d121c\]\/40,
+html.light .bg-\[\#0c1322\]\/40,
+html.light .bg-cyan-950\/20,
+html.light .bg-amber-950\/20,
+html.light .bg-rose-950\/20,
+html.light .bg-rose-950\/40,
+html.light .bg-emerald-950\/20,
+html.light .bg-purple-950\/20,
+html.light .bg-zinc-900\/60,
+html.light .bg-zinc-900\/40,
+html.light .bg-blue-900,
+html.light .bg-blue-850 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Form controls, input elements and lists */
+html.light select,
+html.light input,
+html.light textarea,
+html.light .bg-slate-950,
+html.light .bg-slate-900,
+html.light .bg-slate-950\/40,
+html.light .bg-slate-900\/40 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Borders */
+html.light .border-slate-800,
+html.light .border-slate-850,
+html.light .border-slate-900,
+html.light .border-slate-700,
+html.light .border-slate-800\/40,
+html.light .border-slate-800\/50,
+html.light .border-slate-800\/60,
+html.light .border-slate-850\/50,
+html.light .border-slate-705,
+html.light .border-slate-750,
+html.light .border-slate-700\/60,
+html.light .border-cyan-800\/40,
+html.light .border-cyan-800\/60,
+html.light .border-red-900\/40,
+html.light .border-teal-900\/40,
+html.light .border-cyan-900\/40,
+html.light .border-slate-800\/80,
+html.light .border-slate-700\/80 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Text overrides: light-toned/neon gray/white to deep slate */
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-250,
+html.light .text-slate-300,
+html.light .text-slate-400,
+html.light .text-white,
+html.light .text-gray-100,
+html.light .text-gray-200,
+html.light .text-gray-300,
+html.light .text-gray-400,
+html.light .text-zinc-100,
+html.light .text-zinc-200,
+html.light .text-zinc-300,
+html.light .text-neutral-100,
+html.light .text-neutral-200,
+html.light .text-neutral-300,
+html.light .text-cyan-100,
+html.light .text-teal-100,
+html.light .text-emerald-100,
+html.light .text-slate-50,
+html.light .text-gray-50 {
+  color: #0f172a !important;
+}
+
+/* Medium gray / descriptions */
+html.light .text-slate-400,
+html.light .text-slate-500,
+html.light .text-gray-500,
+html.light .text-zinc-400,
+html.light .text-zinc-500,
+html.light .text-slate-350,
+html.light .text-slate-400\/80 {
+  color: #334155 !important;
+}
+
+/* Vibrant readable colors matching brand context */
+html.light .text-cyan-400,
+html.light .text-cyan-300,
+html.light .text-cyan-200,
+html.light .text-cyan-350,
+html.light .text-[#22d3ee] {
+  color: #0369a1 !important;
+}
+html.light .text-teal-400,
+html.light .text-teal-300,
+html.light .text-teal-200 {
+  color: #0f766e !important;
+}
+html.light .text-emerald-400,
+html.light .text-emerald-300,
+html.light .text-emerald-200 {
+  color: #047857 !important;
+}
+html.light .text-indigo-400,
+html.light .text-indigo-300,
+html.light .text-indigo-200 {
+  color: #4338ca !important;
+}
+html.light .text-purple-400,
+html.light .text-purple-300,
+html.light .text-purple-200 {
+  color: #7e22ce !important;
+}
+html.light .text-amber-400,
+html.light .text-amber-300,
+html.light .text-amber-200,
+html.light .text-yellow-400 {
+  color: #b45309 !important;
+}
+html.light .text-orange-400,
+html.light .text-orange-300,
+html.light .text-orange-200 {
+  color: #c2410c !important;
+}
+html.light .text-red-400,
+html.light .text-red-300 {
+  color: #b91c1c !important;
+}
+
+/* Icons / specific badges */
+html.light .text-cyan-400\/80,
+html.light .text-cyan-400\/40 {
+  color: rgba(3, 105, 161, 0.7) !important;
+}
+
+/* Translucent color overlays */
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/5,
+html.light .bg-cyan-500\/20,
+html.light .bg-cyan-500\/25,
+html.light .bg-cyan-400\/10 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+html.light .bg-teal-500\/10,
+html.light .bg-teal-500\/5 {
+  background-color: rgba(20, 184, 166, 0.12) !important;
+}
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/5 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+html.light .bg-indigo-500\/10,
+html.light .bg-indigo-500\/5 {
+  background-color: rgba(99, 102, 241, 0.12) !important;
+}
+
+/* Active buttons and gradient highlights */
+html.light .bg-gradient-to-r.from-cyan-400.to-teal-400 {
+  background-image: linear-gradient(to right, #0284c7, #0d9488) !important;
+  color: #ffffff !important;
+}
+
+html.light .hover\:bg-slate-800\/80:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* List elements, periodic groups and tables */
+html.light .bg-slate-900\/40,
+html.light .bg-slate-950\/40,
+html.light .hover\:bg-slate-900\/50:hover,
+html.light .hover\:bg-slate-850:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .bg-\[\#0d1424\] {
+  background-color: #ffffff !important;
+}
+
+html.light .border-cyan-500\/20,
+html.light .border-emerald-500\/20,
+html.light .border-teal-500\/20,
+html.light .border-purple-500\/20 {
+  border-color: rgba(14, 165, 233, 0.3) !important;
+}
+
+html.light svg.text-cyan-400 {
+  color: #0891b2 !important;
+}
+
+/* Force elements with dark headings to have clean readability */
+html.light .text-transparent {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+html.light .bg-clip-text {
+  background-clip: border-box !important;
+  -webkit-background-clip: border-box !important;
+  background-image: none !important;
+}
+
+/* Periodic table element boxes */
+html.light .bg-purple-950\/30 { background-color: rgba(216, 180, 254, 0.25) !important; color: #6b21a8 !important; border-color: rgba(168, 85, 247, 0.4) !important; }
+html.light .bg-blue-950\/30 { background-color: rgba(147, 197, 253, 0.25) !important; color: #1d4ed8 !important; border-color: rgba(59, 130, 246, 0.4) !important; }
+html.light .bg-emerald-950\/30 { background-color: rgba(167, 243, 208, 0.25) !important; color: #047857 !important; border-color: rgba(16, 185, 129, 0.4) !important; }
+html.light .bg-amber-950\/30 { background-color: rgba(253, 230, 138, 0.25) !important; color: #b45309 !important; border-color: rgba(245, 158, 11, 0.4) !important; }
+html.light .bg-red-950\/30 { background-color: rgba(254, 202, 202, 0.25) !important; color: #b91c1c !important; border-color: rgba(239, 68, 68, 0.4) !important; }
+html.light .bg-orange-950\/30 { background-color: rgba(255, 237, 213, 0.25) !important; color: #c2410c !important; border-color: rgba(249, 115, 22, 0.4) !important; }
+html.light .bg-pink-950\/30 { background-color: rgba(251, 207, 232, 0.25) !important; color: #be123c !important; border-color: rgba(236, 72, 153, 0.4) !important; }
+html.light .bg-rose-950\/30 { background-color: rgba(255, 228, 230, 0.25) !important; color: #9f1239 !important; border-color: rgba(244, 63, 94, 0.4) !important; }
+html.light .bg-cyan-950\/30 { background-color: rgba(207, 250, 254, 0.25) !important; color: #0e7490 !important; border-color: rgba(6, 182, 212, 0.4) !important; }
+
