@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import nodemailer from "nodemailer";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
@@ -6728,6 +6727,10 @@ async function startServer() {
 
   // ── VITE MIDDLEWARE OR STATIC SERVER ──
   if (process.env.NODE_ENV !== "production") {
+    // Dynamically imported so vite (and its rollup native binary) never loads
+    // in production/serverless -- rollup ships platform-specific binaries and
+    // a lockfile generated on one OS can be missing another platform's binary.
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
