@@ -78,6 +78,8 @@ interface ForumThread {
   body: string;
   authorEmail: string;
   authorName: string;
+  imageUrl: string | null;
+  status: "pending" | "approved";
   createdAt: string;
 }
 
@@ -87,6 +89,8 @@ interface ForumReply {
   body: string;
   authorEmail: string;
   authorName: string;
+  imageUrl: string | null;
+  status: "pending" | "approved";
   createdAt: string;
 }
 
@@ -112,6 +116,17 @@ const AVATAR_BUCKET = "avatars";
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, matches the Storage bucket limit
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, or WEBP images are allowed."));
+  },
+});
+
+const FORUM_BUCKET = "forum";
+const forumUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/webp"];
     if (allowed.includes(file.mimetype)) cb(null, true);
@@ -270,6 +285,8 @@ function mapForumThreadRow(row: any): ForumThread {
     body: row.body,
     authorEmail: row.author_email,
     authorName: row.author_name,
+    imageUrl: row.image_url || null,
+    status: row.status,
     createdAt: row.created_at,
   };
 }
@@ -281,6 +298,8 @@ function mapForumReplyRow(row: any): ForumReply {
     body: row.body,
     authorEmail: row.author_email,
     authorName: row.author_name,
+    imageUrl: row.image_url || null,
+    status: row.status,
     createdAt: row.created_at,
   };
 }
@@ -6932,20 +6951,43 @@ function buildApp(): express.Express {
   });
 
   // ── FORUM (one shared forum, visible to every class and the admin) ──
+  // Student posts start "pending" and are invisible to everyone except their own author until
+  // an admin approves them; admin's own posts are auto-approved.
 
-  // List every thread, most recent first, with a reply count for each
+  async function uploadForumImage(file: Express.Multer.File, prefix: string): Promise<string | null> {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    const filePath = `${prefix}/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage.from(FORUM_BUCKET).upload(filePath, file.buffer, {
+      contentType: file.mimetype,
+    });
+    if (uploadError) {
+      console.error("Forum image upload error:", uploadError.message);
+      return null;
+    }
+    const { data: publicUrlData } = supabase.storage.from(FORUM_BUCKET).getPublicUrl(filePath);
+    return publicUrlData.publicUrl;
+  }
+
+  // List every thread visible to the requester (approved ones + their own pending ones),
+  // most recent first, with a count of approved replies for each.
   app.get("/api/forum/threads", async (req, res) => {
+    const requester = String(req.query.email || "").toLowerCase().trim();
+
     const [{ data: threadRows }, { data: replyRows }] = await Promise.all([
       supabase.from("forum_threads").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("forum_replies").select("thread_id"),
+      supabase.from("forum_replies").select("thread_id, status"),
     ]);
 
     const replyCountByThread = new Map<string, number>();
     (replyRows || []).forEach((r: any) => {
-      replyCountByThread.set(r.thread_id, (replyCountByThread.get(r.thread_id) || 0) + 1);
+      if (r.status === "approved") {
+        replyCountByThread.set(r.thread_id, (replyCountByThread.get(r.thread_id) || 0) + 1);
+      }
     });
 
-    const threads = (threadRows || []).map((t: any) => ({
+    const visible = (threadRows || []).filter((t: any) => t.status === "approved" || t.author_email === requester);
+
+    const threads = visible.map((t: any) => ({
       ...mapForumThreadRow(t),
       replyCount: replyCountByThread.get(t.id) || 0,
     }));
@@ -6953,11 +6995,23 @@ function buildApp(): express.Express {
     return res.json({ threads });
   });
 
-  // Start a new thread
-  app.post("/api/forum/threads", async (req, res) => {
+  // Start a new thread, with an optional image
+  app.post("/api/forum/threads", (req, res, next) => {
+    forumUpload.single("image")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded image." });
+      next();
+    });
+  }, async (req, res) => {
     const { title, body, authorEmail, authorName } = req.body;
     if (!title || !body || !authorEmail || !authorName) {
       return res.status(400).json({ error: "Title, body, and author details are required." });
+    }
+
+    const emailNormalized = String(authorEmail).toLowerCase().trim();
+    let imageUrl: string | null = null;
+    if (req.file) {
+      imageUrl = await uploadForumImage(req.file, "threads");
+      if (!imageUrl) return res.status(500).json({ error: "Failed to upload image." });
     }
 
     const { data: insertedRow, error: insertError } = await supabase
@@ -6965,8 +7019,10 @@ function buildApp(): express.Express {
       .insert({
         title: String(title).trim(),
         body: String(body).trim(),
-        author_email: String(authorEmail).toLowerCase().trim(),
+        author_email: emailNormalized,
         author_name: String(authorName).trim(),
+        image_url: imageUrl,
+        status: ADMIN_EMAILS.includes(emailNormalized) ? "approved" : "pending",
       })
       .select()
       .single();
@@ -6979,24 +7035,37 @@ function buildApp(): express.Express {
     return res.json({ success: true, thread: mapForumThreadRow(insertedRow) });
   });
 
-  // View one thread plus all of its replies
+  // View one thread plus the replies visible to the requester
   app.get("/api/forum/threads/:id", async (req, res) => {
     const { id } = req.params;
+    const requester = String(req.query.email || "").toLowerCase().trim();
+    const isAdmin = ADMIN_EMAILS.includes(requester);
+
     const [{ data: threadRow }, { data: replyRows }] = await Promise.all([
       supabase.from("forum_threads").select("*").eq("id", id).maybeSingle(),
       supabase.from("forum_replies").select("*").eq("thread_id", id).order("created_at", { ascending: true }),
     ]);
 
     if (!threadRow) return res.status(404).json({ error: "Thread not found." });
+    if (threadRow.status !== "approved" && threadRow.author_email !== requester && !isAdmin) {
+      return res.status(404).json({ error: "Thread not found." });
+    }
+
+    const visibleReplies = (replyRows || []).filter((r: any) => r.status === "approved" || r.author_email === requester || isAdmin);
 
     return res.json({
       thread: mapForumThreadRow(threadRow),
-      replies: (replyRows || []).map(mapForumReplyRow),
+      replies: visibleReplies.map(mapForumReplyRow),
     });
   });
 
-  // Reply to a thread
-  app.post("/api/forum/threads/:id/replies", async (req, res) => {
+  // Reply to a thread, with an optional image
+  app.post("/api/forum/threads/:id/replies", (req, res, next) => {
+    forumUpload.single("image")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded image." });
+      next();
+    });
+  }, async (req, res) => {
     const { id } = req.params;
     const { body, authorEmail, authorName } = req.body;
     if (!body || !authorEmail || !authorName) {
@@ -7006,13 +7075,22 @@ function buildApp(): express.Express {
     const { data: threadRow } = await supabase.from("forum_threads").select("id").eq("id", id).maybeSingle();
     if (!threadRow) return res.status(404).json({ error: "Thread not found." });
 
+    const emailNormalized = String(authorEmail).toLowerCase().trim();
+    let imageUrl: string | null = null;
+    if (req.file) {
+      imageUrl = await uploadForumImage(req.file, "replies");
+      if (!imageUrl) return res.status(500).json({ error: "Failed to upload image." });
+    }
+
     const { data: insertedRow, error: insertError } = await supabase
       .from("forum_replies")
       .insert({
         thread_id: id,
         body: String(body).trim(),
-        author_email: String(authorEmail).toLowerCase().trim(),
+        author_email: emailNormalized,
         author_name: String(authorName).trim(),
+        image_url: imageUrl,
+        status: ADMIN_EMAILS.includes(emailNormalized) ? "approved" : "pending",
       })
       .select()
       .single();
@@ -7023,6 +7101,47 @@ function buildApp(): express.Express {
     }
 
     return res.json({ success: true, reply: mapForumReplyRow(insertedRow) });
+  });
+
+  // Admin views every pending thread and reply awaiting approval
+  app.get("/api/admin/forum/pending", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    const [{ data: pendingThreads }, { data: pendingReplies }, { data: allThreads }] = await Promise.all([
+      supabase.from("forum_threads").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("forum_replies").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+      supabase.from("forum_threads").select("id, title"),
+    ]);
+
+    const titleById = new Map((allThreads || []).map((t: any) => [t.id, t.title]));
+
+    return res.json({
+      threads: (pendingThreads || []).map(mapForumThreadRow),
+      replies: (pendingReplies || []).map((r: any) => ({
+        ...mapForumReplyRow(r),
+        threadTitle: titleById.get(r.thread_id) || null,
+      })),
+    });
+  });
+
+  // Admin approves a pending thread
+  app.post("/api/admin/forum/approve-thread", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Thread id is required." });
+
+    await supabase.from("forum_threads").update({ status: "approved" }).eq("id", id);
+    return res.json({ success: true });
+  });
+
+  // Admin approves a pending reply
+  app.post("/api/admin/forum/approve-reply", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Reply id is required." });
+
+    await supabase.from("forum_replies").update({ status: "approved" }).eq("id", id);
+    return res.json({ success: true });
   });
 
   // Admin deletes a thread (its replies go with it via ON DELETE CASCADE)

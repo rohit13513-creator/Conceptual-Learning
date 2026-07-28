@@ -67,13 +67,17 @@ create table announcements (
   created_at timestamptz not null default now()
 );
 
--- 6. FORUM THREADS — one shared forum, visible to all classes and the admin
+-- 6. FORUM THREADS — one shared forum, visible to all classes and the admin.
+-- Student posts start "pending" and only appear to everyone once an admin approves them;
+-- admin's own posts are auto-approved. The author can always see their own pending post.
 create table forum_threads (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   body text not null,
   author_email text not null,
   author_name text not null,
+  image_url text,                           -- optional photo, public URL in the "forum" bucket
+  status text not null default 'pending',   -- pending | approved
   created_at timestamptz not null default now()
 );
 
@@ -84,6 +88,8 @@ create table forum_replies (
   body text not null,
   author_email text not null,
   author_name text not null,
+  image_url text,
+  status text not null default 'pending',
   created_at timestamptz not null default now()
 );
 

@@ -98,7 +98,8 @@ import {
   FlaskConical,
   Megaphone,
   Construction,
-  MessageSquare
+  MessageSquare,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
@@ -573,11 +574,16 @@ export default function App() {
   const [showNewThreadForm, setShowNewThreadForm] = useState(false);
   const [newThreadTitle, setNewThreadTitle] = useState('');
   const [newThreadBody, setNewThreadBody] = useState('');
+  const [newThreadImage, setNewThreadImage] = useState<File | null>(null);
   const [newThreadPosting, setNewThreadPosting] = useState(false);
   const [newThreadError, setNewThreadError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState('');
+  const [replyImage, setReplyImage] = useState<File | null>(null);
   const [replyPosting, setReplyPosting] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
+  const [forumPendingThreads, setForumPendingThreads] = useState<any[]>([]);
+  const [forumPendingReplies, setForumPendingReplies] = useState<any[]>([]);
+  const [forumPendingLoading, setForumPendingLoading] = useState(false);
 
   // Admin Dashboard States
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -889,7 +895,7 @@ export default function App() {
   const fetchForumThreads = async () => {
     setForumThreadsLoading(true);
     try {
-      const resp = await fetch('/api/forum/threads');
+      const resp = await fetch(`/api/forum/threads?email=${encodeURIComponent(user?.email || '')}`);
       const data = await resp.json();
       setForumThreads(data.threads || []);
     } catch (err) {
@@ -902,7 +908,7 @@ export default function App() {
   const fetchForumThreadDetail = async (id: string) => {
     setForumThreadLoading(true);
     try {
-      const resp = await fetch(`/api/forum/threads/${id}`);
+      const resp = await fetch(`/api/forum/threads/${id}?email=${encodeURIComponent(user?.email || '')}`);
       const data = await resp.json();
       if (resp.ok) {
         setForumThreadDetail(data.thread);
@@ -933,15 +939,19 @@ export default function App() {
     setNewThreadPosting(true);
     setNewThreadError(null);
     try {
-      const resp = await fetch('/api/forum/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newThreadTitle, body: newThreadBody, authorEmail: user.email, authorName: user.name })
-      });
+      const formData = new FormData();
+      formData.append('title', newThreadTitle);
+      formData.append('body', newThreadBody);
+      formData.append('authorEmail', user.email);
+      formData.append('authorName', user.name);
+      if (newThreadImage) formData.append('image', newThreadImage);
+
+      const resp = await fetch('/api/forum/threads', { method: 'POST', body: formData });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post thread.');
       setNewThreadTitle('');
       setNewThreadBody('');
+      setNewThreadImage(null);
       setShowNewThreadForm(false);
       fetchForumThreads();
     } catch (err: any) {
@@ -957,14 +967,17 @@ export default function App() {
     setReplyPosting(true);
     setReplyError(null);
     try {
-      const resp = await fetch(`/api/forum/threads/${forumActiveThreadId}/replies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: replyBody, authorEmail: user.email, authorName: user.name })
-      });
+      const formData = new FormData();
+      formData.append('body', replyBody);
+      formData.append('authorEmail', user.email);
+      formData.append('authorName', user.name);
+      if (replyImage) formData.append('image', replyImage);
+
+      const resp = await fetch(`/api/forum/threads/${forumActiveThreadId}/replies`, { method: 'POST', body: formData });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post reply.');
       setReplyBody('');
+      setReplyImage(null);
       fetchForumThreadDetail(forumActiveThreadId);
     } catch (err: any) {
       setReplyError(err.message);
@@ -981,21 +994,67 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ id })
       });
-      if (resp.ok) backToForumList();
+      if (resp.ok) { backToForumList(); fetchForumPending(); }
     } catch (err) {
       // Silent
     }
   };
 
   const handleDeleteForumReply = async (id: string) => {
-    if (!user || !forumActiveThreadId) return;
+    if (!user) return;
     try {
       const resp = await fetch('/api/admin/forum/delete-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ id })
       });
-      if (resp.ok) fetchForumThreadDetail(forumActiveThreadId);
+      if (resp.ok) {
+        if (forumActiveThreadId) fetchForumThreadDetail(forumActiveThreadId);
+        fetchForumPending();
+      }
+    } catch (err) {
+      // Silent
+    }
+  };
+
+  const fetchForumPending = async () => {
+    if (!user || !ADMIN_EMAILS.includes(user.email)) return;
+    setForumPendingLoading(true);
+    try {
+      const resp = await fetch('/api/admin/forum/pending', { headers: { 'x-admin-email': user.email } });
+      const data = await resp.json();
+      setForumPendingThreads(data.threads || []);
+      setForumPendingReplies(data.replies || []);
+    } catch (err) {
+      // Silent
+    } finally {
+      setForumPendingLoading(false);
+    }
+  };
+
+  const handleApproveForumThread = async (id: string) => {
+    if (!user) return;
+    try {
+      const resp = await fetch('/api/admin/forum/approve-thread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ id })
+      });
+      if (resp.ok) fetchForumPending();
+    } catch (err) {
+      // Silent
+    }
+  };
+
+  const handleApproveForumReply = async (id: string) => {
+    if (!user) return;
+    try {
+      const resp = await fetch('/api/admin/forum/approve-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ id })
+      });
+      if (resp.ok) fetchForumPending();
     } catch (err) {
       // Silent
     }
@@ -1224,6 +1283,7 @@ export default function App() {
       fetchAssignments();
       fetchAnnouncements();
       fetchMissingReport();
+      fetchForumPending();
     }
     if (activeView === 'profile' && user) {
       setProfileDob(user.dateOfBirth || '');
@@ -4244,10 +4304,16 @@ export default function App() {
                           </button>
                         )}
                       </div>
-                      <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                      <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
                         {forumThreadDetail.authorName} • {new Date(forumThreadDetail.createdAt).toLocaleString()}
+                        {forumThreadDetail.status === 'pending' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
+                        )}
                       </p>
                       <p className={`text-sm mt-3 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{forumThreadDetail.body}</p>
+                      {forumThreadDetail.imageUrl && (
+                        <img src={forumThreadDetail.imageUrl} alt="Attached" className="mt-3 rounded-xl max-h-80 border border-slate-800" />
+                      )}
                     </div>
 
                     <div className="space-y-2.5">
@@ -4264,8 +4330,16 @@ export default function App() {
                               </button>
                             )}
                           </div>
-                          <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{new Date(r.createdAt).toLocaleString()}</p>
+                          <p className={`text-[10px] font-mono flex items-center gap-1.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                            {new Date(r.createdAt).toLocaleString()}
+                            {r.status === 'pending' && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
+                            )}
+                          </p>
                           <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{r.body}</p>
+                          {r.imageUrl && (
+                            <img src={r.imageUrl} alt="Attached" className="mt-2 rounded-lg max-h-60 border border-slate-800" />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -4283,6 +4357,13 @@ export default function App() {
                           placeholder="Write a reply..."
                           className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                         />
+                        <div className="flex items-center gap-2">
+                          <label className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
+                            <ImageIcon className="w-3 h-3" /> {replyImage ? 'Change Image' : 'Add Image'}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setReplyImage(e.target.files?.[0] || null)} />
+                          </label>
+                          {replyImage && <span className="text-[10px] text-slate-500 truncate max-w-[160px]">{replyImage.name}</span>}
+                        </div>
                         <button
                           type="submit"
                           disabled={replyPosting}
@@ -4341,6 +4422,16 @@ export default function App() {
                       placeholder="Describe your doubt or what you'd like to discuss..."
                       className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                     />
+                    <div className="flex items-center gap-2">
+                      <label className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
+                        <ImageIcon className="w-3 h-3" /> {newThreadImage ? 'Change Image' : 'Add Image'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setNewThreadImage(e.target.files?.[0] || null)} />
+                      </label>
+                      {newThreadImage && <span className="text-[10px] text-slate-500 truncate max-w-[160px]">{newThreadImage.name}</span>}
+                    </div>
+                    <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Your post will be reviewed by an admin before it's visible to others.
+                    </p>
                     <button
                       type="submit"
                       disabled={newThreadPosting}
@@ -4366,21 +4457,31 @@ export default function App() {
                       onClick={() => openForumThread(t.id)}
                       className={`w-full text-left border rounded-2xl p-4 shadow-lg cursor-pointer transition ${isLightMode ? 'bg-white border-slate-200 hover:border-cyan-400' : 'bg-slate-900/60 border-slate-800 hover:border-cyan-500/50'}`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{t.title}</p>
-                        {isAdmin && (
-                          <span
-                            onClick={(e) => { e.stopPropagation(); handleDeleteForumThread(t.id); }}
-                            className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0"
-                            title="Delete thread"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </span>
+                      <div className="flex items-start gap-3">
+                        {t.imageUrl && (
+                          <img src={t.imageUrl} alt="Attached" className="w-14 h-14 rounded-lg object-cover border border-slate-800 shrink-0" />
                         )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{t.title}</p>
+                            {isAdmin && (
+                              <span
+                                onClick={(e) => { e.stopPropagation(); handleDeleteForumThread(t.id); }}
+                                className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0"
+                                title="Delete thread"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 flex-wrap ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                            {t.authorName} • {new Date(t.createdAt).toLocaleDateString()} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
+                            {t.status === 'pending' && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
-                      <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                        {t.authorName} • {new Date(t.createdAt).toLocaleDateString()} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
-                      </p>
                     </button>
                   ))}
                 </div>
@@ -4970,6 +5071,66 @@ export default function App() {
                       )}
                     </div>
                   ))
+                )}
+              </div>
+            </div>
+
+            {/* Pending Forum Posts */}
+            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400">
+                <MessageSquare className="w-4 h-4 text-amber-400" /> Pending Forum Posts
+              </h3>
+              <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>New threads and replies waiting for your approval before they become visible.</p>
+
+              <div className={`mt-4 divide-y max-h-[420px] overflow-y-auto ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                {forumPendingLoading ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">Loading...</p>
+                ) : forumPendingThreads.length === 0 && forumPendingReplies.length === 0 ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">Nothing pending -- all caught up.</p>
+                ) : (
+                  <>
+                    {forumPendingThreads.map((t) => (
+                      <div key={t.id} className="py-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`text-xs font-black uppercase tracking-wider text-cyan-400 mb-0.5`}>New Thread</p>
+                            <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{t.title}</p>
+                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{t.authorName} • {new Date(t.createdAt).toLocaleString()}</p>
+                            <p className={`text-xs mt-1 whitespace-pre-wrap ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{t.body}</p>
+                            {t.imageUrl && <img src={t.imageUrl} alt="Attached" className="mt-1.5 rounded-lg max-h-40 border border-slate-800" />}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button onClick={() => handleApproveForumThread(t.id)} className="p-1.5 rounded hover:bg-emerald-500/10 text-slate-500 hover:text-emerald-400 cursor-pointer" title="Approve">
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDeleteForumThread(t.id)} className="p-1.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer" title="Delete">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {forumPendingReplies.map((r) => (
+                      <div key={r.id} className="py-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`text-xs font-black uppercase tracking-wider text-cyan-400 mb-0.5`}>Reply {r.threadTitle ? `to "${r.threadTitle}"` : ''}</p>
+                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{r.authorName} • {new Date(r.createdAt).toLocaleString()}</p>
+                            <p className={`text-xs mt-1 whitespace-pre-wrap ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{r.body}</p>
+                            {r.imageUrl && <img src={r.imageUrl} alt="Attached" className="mt-1.5 rounded-lg max-h-40 border border-slate-800" />}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button onClick={() => handleApproveForumReply(r.id)} className="p-1.5 rounded hover:bg-emerald-500/10 text-slate-500 hover:text-emerald-400 cursor-pointer" title="Approve">
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDeleteForumReply(r.id)} className="p-1.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer" title="Delete">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             </div>
