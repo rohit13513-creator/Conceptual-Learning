@@ -417,6 +417,8 @@ function PrintView({ grade }: PrintViewProps) {
   );
 }
 
+const ADMIN_EMAILS = ['rohit13513@gmail.com', 'conceptuallearningonline@gmail.com'];
+
 export default function App() {
   const [isLightMode, setIsLightMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -482,7 +484,7 @@ export default function App() {
   // Solve NCERT, Question Bank, and Self Assessment -- no switcher to other classes is shown.
   // Simulators remain open to every logged-in user regardless of class. The admin and shared
   // test accounts are exempt so they can freely QA any class's material.
-  const CLASS_EXEMPT_EMAILS = ['rohit13513@gmail.com', 'test@rayoptica.com'];
+  const CLASS_EXEMPT_EMAILS = [...ADMIN_EMAILS, 'test@rayoptica.com'];
   const isClassExempt = !user || CLASS_EXEMPT_EMAILS.includes(user.email);
   const CLASS_TRACK_MAP: Record<string, '8th' | '9th' | '10th' | '12th' | 'unavailable'> = {
     'VIII': '8th',
@@ -786,7 +788,7 @@ export default function App() {
 
   // Admins dashboard fetchers
   const fetchAdminData = async () => {
-    if (!user || user.email !== 'rohit13513@gmail.com') return;
+    if (!user || !ADMIN_EMAILS.includes(user.email)) return;
     setAdminLoading(true);
     setAdminError(null);
     try {
@@ -832,7 +834,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeView === 'admin' && user?.email === 'rohit13513@gmail.com') {
+    if (activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email)) {
       fetchAdminData();
     }
   }, [activeView]);
@@ -1003,7 +1005,7 @@ export default function App() {
       fetchAssignments();
       fetchAnnouncements();
     }
-    if (activeView === 'admin' && user?.email === 'rohit13513@gmail.com') {
+    if (activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email)) {
       fetchAssignments();
       fetchAnnouncements();
       fetchMissingReport();
@@ -1924,8 +1926,8 @@ export default function App() {
             <span>About Us</span>
           </button>
           
-          {/* Owner Admin panel only visible to rohit13513@gmail.com */}
-          {user?.email === 'rohit13513@gmail.com' && (
+          {/* Admin panel only visible to admin accounts */}
+          {user?.email && ADMIN_EMAILS.includes(user.email) && (
             <button 
               onClick={() => { changeView('admin'); setOpenMenu(null); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
@@ -3767,7 +3769,7 @@ export default function App() {
         </div>
       )}
 
-      {activeView === 'admin' && user?.email === 'rohit13513@gmail.com' && (
+      {activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email) && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
           <div className="max-w-6xl mx-auto space-y-8">
 
@@ -3779,7 +3781,7 @@ export default function App() {
                   🛡️ Core Administrator Controls [Owner Only]
                 </span>
                 <h1 className={`text-2xl sm:text-3xl font-black tracking-tight leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                  Welcome back, Rohit!
+                  Welcome back, {(user?.name || 'Admin').split(' ')[0]}!
                 </h1>
                 <p className={`text-xs sm:text-sm font-semibold leading-relaxed max-w-xl ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                   Approve/reject pending user registries, reset active device limits, and manage shareable Invite/Access Codes for WhatsApp & Instagram.

@@ -72,6 +72,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
+const ADMIN_EMAILS = ["rohit13513@gmail.com", "conceptuallearningonline@gmail.com"];
+
 const HOMEWORK_BUCKET = "homework";
 const homeworkUpload = multer({
   storage: multer.memoryStorage(),
@@ -6143,7 +6145,7 @@ function buildApp(): express.Express {
     }
 
     const emailNormalized = email.toLowerCase().trim();
-    if (emailNormalized === "rohit13513@gmail.com") {
+    if (ADMIN_EMAILS.includes(emailNormalized)) {
       return res.status(400).json({ error: "Owner account is already bootstrapped. Please log in directly." });
     }
 
@@ -6254,13 +6256,15 @@ function buildApp(): express.Express {
       </div>
     `;
 
-    sendSimulatedEmail(
-      "rohit13513@gmail.com",
-      `📝 Action Required: New Student Registry [${newUser.name}]`,
-      textBody,
-      'incoming',
-      htmlBody
-    );
+    for (const adminEmail of ADMIN_EMAILS) {
+      sendSimulatedEmail(
+        adminEmail,
+        `📝 Action Required: New Student Registry [${newUser.name}]`,
+        textBody,
+        'incoming',
+        htmlBody
+      );
+    }
 
     return res.status(200).json({
       message: "Registration completed after Phone OTP validation! Your profile is pending manual review and approval by your teacher. A notification has been dispatched.",
@@ -6803,7 +6807,7 @@ function buildApp(): express.Express {
   // Checks admin authorization headers / payload parameter
   function checkAdminAuth(req: express.Request, res: express.Response) {
     const requester = (req.headers["x-admin-email"] as string || "").toLowerCase().trim();
-    if (requester !== "rohit13513@gmail.com") {
+    if (!ADMIN_EMAILS.includes(requester)) {
       res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
       return false;
     }
@@ -6861,7 +6865,7 @@ function buildApp(): express.Express {
     if (!email) return res.status(400).json({ error: "Target email parameter is required." });
 
     const targetEmail = email.toLowerCase().trim();
-    if (targetEmail === "rohit13513@gmail.com") {
+    if (ADMIN_EMAILS.includes(targetEmail)) {
       return res.status(400).json({ error: "Action blocked: The owner account cannot be suspended or rejected." });
     }
 
