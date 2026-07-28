@@ -9,6 +9,7 @@ import { AnalysisDashboard } from './components/AnalysisDashboard';
 import { Quiz } from './components/Quiz';
 import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
 import LearnChemistry from './components/LearnChemistry';
+import { LearnBiology } from './components/LearnBiology';
 import { CompetitiveOptics } from './components/CompetitiveOptics';
 import { AboutUs } from './components/AboutUs';
 import ReactionSimulator from './components/ReactionSimulator';
@@ -91,7 +92,12 @@ import {
   Sparkles,
   Sun,
   Moon,
-  Upload
+  Upload,
+  Calculator,
+  Dna,
+  FlaskConical,
+  Megaphone,
+  Construction
 } from 'lucide-react';
 
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
@@ -433,10 +439,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -478,21 +484,21 @@ export default function App() {
   // test accounts are exempt so they can freely QA any class's material.
   const CLASS_EXEMPT_EMAILS = ['rohit13513@gmail.com', 'test@rayoptica.com'];
   const isClassExempt = !user || CLASS_EXEMPT_EMAILS.includes(user.email);
-  const CLASS_TRACK_MAP: Record<string, '8th' | '10th' | '12th' | 'unavailable'> = {
+  const CLASS_TRACK_MAP: Record<string, '8th' | '9th' | '10th' | '12th' | 'unavailable'> = {
     'VIII': '8th',
-    'IX': 'unavailable',
+    'IX': '9th',
     'X': '10th',
     'XI': 'unavailable',
     'XII': '12th',
   };
-  const studentTrack: '8th' | '10th' | '12th' | 'unavailable' | null = isClassExempt
+  const studentTrack: '8th' | '9th' | '10th' | '12th' | 'unavailable' | null = isClassExempt
     ? null
     : (CLASS_TRACK_MAP[user?.studentClass || ''] || 'unavailable');
 
   // Shared filter used by every class-scoped nav dropdown (Notes/Solve NCERT/Question Bank/Self
   // Assessment): exempt accounts see every item unchanged; locked students only ever see the
   // item(s) tagged with their own track, so there is never a switcher to another class's content.
-  type ClassNavItem = { label: string; grade: '8th' | '10th' | '12th'; onClick: () => void };
+  type ClassNavItem = { label: string; grade: '8th' | '9th' | '10th' | '12th'; onClick: () => void };
   const filterNavItemsByClass = (items: ClassNavItem[]): ClassNavItem[] => {
     if (isClassExempt) return items;
     if (!studentTrack || studentTrack === 'unavailable') return [];
@@ -543,6 +549,8 @@ export default function App() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [newStudentName, setNewStudentName] = useState('');
+  const [checkNowLoading, setCheckNowLoading] = useState(false);
+  const [checkNowResult, setCheckNowResult] = useState<string | null>(null);
 
   // Homework Upload States
   const homeworkFileInputRef = useRef<HTMLInputElement>(null);
@@ -556,15 +564,30 @@ export default function App() {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
 
   // Homework Assignment States (posted by admin, seen by students)
+  const todayDateStr = new Date().toISOString().slice(0, 10);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDescription, setAssignDescription] = useState('');
   const [assignSubject, setAssignSubject] = useState('');
-  const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '10th' | '12th'>('All');
+  const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
+  const [assignAssignedDate, setAssignAssignedDate] = useState(todayDateStr);
   const [assignFile, setAssignFile] = useState<File | null>(null);
   const [assignUploading, setAssignUploading] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
+
+  // Missing-submissions report (admin only)
+  const [missingReport, setMissingReport] = useState<any[]>([]);
+  const [missingReportLoading, setMissingReportLoading] = useState(false);
+
+  // Announcements / Latest Updates States (posted by admin, seen by everyone)
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announceTitle, setAnnounceTitle] = useState('');
+  const [announceMessage, setAnnounceMessage] = useState('');
+  const [announceTargetClass, setAnnounceTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
+  const [announceUploading, setAnnounceUploading] = useState(false);
+  const [announceError, setAnnounceError] = useState<string | null>(null);
 
   // Device Fingerprinting and Session Relaunch Effect
   useEffect(() => {
@@ -790,6 +813,24 @@ export default function App() {
     }
   };
 
+  const handleCheckHomeworkNow = async () => {
+    if (!user) return;
+    setCheckNowLoading(true);
+    try {
+      const resp = await fetch('/api/admin/homework/check-now', {
+        method: 'POST',
+        headers: { 'x-admin-email': user.email },
+      });
+      const data = await resp.json();
+      setCheckNowResult(resp.ok ? `Checked ${data.checked} submission(s).` : (data.error || 'Failed to run check.'));
+      fetchAdminData();
+    } catch (err: any) {
+      setCheckNowResult(err.message);
+    } finally {
+      setCheckNowLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeView === 'admin' && user?.email === 'rohit13513@gmail.com') {
       fetchAdminData();
@@ -814,6 +855,67 @@ export default function App() {
     return assignments.filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack);
   }, [assignments, isClassExempt, studentTrack]);
 
+  const formatDeadline = (deadline?: string) => {
+    if (!deadline) return null;
+    return new Date(deadline).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+  };
+
+  // Announcements / Latest Updates (posted by admin, visible to everyone logged in)
+  const fetchAnnouncements = async () => {
+    setAnnouncementsLoading(true);
+    try {
+      const resp = await fetch('/api/announcements');
+      const data = await resp.json();
+      setAnnouncements(data.announcements || []);
+    } catch (err) {
+      // Silent — list simply stays empty on network failure.
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  };
+
+  const visibleAnnouncements = useMemo(() => {
+    return announcements.filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack);
+  }, [announcements, isClassExempt, studentTrack]);
+
+  const handlePostAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !announceTitle.trim() || !announceMessage.trim()) return;
+    setAnnounceUploading(true);
+    setAnnounceError(null);
+    try {
+      const resp = await fetch('/api/admin/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ title: announceTitle, message: announceMessage, targetClass: announceTargetClass })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to post announcement.');
+      setAnnounceTitle('');
+      setAnnounceMessage('');
+      setAnnounceTargetClass('All');
+      fetchAnnouncements();
+    } catch (err: any) {
+      setAnnounceError(err.message);
+    } finally {
+      setAnnounceUploading(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!user) return;
+    try {
+      const resp = await fetch('/api/admin/announcements/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ id })
+      });
+      if (resp.ok) fetchAnnouncements();
+    } catch (err) {
+      // Silent
+    }
+  };
+
   const handleAssignHomework = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !assignTitle.trim()) return;
@@ -825,6 +927,7 @@ export default function App() {
       formData.append('description', assignDescription);
       formData.append('subject', assignSubject);
       formData.append('targetClass', assignTargetClass);
+      formData.append('assignedDate', assignAssignedDate);
       if (assignFile) formData.append('file', assignFile);
       const resp = await fetch('/api/admin/homework/assign', {
         method: 'POST',
@@ -837,8 +940,10 @@ export default function App() {
       setAssignDescription('');
       setAssignSubject('');
       setAssignTargetClass('All');
+      setAssignAssignedDate(todayDateStr);
       setAssignFile(null);
       fetchAssignments();
+      fetchMissingReport();
     } catch (err: any) {
       setAssignError(err.message);
     } finally {
@@ -854,9 +959,23 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ id })
       });
-      if (resp.ok) fetchAssignments();
+      if (resp.ok) { fetchAssignments(); fetchMissingReport(); }
     } catch (err) {
       // Silent
+    }
+  };
+
+  const fetchMissingReport = async () => {
+    if (!user) return;
+    setMissingReportLoading(true);
+    try {
+      const resp = await fetch('/api/admin/homework/missing', { headers: { 'x-admin-email': user.email } });
+      const data = await resp.json();
+      setMissingReport(data.report || []);
+    } catch (err) {
+      // Silent
+    } finally {
+      setMissingReportLoading(false);
     }
   };
 
@@ -880,10 +999,16 @@ export default function App() {
       fetchMyHomework();
       fetchAssignments();
     }
+    if ((activeView === 'hub' || activeView === 'latestNews') && user) {
+      fetchAssignments();
+      fetchAnnouncements();
+    }
     if (activeView === 'admin' && user?.email === 'rohit13513@gmail.com') {
       fetchAssignments();
+      fetchAnnouncements();
+      fetchMissingReport();
     }
-  }, [activeView]);
+  }, [activeView, user]);
 
   const handleHomeworkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -900,7 +1025,7 @@ export default function App() {
       const resp = await fetch('/api/homework/upload', { method: 'POST', body: formData });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to upload homework.');
-      setHomeworkSuccess('Homework submitted successfully! Rohit will review it soon.');
+      setHomeworkSuccess('Homework submitted successfully! It will be checked soon.');
       setHomeworkFiles([]);
       if (homeworkFileInputRef.current) homeworkFileInputRef.current.value = '';
       setHomeworkSubject('');
@@ -998,6 +1123,32 @@ export default function App() {
   // Class X now has two subjects (Physics/Optics and Chemistry) for Solve NCERT, Question Bank,
   // and Self Assessment -- this tracks which one is currently active, alongside `preparingFor`.
   const [qbSubject, setQbSubject] = useState<'physics' | 'chemistry'>('physics');
+
+  // "Start Studying" subject picker: which class the picker is showing subjects for. Locked
+  // students always see their own registered class; exempt (admin/test) accounts pick one first.
+  const [studyingClass, setStudyingClass] = useState<'8th' | '9th' | '10th' | null>(null);
+  // Which subject on the Start Studying page just showed the "coming soon" message, if any.
+  const [underConstructionSubject, setUnderConstructionSubject] = useState<string | null>(null);
+
+  // Which (class, subject) combinations have real notes built already -- everything else shows
+  // an "under construction" message instead of navigating away.
+  const SUBJECT_AVAILABILITY: Record<'8th' | '9th' | '10th', Record<'Maths' | 'Physics' | 'Chemistry' | 'Biology', boolean>> = {
+    '8th': { Maths: false, Physics: true, Chemistry: false, Biology: false },
+    '9th': { Maths: false, Physics: false, Chemistry: false, Biology: true },
+    '10th': { Maths: false, Physics: true, Chemistry: true, Biology: false },
+  };
+
+  const openSubject = (cls: '8th' | '9th' | '10th', subject: 'Maths' | 'Physics' | 'Chemistry' | 'Biology') => {
+    if (!SUBJECT_AVAILABILITY[cls][subject]) {
+      setUnderConstructionSubject(subject);
+      return;
+    }
+    setUnderConstructionSubject(null);
+    setPreparingFor(cls);
+    if (subject === 'Physics') changeView('learn');
+    else if (subject === 'Chemistry') changeView('chemNotes');
+    else if (subject === 'Biology') changeView('bioNotes');
+  };
 
   // Whenever a non-exempt student logs in, default their content track to their own registered
   // class instead of the hardcoded '10th' default -- this only sets the default; class-locked nav
@@ -1492,6 +1643,7 @@ export default function App() {
           {(() => {
             const notesItems = filterNavItemsByClass([
               { label: 'Class VIII', grade: '8th', onClick: () => { setPreparingFor('8th'); changeView('learn'); } },
+              { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); changeView('bioNotes'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('learn'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('chemNotes'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('competitive'); } },
@@ -1506,7 +1658,7 @@ export default function App() {
                     setOpenMenu(openMenu === 'notes' ? null : 'notes');
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'competitive')
+                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'competitive')
                       ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
                       : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
                   }`}
@@ -1830,100 +1982,155 @@ export default function App() {
       </header>
         {/* ── 1. HOME HUB INITIAL VIEW PANEL ── */}
       {activeView === 'hub' && (
-        <div className={`flex-1 overflow-y-auto px-4 py-12 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
-          <div className="max-w-4xl mx-auto space-y-8">
-            
-            {/* Options Selection Panel: "Optics Grade Curriculum" */}
-            <div className={`relative rounded-3xl overflow-hidden border p-8 sm:p-10 shadow-2xl transition-all duration-300 ${
-              isLightMode 
-                ? 'bg-gradient-to-br from-white via-sky-50 to-blue-50/50 border-slate-200' 
-                : 'bg-gradient-to-r from-slate-900 via-slate-950 to-indigo-950 border border-slate-800'
-            }`}>
-              <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-10 w-60 h-60 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
-              
-              <div className="space-y-6 relative z-10">
-                <div className="space-y-2">
-                  <span className={`text-xs uppercase font-mono font-black px-2.5 py-0.5 rounded border ${
-                    isLightMode 
-                      ? 'text-cyan-800 bg-cyan-100 border-cyan-300' 
-                      : 'text-cyan-400 bg-cyan-400/10 border border-cyan-500/20'
-                  }`}>
-                    Learning Dashboard
-                  </span>
-                  <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>Select Course Level:</h1>
-                  <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Choose a pathway below to view study notes and interactive optical simulators mapped directly to your grade curriculum.</p>
-                </div>
+        <div className={`flex-1 overflow-y-auto px-4 py-10 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
+          <div className="max-w-5xl mx-auto space-y-6">
 
-                {/* specialized program grids -- registered students only ever see their own
-                    registered class's card; the admin/test accounts see all three as before. */}
-                <div className={`grid grid-cols-1 gap-4 pt-2 ${isClassExempt ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-sm'}`}>
-                  {[
-                    { id: '8th' as const, label: 'Optics for Class 8', description: 'Fundamentals of straight-light propagation, reflection laws, shadows, and human vision.' },
-                    { id: '10th' as const, label: 'Optics for Class 10', description: 'Complete study of concave/convex mirrors, lens refraction, and CBSE NCERT board modules.' },
-                    { id: '12th' as const, label: 'Optics for Competitions', description: 'Advanced wave & geometric optics for JEE/NEET, Lens formulas, prisms, and premium ray tracing.' }
-                  ].filter(option => isClassExempt || option.id === studentTrack).map((option) => {
-                    const isActive = preparingFor === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        onClick={() => {
-                          setPreparingFor(option.id);
-                          setSelectedSubject('Science');
-                          setSelectedChapter('Light');
-                          changeView('portal');
-                        }}
-                        className={`flex flex-col items-start p-5 rounded-2xl border text-left transition duration-200 cursor-pointer focus:outline-none relative group overflow-hidden ${
-                          isActive
-                            ? isLightMode
-                              ? 'bg-gradient-to-br from-cyan-100 to-blue-200 text-slate-900 border-cyan-400 shadow-xl shadow-cyan-300/20'
-                              : 'bg-gradient-to-br from-cyan-500/20 to-blue-600/20 text-white border-cyan-400 shadow-xl shadow-cyan-500/10'
-                            : isLightMode
-                              ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300'
-                              : 'bg-slate-950/70 border-slate-800/80 text-slate-400 hover:bg-slate-900/80 hover:text-slate-200 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 mb-2">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black shrink-0 ${
-                            isActive 
-                              ? isLightMode ? 'bg-cyan-200 text-cyan-800' : 'bg-cyan-500/20 text-cyan-400' 
-                              : isLightMode ? 'bg-slate-100 text-slate-500' : 'bg-slate-900 text-slate-500 group-hover:text-slate-400'
-                          }`}>
-                            {option.id === '8th' && '🕯️'}
-                            {option.id === '10th' && '🔍'}
-                            {option.id === '12th' && '🚀'}
-                          </div>
-                          <span className={`text-sm sm:text-base font-extrabold tracking-tight ${
-                            isActive 
-                              ? isLightMode ? 'text-cyan-850' : 'text-cyan-400' 
-                              : isLightMode ? 'text-slate-700 group-hover:text-slate-900' : 'text-slate-350 group-hover:text-slate-200'
-                          }`}>
-                            {option.label}
-                          </span>
-                        </div>
-                        <p className={`text-[11px] font-medium leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
-                          {option.description}
-                        </p>
-                        {isActive && (
-                          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-cyan-400 to-teal-400" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="space-y-1">
+              <span className={`text-xs uppercase font-mono font-black px-2.5 py-0.5 rounded border ${isLightMode ? 'text-cyan-800 bg-cyan-100 border-cyan-300' : 'text-cyan-400 bg-cyan-400/10 border border-cyan-500/20'}`}>
+                Home
+              </span>
+              <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>Welcome back, {user.name.split(' ')[0]}!</h1>
+            </div>
 
-                {!isClassExempt && (!studentTrack || studentTrack === 'unavailable') && (
-                  <div className={`rounded-2xl border p-6 text-center space-y-2 ${isLightMode ? 'bg-amber-50 border-amber-300' : 'bg-amber-950/20 border-amber-500/20'}`}>
-                    <p className={`text-sm font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>Content for your class is coming soon</p>
-                    <p className={`text-xs font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-200/80'}`}>
-                      We're still building dedicated study notes, question banks, and self-assessment tests for your registered class. In the meantime, all Simulators remain fully open to you -- use the Simulator menu above to keep exploring.
-                    </p>
-                  </div>
-                )}
+            {/* Start Studying -- primary call to action */}
+            <button
+              onClick={() => { setStudyingClass(null); setUnderConstructionSubject(null); changeView('startStudying'); }}
+              className={`w-full flex items-center gap-4 p-6 sm:p-7 rounded-3xl border text-left transition duration-200 cursor-pointer relative overflow-hidden group ${
+                isLightMode
+                  ? 'bg-gradient-to-br from-cyan-500 to-teal-500 border-cyan-400 text-white hover:brightness-105'
+                  : 'bg-gradient-to-r from-cyan-500/20 via-teal-500/10 to-slate-900 border-cyan-500/30 text-white hover:border-cyan-400'
+              }`}
+            >
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isLightMode ? 'bg-white/20' : 'bg-cyan-500/20'}`}>
+                <GraduationCap className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <p className="text-lg sm:text-xl font-black tracking-tight">Start Studying</p>
+                <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-white/90' : 'text-slate-300'}`}>Open your Maths, Physics, Chemistry & Biology notes</p>
+              </div>
+              <ChevronRight className="w-6 h-6 shrink-0 opacity-80 group-hover:translate-x-1 transition-transform" />
+            </button>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+              {/* Latest Updates box */}
+              <div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                  <Megaphone className="w-4 h-4 text-amber-400" /> Latest Updates
+                </h2>
+                <div className={`mt-3 divide-y flex-1 ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                  {announcementsLoading ? (
+                    <p className="text-[11px] font-semibold text-slate-500 py-3">Loading updates...</p>
+                  ) : visibleAnnouncements.length === 0 ? (
+                    <p className="text-[11px] font-semibold text-slate-500 py-3">No updates posted yet.</p>
+                  ) : (
+                    visibleAnnouncements.slice(0, 3).map((a) => (
+                      <div key={a.id} className="py-2.5">
+                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                        <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <button onClick={() => changeView('latestNews')} className={`mt-2 text-[11px] font-black self-start cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                  View all updates →
+                </button>
+              </div>
+
+              {/* Homework Assigned box */}
+              <div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                  <FileText className="w-4 h-4 text-amber-400" /> Homework Assigned
+                </h2>
+                <div className={`mt-3 divide-y flex-1 ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                  {assignmentsLoading ? (
+                    <p className="text-[11px] font-semibold text-slate-500 py-3">Loading assignments...</p>
+                  ) : visibleAssignments.length === 0 ? (
+                    <p className="text-[11px] font-semibold text-slate-500 py-3">No homework assigned yet.</p>
+                  ) : (
+                    visibleAssignments.slice(0, 3).map((a) => (
+                      <div key={a.id} className="py-2.5">
+                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                        {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
+                        {a.deadline && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(a.deadline)}</p>}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <button onClick={() => changeView('homework')} className={`mt-2 text-[11px] font-black self-start cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                  View all homework →
+                </button>
               </div>
             </div>
 
+            {/* Upload Homework box */}
+            <div className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Upload className="w-4 h-4 text-cyan-400" /> Upload Homework
+              </h2>
 
+              {homeworkError && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{homeworkError}</div>
+              )}
+              {homeworkSuccess && (
+                <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2.5">{homeworkSuccess}</div>
+              )}
+
+              <form onSubmit={handleHomeworkUpload} className="space-y-3">
+                {visibleAssignments.length > 0 && (
+                  <div className="space-y-1">
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For? (optional)</label>
+                    <select
+                      value={selectedAssignmentId}
+                      onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                    >
+                      <option value="">General submission (not tied to a listed assignment)</option>
+                      {visibleAssignments.map((a) => (
+                        <option key={a.id} value={a.id}>{a.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10MB per file)</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+                    onChange={(e) => setHomeworkFiles(Array.from(e.target.files || []))}
+                    required
+                    className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                  />
+                  {homeworkFiles.length > 0 && (
+                    <ul className="space-y-1 pt-1">
+                      {homeworkFiles.map((f, i) => (
+                        <li key={i} className={`flex items-center justify-between text-[10px] font-mono px-2 py-1 rounded ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-950 text-slate-400'}`}>
+                          <span className="truncate">{f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setHomeworkFiles(homeworkFiles.filter((_, idx) => idx !== i))}
+                            className="text-red-400 hover:text-red-300 cursor-pointer ml-2 shrink-0"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {homeworkFiles.length > 1 && (
+                    <p className="text-[10px] font-semibold text-cyan-400">{homeworkFiles.length} photos will be combined into one PDF automatically.</p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={homeworkUploading || homeworkFiles.length === 0}
+                  className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
+                </button>
+              </form>
+            </div>
 
           </div>
         </div>
@@ -2159,6 +2366,11 @@ export default function App() {
           onCompleteNotes={() => { setQbSubject('chemistry'); changeView('ncert'); }}
           onGoToSelfAssessment={() => { setQbSubject('chemistry'); changeView('assessment'); }}
         />
+      )}
+
+      {/* ── 1D. LEARN BIOLOGY (CLASS IX) STUDY MODULE ── */}
+      {activeView === 'bioNotes' && (
+        <LearnBiology isLightMode={isLightMode} />
       )}
 
       {/* ── 2. SOLVED NCERT QUESTIONS EXPLORER ── */}
@@ -3267,7 +3479,7 @@ export default function App() {
 
             <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <FileText className="w-5 h-5 text-amber-400" /> Homework Assigned by Rohit
+                <FileText className="w-5 h-5 text-amber-400" /> Homework Assigned
               </h2>
               {assignmentsLoading ? (
                 <div className="text-center py-4 text-xs font-semibold text-slate-500">Loading assignments...</div>
@@ -3284,6 +3496,7 @@ export default function App() {
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
                           {new Date(a.createdAt).toLocaleDateString()} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
                         </p>
+                        {a.deadline && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(a.deadline)}</p>}
                       </div>
                       {a.fileUrl && (
                         <a href={a.fileUrl} target="_blank" rel="noreferrer" className="p-1.5 rounded hover:bg-cyan-500/10 text-cyan-400 shrink-0 cursor-pointer" title="View assignment file">
@@ -3301,7 +3514,7 @@ export default function App() {
                 <Upload className="w-5 h-5 text-cyan-400" /> Submit Homework
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. Rohit will review it and send feedback here.
+                Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. It will be checked and feedback will be sent here.
               </p>
 
               {homeworkError && (
@@ -3418,6 +3631,138 @@ export default function App() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {activeView === 'startStudying' && (() => {
+        const effectiveClass: '8th' | '9th' | '10th' | null = !isClassExempt
+          ? (studentTrack === '8th' || studentTrack === '9th' || studentTrack === '10th' ? studentTrack : null)
+          : studyingClass;
+
+        const SUBJECT_CARDS: { id: 'Maths' | 'Physics' | 'Chemistry' | 'Biology'; icon: React.ElementType; color: string }[] = [
+          { id: 'Maths', icon: Calculator, color: 'from-violet-500/20 to-purple-600/20 border-violet-400 text-violet-400' },
+          { id: 'Physics', icon: Zap, color: 'from-cyan-500/20 to-blue-600/20 border-cyan-400 text-cyan-400' },
+          { id: 'Chemistry', icon: FlaskConical, color: 'from-emerald-500/20 to-teal-600/20 border-emerald-400 text-emerald-400' },
+          { id: 'Biology', icon: Dna, color: 'from-green-500/20 to-lime-600/20 border-green-400 text-green-400' },
+        ];
+
+        return (
+          <div className={`flex-1 overflow-y-auto px-4 py-12 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
+            <div className="max-w-4xl mx-auto space-y-8">
+              <div className="space-y-2">
+                <span className={`text-xs uppercase font-mono font-black px-2.5 py-0.5 rounded border ${isLightMode ? 'text-cyan-800 bg-cyan-100 border-cyan-300' : 'text-cyan-400 bg-cyan-400/10 border border-cyan-500/20'}`}>
+                  Start Studying
+                </span>
+                <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>
+                  {effectiveClass ? `Class ${effectiveClass.replace('th', '')} -- Choose a Subject` : 'Which class are you studying?'}
+                </h1>
+                <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                  {effectiveClass ? 'Pick a subject to open its study notes.' : 'Select a class to see its available subjects.'}
+                </p>
+              </div>
+
+              {!isClassExempt && effectiveClass === null && (
+                <div className={`rounded-2xl border p-6 text-center space-y-2 ${isLightMode ? 'bg-cyan-50 border-cyan-300' : 'bg-cyan-950/20 border-cyan-500/20'}`}>
+                  <p className={`text-sm font-black ${isLightMode ? 'text-cyan-800' : 'text-cyan-300'}`}>Start Studying covers Class 8, 9 and 10</p>
+                  <p className={`text-xs font-semibold ${isLightMode ? 'text-cyan-700' : 'text-cyan-200/80'}`}>Your registered track isn't part of this yet -- use the Notes menu above for your content.</p>
+                </div>
+              )}
+
+              {isClassExempt && effectiveClass === null && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {(['8th', '9th', '10th'] as const).map((cls) => (
+                    <button
+                      key={cls}
+                      onClick={() => setStudyingClass(cls)}
+                      className={`flex flex-col items-center justify-center gap-2 p-8 rounded-2xl border text-center transition duration-200 cursor-pointer ${
+                        isLightMode ? 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300' : 'bg-slate-950/70 border-slate-800/80 hover:bg-slate-900/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <GraduationCap className={`w-8 h-8 ${isLightMode ? 'text-cyan-600' : 'text-cyan-400'}`} />
+                      <span className={`text-lg font-black ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>Class {cls.replace('th', '')}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {effectiveClass !== null && (
+                <div className="space-y-4">
+                  {isClassExempt && (
+                    <button
+                      onClick={() => { setStudyingClass(null); setUnderConstructionSubject(null); }}
+                      className={`text-xs font-bold flex items-center gap-1 cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" /> Choose a different class
+                    </button>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {SUBJECT_CARDS.map((s) => {
+                      const available = SUBJECT_AVAILABILITY[effectiveClass][s.id];
+                      const Icon = s.icon;
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => openSubject(effectiveClass, s.id)}
+                          className={`flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${s.color} ${!available ? 'opacity-70' : ''}`}
+                        >
+                          <Icon className="w-7 h-7 shrink-0" />
+                          <div>
+                            <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{s.id}</p>
+                            <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{available ? 'Notes available' : 'Coming soon'}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {underConstructionSubject && (
+                    <div className={`rounded-2xl border p-6 text-center space-y-2 ${isLightMode ? 'bg-amber-50 border-amber-300' : 'bg-amber-950/20 border-amber-500/20'}`}>
+                      <Construction className={`w-6 h-6 mx-auto ${isLightMode ? 'text-amber-600' : 'text-amber-400'}`} />
+                      <p className={`text-sm font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>{underConstructionSubject} notes for Class {effectiveClass.replace('th', '')} are under construction</p>
+                      <p className={`text-xs font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-200/80'}`}>They'll open here as soon as they're ready. Check back soon!</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {activeView === 'latestNews' && (
+        <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="space-y-1">
+              <h1 className={`text-2xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Megaphone className="w-6 h-6 text-amber-400" /> Latest Updates
+              </h1>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Syllabus notices and announcements posted by your teacher.</p>
+            </div>
+
+            {announcementsLoading ? (
+              <div className="text-center py-8 text-xs font-semibold text-slate-500">Loading updates...</div>
+            ) : visibleAnnouncements.length === 0 ? (
+              <div className={`text-center py-10 rounded-2xl border ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                <p className="text-xs font-semibold text-slate-500">No updates posted yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {visibleAnnouncements.map((a) => (
+                  <div key={a.id} className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                      {a.targetClass !== 'All' && (
+                        <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">Class {a.targetClass.replace('th', '')}</span>
+                      )}
+                    </div>
+                    <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
+                    <p className={`text-[10px] font-mono mt-3 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{new Date(a.createdAt).toLocaleDateString()}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3614,10 +3959,25 @@ export default function App() {
                         >
                           <option value="All">All Classes</option>
                           <option value="8th">Class 8th</option>
+                          <option value="9th">Class 9th</option>
                           <option value="10th">Class 10th</option>
                           <option value="12th">Class 12th / Competitions</option>
                         </select>
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Assigned Date</label>
+                      <input
+                        type="date"
+                        value={assignAssignedDate}
+                        min={todayDateStr}
+                        onChange={(e) => setAssignAssignedDate(e.target.value)}
+                        required
+                        className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      />
+                      <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Deadline: 8:00 PM the next day. Past dates can't be selected.
+                      </p>
                     </div>
                     <div className="space-y-1">
                       <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Instructions (optional)</label>
@@ -3656,6 +4016,7 @@ export default function App() {
                           <div className="min-w-0">
                             <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
                             <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {new Date(a.createdAt).toLocaleDateString()}</p>
+                            {a.deadline && <p className="text-[10px] font-bold text-amber-400">Deadline: {formatDeadline(a.deadline)}</p>}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {a.fileUrl && (
@@ -3671,6 +4032,90 @@ export default function App() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Post Announcement / Latest Update */}
+              <div>
+                <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400">
+                    <Megaphone className="w-4 h-4 text-amber-400" /> Post an Update / Announcement
+                  </h3>
+                  <p className={`text-[11px] leading-relaxed font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Shows up on every student's home page and Latest Updates page. Use this for the CBSE syllabus, exam dates, or any other notice.
+                  </p>
+
+                  {announceError && (
+                    <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{announceError}</div>
+                  )}
+
+                  <form onSubmit={handlePostAnnouncement} className="space-y-3">
+                    <div className="space-y-1">
+                      <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Title</label>
+                      <input
+                        type="text"
+                        value={announceTitle}
+                        onChange={(e) => setAnnounceTitle(e.target.value)}
+                        placeholder="e.g. CBSE Syllabus 2026-27 -- Class X"
+                        required
+                        className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Target Class</label>
+                      <select
+                        value={announceTargetClass}
+                        onChange={(e) => setAnnounceTargetClass(e.target.value as any)}
+                        className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="All">All Classes</option>
+                        <option value="8th">Class 8th</option>
+                        <option value="9th">Class 9th</option>
+                        <option value="10th">Class 10th</option>
+                        <option value="12th">Class 12th / Competitions</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Message</label>
+                      <textarea
+                        value={announceMessage}
+                        onChange={(e) => setAnnounceMessage(e.target.value)}
+                        rows={4}
+                        required
+                        placeholder="Write the full announcement or paste the syllabus text here."
+                        className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={announceUploading || !announceTitle.trim() || !announceMessage.trim()}
+                      className="w-full py-2 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50"
+                    >
+                      {announceUploading ? 'Posting...' : 'Post Update'}
+                    </button>
+                  </form>
+
+                  <div className={`divide-y pt-2 border-t max-h-[220px] overflow-y-auto ${isLightMode ? 'divide-slate-200 border-slate-200' : 'divide-slate-800 border-slate-800'}`}>
+                    {announcements.length === 0 ? (
+                      <p className="text-center py-4 text-xs font-semibold text-slate-500">No updates posted yet.</p>
+                    ) : (
+                      announcements.map((a) => (
+                        <div key={a.id} className="py-2.5 flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                            <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {new Date(a.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAnnouncement(a.id)}
+                            className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0"
+                            title="Delete announcement"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ))
                     )}
@@ -3778,10 +4223,24 @@ export default function App() {
 
             {/* Homework Submissions */}
             <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-[#22d3ee]">
-                <FileText className="w-4 h-4 text-cyan-400" /> Homework Submissions ({adminHomework.length})
-              </h3>
-              <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework uploaded by students. Auto-checking scores will populate here once the AI grading pipeline is live.</p>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-[#22d3ee]">
+                    <FileText className="w-4 h-4 text-cyan-400" /> Homework Submissions ({adminHomework.length})
+                  </h3>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework uploaded by students. Checked automatically every 30 minutes.</p>
+                </div>
+                <button
+                  onClick={handleCheckHomeworkNow}
+                  disabled={checkNowLoading}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 cursor-pointer transition disabled:opacity-50 shrink-0"
+                >
+                  {checkNowLoading ? 'Checking...' : 'Check Pending Now'}
+                </button>
+              </div>
+              {checkNowResult && (
+                <p className={`text-[11px] mt-2 font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{checkNowResult}</p>
+              )}
 
               <div className="mt-4 overflow-x-auto">
                 <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
@@ -3791,7 +4250,7 @@ export default function App() {
                       <th className="py-2 px-4 font-bold">Assignment / Subject</th>
                       <th className="py-2 px-4 font-bold">Submitted</th>
                       <th className="py-2 px-4 font-bold">Status</th>
-                      <th className="py-2 px-4 font-bold">AI Remarks</th>
+                      <th className="py-2 px-4 font-bold">Remarks</th>
                       <th className="py-2 pl-4 text-right font-bold">File</th>
                     </tr>
                   </thead>
@@ -3811,7 +4270,10 @@ export default function App() {
                             {sub.assignmentTitle && <p className="font-bold text-amber-400">{sub.assignmentTitle}</p>}
                             <p className={sub.assignmentTitle ? `text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}` : ''}>{sub.subject || (sub.assignmentTitle ? '' : '—')}</p>
                           </td>
-                          <td className={`py-3 px-4 font-mono text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(sub.submittedAt).toLocaleString()}</td>
+                          <td className={`py-3 px-4 font-mono text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {new Date(sub.submittedAt).toLocaleString()}
+                            {sub.isLate && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider">Late</span>}
+                          </td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
                               sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -3828,6 +4290,12 @@ export default function App() {
                             ) : (
                               <span className="text-slate-500 italic">Not checked yet</span>
                             )}
+                            {sub.integrityFlag && (
+                              <div className="mt-1.5 flex items-start gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
+                                <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
+                                <span className="text-red-400 font-semibold">{sub.integrityFlag}</span>
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 pl-4 text-right">
                             {sub.fileUrl && (
@@ -3841,6 +4309,45 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            {/* Missing Homework Report */}
+            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-red-400">
+                <AlertTriangle className="w-4 h-4 text-red-400" /> Missing Homework
+              </h3>
+              <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date-wise list of students who haven't submitted each assignment.</p>
+
+              <div className={`mt-4 divide-y max-h-[420px] overflow-y-auto ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                {missingReportLoading ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">Loading report...</p>
+                ) : missingReport.length === 0 ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">No assignments to report on yet.</p>
+                ) : (
+                  missingReport.map((r) => (
+                    <div key={r.id} className="py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{r.title}</p>
+                        <span className={`text-[10px] font-mono shrink-0 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                          {r.assignedDate} • {r.targetClass === 'All' ? 'All Classes' : r.targetClass}
+                        </span>
+                      </div>
+                      <p className={`text-[10px] font-mono mt-0.5 ${r.missing.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {r.submittedCount}/{r.rosterCount} submitted
+                      </p>
+                      {r.missing.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {r.missing.map((m: any) => (
+                            <span key={m.email} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLightMode ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
+                              {m.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

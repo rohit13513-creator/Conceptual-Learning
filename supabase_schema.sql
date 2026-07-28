@@ -24,7 +24,20 @@ create table invite_codes (
   created_at timestamptz not null default now()
 );
 
--- 3. HOMEWORK SUBMISSIONS — new, for the upload + auto-check feature
+-- 3. HOMEWORK ASSIGNMENTS — homework posted by the admin for students to complete
+create table homework_assignments (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  subject text,
+  target_class text not null default 'All',  -- 'All' | '8th' | '9th' | '10th' | '12th'
+  file_path text,                            -- optional reference file/worksheet
+  assigned_date date not null default current_date,  -- the day this homework was posted for; cannot be backdated
+  deadline timestamptz,                      -- always assigned_date + 1 day, 8:00 PM IST (computed by the server on insert)
+  created_at timestamptz not null default now()
+);
+
+-- 4. HOMEWORK SUBMISSIONS — student uploads, for the upload + auto-check feature
 create table homework_submissions (
   id uuid primary key default gen_random_uuid(),
   student_email text not null references users(email),
@@ -34,14 +47,17 @@ create table homework_submissions (
   status text not null default 'pending',   -- pending | checked | reviewed
   ai_score numeric,
   ai_feedback text,
-  admin_notes text
+  admin_notes text,
+  assignment_id uuid references homework_assignments(id),
+  integrity_flag text                       -- admin-only hint if the submission looks copied, never shown to the student
 );
 
--- 4. ANNOUNCEMENTS — new, for the admin "push updates" feature
+-- 5. ANNOUNCEMENTS — admin "push updates" feature (latest news, CBSE syllabus, etc.)
 create table announcements (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   message text not null,
+  target_class text not null default 'All', -- 'All' | '8th' | '9th' | '10th' | '12th'
   created_by text not null,
   created_at timestamptz not null default now()
 );

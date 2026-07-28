@@ -42,6 +42,7 @@ interface HomeworkSubmission {
   aiScore: number | null;
   aiFeedback: string | null;
   adminNotes: string | null;
+  integrityFlag: string | null;
   fileUrl: string | null;
 }
 
@@ -52,6 +53,17 @@ interface HomeworkAssignment {
   subject: string | null;
   targetClass: string;
   fileUrl: string | null;
+  assignedDate: string;
+  deadline: string | null;
+  createdAt: string;
+}
+
+interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  targetClass: string;
+  createdBy: string;
   createdAt: string;
 }
 
@@ -95,6 +107,72 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
   return Buffer.from(await pdfDoc.save());
 }
 
+const CLAUDE_MODEL = "claude-sonnet-5";
+
+// Sends one homework submission to Claude for grading, and writes the result back to the row.
+// Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
+async function checkHomeworkSubmission(submissionId: string) {
+  const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+  if (!sub) return;
+
+  const { data: fileBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
+  if (downloadError || !fileBlob) {
+    console.error(`Could not download homework file for submission ${submissionId}:`, downloadError?.message);
+    return;
+  }
+
+  const arrayBuffer = await fileBlob.arrayBuffer();
+  const base64Data = Buffer.from(arrayBuffer).toString("base64");
+  const isPdf = fileBlob.type === "application/pdf" || sub.file_path.toLowerCase().endsWith(".pdf");
+  const mediaType = isPdf ? "application/pdf" : (fileBlob.type || "image/jpeg");
+
+  let assignmentContext = "";
+  if (sub.assignment_id) {
+    const { data: a } = await supabase.from("homework_assignments").select("title, description, subject").eq("id", sub.assignment_id).maybeSingle();
+    if (a) assignmentContext = `This was assigned as: "${a.title}"${a.description ? ` -- ${a.description}` : ""}${a.subject ? ` (Subject: ${a.subject})` : ""}.\n`;
+  }
+
+  const contentBlock = isPdf
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
+    : { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } };
+
+  const prompt = `You are a supportive school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
+${assignmentContext}
+Look at the attached homework and respond with ONLY a JSON object, no other text, in exactly this shape:
+{"score": <integer 0-10 for completeness and correctness>, "feedback": "<2-4 warm, specific, constructive sentences directly for the student -- praise what's right, gently point out mistakes or gaps, suggest what to revise>", "integrityFlag": <null, or a short string ONLY if the work strongly looks copied verbatim from a printed/online/AI source rather than solved by the student -- shown only to the teacher, never the student>}`;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY as string,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 500,
+        messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
+      }),
+    });
+    const data = await resp.json();
+    const text = data?.content?.[0]?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!resp.ok || !jsonMatch) throw new Error(data?.error?.message || "Claude did not return a parseable result.");
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    const { error: updateError } = await supabase.from("homework_submissions").update({
+      status: "checked",
+      ai_score: typeof parsed.score === "number" ? parsed.score : null,
+      ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
+      integrity_flag: typeof parsed.integrityFlag === "string" ? parsed.integrityFlag : null,
+    }).eq("id", submissionId);
+    if (updateError) throw new Error(updateError.message);
+  } catch (err: any) {
+    console.error(`Error checking homework submission ${submissionId}:`, err.message);
+  }
+}
+
 function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
   return {
     id: row.id,
@@ -106,6 +184,7 @@ function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
     aiScore: row.ai_score,
     aiFeedback: row.ai_feedback,
     adminNotes: row.admin_notes,
+    integrityFlag: row.integrity_flag,
     fileUrl: fileUrl ?? null,
   };
 }
@@ -118,6 +197,32 @@ function mapAssignmentRow(row: any, fileUrl?: string | null): HomeworkAssignment
     subject: row.subject,
     targetClass: row.target_class,
     fileUrl: fileUrl ?? null,
+    assignedDate: row.assigned_date,
+    deadline: row.deadline,
+    createdAt: row.created_at,
+  };
+}
+
+// Today's date in IST, as "YYYY-MM-DD" -- the timezone the daily-homework deadline is anchored to.
+function todayIST(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+// Deadline for homework assigned on a given IST date: 8:00 PM IST the following day.
+function computeDeadline(assignedDate: string): string {
+  const next = new Date(`${assignedDate}T00:00:00+05:30`);
+  next.setDate(next.getDate() + 1);
+  const nextDateStr = next.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return new Date(`${nextDateStr}T20:00:00+05:30`).toISOString();
+}
+
+function mapAnnouncementRow(row: any): Announcement {
+  return {
+    id: row.id,
+    title: row.title,
+    message: row.message,
+    targetClass: row.target_class,
+    createdBy: row.created_by,
     createdAt: row.created_at,
   };
 }
@@ -6158,7 +6263,7 @@ function buildApp(): express.Express {
     );
 
     return res.status(200).json({
-      message: "Registration completed after Phone OTP validation! Your profile is pending manual inbox review and approval by teacher Rohit. An email notification has been dispatched to Rohit.",
+      message: "Registration completed after Phone OTP validation! Your profile is pending manual review and approval by your teacher. A notification has been dispatched.",
       status: newUser.status,
       user: newUser
     });
@@ -6181,7 +6286,7 @@ function buildApp(): express.Express {
     await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
 
     const congradsSubject = "🎉 Account Approved: Welcome to Ray-Optica!";
-    const congradsBody = `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray-Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the Ray-Optica portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray-Optica Team`;
+    const congradsBody = `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`;
 
     // Notify student as well
     sendSimulatedEmail(
@@ -6275,7 +6380,7 @@ function buildApp(): express.Express {
     sendSimulatedEmail(
       targetEmail,
       "🎉 Account Approved: Welcome to Ray-Optica!",
-      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray-Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the Ray-Optica portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray-Optica Team`,
+      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`,
       'outgoing'
     );
 
@@ -6304,7 +6409,7 @@ function buildApp(): express.Express {
     }
 
     if (userRow.status === "pending") {
-      return res.status(403).json({ error: "Registration is pending approval. Please ask Rohit (Owner) to approve your account." });
+      return res.status(403).json({ error: "Registration is pending approval. Please ask your teacher to approve your account." });
     }
 
     if (userRow.status === "rejected") {
@@ -6432,6 +6537,34 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(insertedRow) });
   });
 
+  // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still
+  // "pending". Vercel automatically sends "Authorization: Bearer <CRON_SECRET>" for cron-triggered
+  // requests when CRON_SECRET is set as an env var, which is what this checks against.
+  app.get("/api/cron/check-homework", async (req, res) => {
+    const auth = req.headers["authorization"] || "";
+    if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized." });
+    }
+
+    const { data: pending } = await supabase.from("homework_submissions").select("id").eq("status", "pending").limit(25);
+    for (const row of pending || []) {
+      await checkHomeworkSubmission(row.id);
+    }
+    return res.json({ checked: (pending || []).length });
+  });
+
+  // Admin-triggered immediate check of all pending homework (for local testing, or to skip
+  // waiting for the next scheduled cron run).
+  app.post("/api/admin/homework/check-now", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    const { data: pending } = await supabase.from("homework_submissions").select("id").eq("status", "pending").limit(25);
+    for (const row of pending || []) {
+      await checkHomeworkSubmission(row.id);
+    }
+    return res.json({ checked: (pending || []).length });
+  });
+
   // Student views their own homework submission history
   app.get("/api/homework/mine", async (req, res) => {
     const email = String(req.query.email || "").toLowerCase().trim();
@@ -6458,18 +6591,21 @@ function buildApp(): express.Express {
     const [{ data: rows }, { data: userRows }, { data: assignmentRows }] = await Promise.all([
       supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(300),
       supabase.from("users").select("email, name"),
-      supabase.from("homework_assignments").select("id, title"),
+      supabase.from("homework_assignments").select("id, title, deadline"),
     ]);
 
     const nameByEmail = new Map((userRows || []).map((u: any) => [u.email, u.name]));
     const titleById = new Map((assignmentRows || []).map((a: any) => [a.id, a.title]));
+    const deadlineById = new Map((assignmentRows || []).map((a: any) => [a.id, a.deadline]));
 
     const submissions = await Promise.all((rows || []).map(async (r) => {
       const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
+      const deadline = r.assignment_id ? (deadlineById.get(r.assignment_id) || null) : null;
       return {
         ...mapHomeworkRow(r, signed?.signedUrl),
         studentName: nameByEmail.get(r.student_email) || r.student_email,
         assignmentTitle: r.assignment_id ? (titleById.get(r.assignment_id) || null) : null,
+        isLate: deadline ? new Date(r.submitted_at).getTime() > new Date(deadline).getTime() : false,
       };
     }));
 
@@ -6484,8 +6620,14 @@ function buildApp(): express.Express {
     });
   }, async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
-    const { title, description, subject, targetClass } = req.body;
+    const { title, description, subject, targetClass, assignedDate } = req.body;
     if (!title) return res.status(400).json({ error: "Assignment title is required." });
+
+    const today = todayIST();
+    const finalAssignedDate = assignedDate ? String(assignedDate) : today;
+    if (finalAssignedDate < today) {
+      return res.status(400).json({ error: "Homework cannot be posted for a past date." });
+    }
 
     let filePath: string | null = null;
     if (req.file) {
@@ -6508,6 +6650,8 @@ function buildApp(): express.Express {
         subject: subject ? String(subject).trim() : null,
         target_class: targetClass || "All",
         file_path: filePath,
+        assigned_date: finalAssignedDate,
+        deadline: computeDeadline(finalAssignedDate),
       })
       .select()
       .single();
@@ -6556,6 +6700,91 @@ function buildApp(): express.Express {
     return res.json({ success: true });
   });
 
+  // Admin report: for each recent assignment, which target-class students have not submitted yet.
+  app.get("/api/admin/homework/missing", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+
+    const CLASS_TO_TARGET: Record<string, string> = { VIII: "8th", IX: "9th", X: "10th", XII: "12th" };
+
+    const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
+      supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
+      supabase.from("users").select("email, name, student_class, role, status"),
+      supabase.from("homework_submissions").select("student_email, assignment_id"),
+    ]);
+
+    const students = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved");
+    const submittedByAssignment = new Map<string, Set<string>>();
+    (submissionRows || []).forEach((s: any) => {
+      if (!s.assignment_id) return;
+      if (!submittedByAssignment.has(s.assignment_id)) submittedByAssignment.set(s.assignment_id, new Set());
+      submittedByAssignment.get(s.assignment_id)!.add(s.student_email);
+    });
+
+    const report = (assignmentRows || []).map((a: any) => {
+      const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
+      const submitted = submittedByAssignment.get(a.id) || new Set<string>();
+      const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+      return {
+        id: a.id,
+        title: a.title,
+        targetClass: a.target_class,
+        assignedDate: a.assigned_date,
+        deadline: a.deadline,
+        rosterCount: roster.length,
+        submittedCount: submitted.size,
+        missing,
+      };
+    });
+
+    return res.json({ report });
+  });
+
+  // Everyone (students + admin) can view the list of posted announcements/updates
+  app.get("/api/announcements", async (req, res) => {
+    const { data: rows } = await supabase
+      .from("announcements")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    return res.json({ announcements: (rows || []).map(mapAnnouncementRow) });
+  });
+
+  // Admin posts a new announcement/update (latest news, CBSE syllabus, etc.)
+  app.post("/api/admin/announcements", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { title, message, targetClass } = req.body;
+    if (!title || !message) return res.status(400).json({ error: "Title and message are required." });
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("announcements")
+      .insert({
+        title: String(title).trim(),
+        message: String(message).trim(),
+        target_class: targetClass || "All",
+        created_by: (req.headers["x-admin-email"] as string || "").toLowerCase().trim(),
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error creating announcement:", insertError?.message);
+      return res.status(500).json({ error: "Failed to save announcement." });
+    }
+
+    return res.json({ success: true, announcement: mapAnnouncementRow(insertedRow) });
+  });
+
+  // Admin deletes an announcement
+  app.post("/api/admin/announcements/delete", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Announcement id is required." });
+
+    await supabase.from("announcements").delete().eq("id", id);
+    return res.json({ success: true });
+  });
+
   // Publicly queryable simulated alerts for sandbox verification
   app.get("/api/public/logs", async (req, res) => {
     const { data: logRows } = await supabase
@@ -6575,7 +6804,7 @@ function buildApp(): express.Express {
   function checkAdminAuth(req: express.Request, res: express.Response) {
     const requester = (req.headers["x-admin-email"] as string || "").toLowerCase().trim();
     if (requester !== "rohit13513@gmail.com") {
-      res.status(403).json({ error: "Forbidden: Rohit (Owner) privileges required to execute this operation." });
+      res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
       return false;
     }
     return true;
@@ -6618,7 +6847,7 @@ function buildApp(): express.Express {
     sendSimulatedEmail(
       targetEmail,
       "🎉 Account Approved: Welcome to Ray Optica",
-      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Ray Optica has been officially APPROVED by teacher Rohit!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nTeacher Rohit & Ray Optica Academy`,
+      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`,
       'outgoing'
     );
 
@@ -6647,7 +6876,7 @@ function buildApp(): express.Express {
     sendSimulatedEmail(
       targetEmail,
       "🚫 Account Request Disapproved - Ray Optica",
-      `Dear ${targetUser.name},\n\nWe regret to inform you that your registration request for Ray Optica has been disapproved/suspended. If you believe this is a clerical error, please reach out to your instructor Rohit directly.\n\nBest regards,\nRay Optica Support`,
+      `Dear ${targetUser.name},\n\nWe regret to inform you that your registration request for Conceptual Learning Online has been disapproved/suspended. If you believe this is a clerical error, please reach out to your teacher directly.\n\nBest regards,\nConceptual Learning Online Support`,
       'outgoing'
     );
 
