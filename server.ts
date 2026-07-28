@@ -24,6 +24,11 @@ interface User {
   createdAt: string;
   role: "admin" | "student";
   studentClass?: string;
+  photoUrl: string | null;
+  dateOfBirth: string | null;
+  bio: string | null;
+  favoriteSubject: string | null;
+  hobbies: string | null;
 }
 
 interface InviteCode {
@@ -67,6 +72,24 @@ interface Announcement {
   createdAt: string;
 }
 
+interface ForumThread {
+  id: string;
+  title: string;
+  body: string;
+  authorEmail: string;
+  authorName: string;
+  createdAt: string;
+}
+
+interface ForumReply {
+  id: string;
+  threadId: string;
+  body: string;
+  authorEmail: string;
+  authorName: string;
+  createdAt: string;
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
   process.env.SUPABASE_SERVICE_ROLE_KEY as string
@@ -82,6 +105,17 @@ const homeworkUpload = multer({
     const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error("Only JPG, PNG, WEBP, HEIC, or PDF files are allowed."));
+  },
+});
+
+const AVATAR_BUCKET = "avatars";
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, matches the Storage bucket limit
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, or WEBP images are allowed."));
   },
 });
 
@@ -229,6 +263,28 @@ function mapAnnouncementRow(row: any): Announcement {
   };
 }
 
+function mapForumThreadRow(row: any): ForumThread {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    authorEmail: row.author_email,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+  };
+}
+
+function mapForumReplyRow(row: any): ForumReply {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    body: row.body,
+    authorEmail: row.author_email,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+  };
+}
+
 // Maps a raw Supabase `users` row (snake_case) to the camelCase shape the frontend expects.
 function mapUserRow(row: any): User {
   return {
@@ -240,6 +296,11 @@ function mapUserRow(row: any): User {
     createdAt: row.created_at,
     role: row.role,
     studentClass: row.student_class,
+    photoUrl: row.photo_url || null,
+    dateOfBirth: row.date_of_birth || null,
+    bio: row.bio || null,
+    favoriteSubject: row.favorite_subject || null,
+    hobbies: row.hobbies || null,
   };
 }
 
@@ -6463,6 +6524,87 @@ function buildApp(): express.Express {
     });
   });
 
+  // Logged-in user changes their own password (must know the current one)
+  app.post("/api/change-password", async (req, res) => {
+    const { email, currentPassword, newPassword } = req.body;
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Email, current password, and new password are all required." });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters." });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    const { data: userRow } = await supabase.from("users").select("password_hash").eq("email", emailNormalized).maybeSingle();
+    if (!userRow) {
+      return res.status(404).json({ error: "Account not found." });
+    }
+
+    const currentMatches = await bcrypt.compare(currentPassword, userRow.password_hash);
+    if (!currentMatches) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    const { error: updateError } = await supabase.from("users").update({ password_hash: newHash }).eq("email", emailNormalized);
+    if (updateError) {
+      console.error("Error updating password:", updateError.message);
+      return res.status(500).json({ error: "Failed to update password. Please try again." });
+    }
+
+    return res.json({ success: true });
+  });
+
+  // Logged-in user updates their own profile (photo + academic/social details)
+  app.post("/api/profile/update", (req, res, next) => {
+    avatarUpload.single("photo")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded photo." });
+      next();
+    });
+  }, async (req, res) => {
+    const { email, dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required." });
+
+    const emailNormalized = email.toLowerCase().trim();
+    const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
+    if (!existingUser) return res.status(404).json({ error: "Account not found." });
+
+    const updates: Record<string, any> = {
+      date_of_birth: dateOfBirth || null,
+      bio: bio ? String(bio).trim() : null,
+      favorite_subject: favoriteSubject ? String(favoriteSubject).trim() : null,
+      hobbies: hobbies ? String(hobbies).trim() : null,
+    };
+
+    if (req.file) {
+      const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const filePath = `${emailNormalized}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(filePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+      });
+      if (uploadError) {
+        console.error("Avatar upload error:", uploadError.message);
+        return res.status(500).json({ error: "Failed to upload photo." });
+      }
+      const { data: publicUrlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(filePath);
+      updates.photo_url = publicUrlData.publicUrl;
+    }
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from("users")
+      .update(updates)
+      .eq("email", emailNormalized)
+      .select()
+      .single();
+
+    if (updateError || !updatedRow) {
+      console.error("Error updating profile:", updateError?.message);
+      return res.status(500).json({ error: "Failed to save profile." });
+    }
+
+    return res.json({ success: true, user: mapUserRow(updatedRow) });
+  });
+
   // ── HOMEWORK UPLOAD & REVIEW ──
 
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
@@ -6786,6 +6928,120 @@ function buildApp(): express.Express {
     if (!id) return res.status(400).json({ error: "Announcement id is required." });
 
     await supabase.from("announcements").delete().eq("id", id);
+    return res.json({ success: true });
+  });
+
+  // ── FORUM (one shared forum, visible to every class and the admin) ──
+
+  // List every thread, most recent first, with a reply count for each
+  app.get("/api/forum/threads", async (req, res) => {
+    const [{ data: threadRows }, { data: replyRows }] = await Promise.all([
+      supabase.from("forum_threads").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("forum_replies").select("thread_id"),
+    ]);
+
+    const replyCountByThread = new Map<string, number>();
+    (replyRows || []).forEach((r: any) => {
+      replyCountByThread.set(r.thread_id, (replyCountByThread.get(r.thread_id) || 0) + 1);
+    });
+
+    const threads = (threadRows || []).map((t: any) => ({
+      ...mapForumThreadRow(t),
+      replyCount: replyCountByThread.get(t.id) || 0,
+    }));
+
+    return res.json({ threads });
+  });
+
+  // Start a new thread
+  app.post("/api/forum/threads", async (req, res) => {
+    const { title, body, authorEmail, authorName } = req.body;
+    if (!title || !body || !authorEmail || !authorName) {
+      return res.status(400).json({ error: "Title, body, and author details are required." });
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("forum_threads")
+      .insert({
+        title: String(title).trim(),
+        body: String(body).trim(),
+        author_email: String(authorEmail).toLowerCase().trim(),
+        author_name: String(authorName).trim(),
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error creating forum thread:", insertError?.message);
+      return res.status(500).json({ error: "Failed to post thread." });
+    }
+
+    return res.json({ success: true, thread: mapForumThreadRow(insertedRow) });
+  });
+
+  // View one thread plus all of its replies
+  app.get("/api/forum/threads/:id", async (req, res) => {
+    const { id } = req.params;
+    const [{ data: threadRow }, { data: replyRows }] = await Promise.all([
+      supabase.from("forum_threads").select("*").eq("id", id).maybeSingle(),
+      supabase.from("forum_replies").select("*").eq("thread_id", id).order("created_at", { ascending: true }),
+    ]);
+
+    if (!threadRow) return res.status(404).json({ error: "Thread not found." });
+
+    return res.json({
+      thread: mapForumThreadRow(threadRow),
+      replies: (replyRows || []).map(mapForumReplyRow),
+    });
+  });
+
+  // Reply to a thread
+  app.post("/api/forum/threads/:id/replies", async (req, res) => {
+    const { id } = req.params;
+    const { body, authorEmail, authorName } = req.body;
+    if (!body || !authorEmail || !authorName) {
+      return res.status(400).json({ error: "Reply body and author details are required." });
+    }
+
+    const { data: threadRow } = await supabase.from("forum_threads").select("id").eq("id", id).maybeSingle();
+    if (!threadRow) return res.status(404).json({ error: "Thread not found." });
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("forum_replies")
+      .insert({
+        thread_id: id,
+        body: String(body).trim(),
+        author_email: String(authorEmail).toLowerCase().trim(),
+        author_name: String(authorName).trim(),
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error posting forum reply:", insertError?.message);
+      return res.status(500).json({ error: "Failed to post reply." });
+    }
+
+    return res.json({ success: true, reply: mapForumReplyRow(insertedRow) });
+  });
+
+  // Admin deletes a thread (its replies go with it via ON DELETE CASCADE)
+  app.post("/api/admin/forum/delete-thread", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Thread id is required." });
+
+    await supabase.from("forum_threads").delete().eq("id", id);
+    return res.json({ success: true });
+  });
+
+  // Admin deletes a single reply
+  app.post("/api/admin/forum/delete-reply", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: "Reply id is required." });
+
+    await supabase.from("forum_replies").delete().eq("id", id);
     return res.json({ success: true });
   });
 

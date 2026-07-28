@@ -97,7 +97,8 @@ import {
   Dna,
   FlaskConical,
   Megaphone,
-  Construction
+  Construction,
+  MessageSquare
 } from 'lucide-react';
 
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
@@ -441,10 +442,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -542,6 +543,41 @@ export default function App() {
   const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
+
+  // Change Password States
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState<string | null>(null);
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  // Profile States
+  const [profileDob, setProfileDob] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+  const [profileFavSubject, setProfileFavSubject] = useState('');
+  const [profileHobbies, setProfileHobbies] = useState('');
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+
+  // Forum States
+  const [forumThreads, setForumThreads] = useState<any[]>([]);
+  const [forumThreadsLoading, setForumThreadsLoading] = useState(false);
+  const [forumActiveThreadId, setForumActiveThreadId] = useState<string | null>(null);
+  const [forumThreadDetail, setForumThreadDetail] = useState<any | null>(null);
+  const [forumReplies, setForumReplies] = useState<any[]>([]);
+  const [forumThreadLoading, setForumThreadLoading] = useState(false);
+  const [showNewThreadForm, setShowNewThreadForm] = useState(false);
+  const [newThreadTitle, setNewThreadTitle] = useState('');
+  const [newThreadBody, setNewThreadBody] = useState('');
+  const [newThreadPosting, setNewThreadPosting] = useState(false);
+  const [newThreadError, setNewThreadError] = useState<string | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [replyPosting, setReplyPosting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   // Admin Dashboard States
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -786,6 +822,185 @@ export default function App() {
     changeView('hub');
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setChangePasswordError(null);
+    setChangePasswordSuccess(null);
+    if (newPasswordInput !== confirmPasswordInput) {
+      setChangePasswordError('New password and confirmation do not match.');
+      return;
+    }
+    setChangePasswordLoading(true);
+    try {
+      const resp = await fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, currentPassword: currentPasswordInput, newPassword: newPasswordInput })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to change password.');
+      setChangePasswordSuccess('Password changed successfully.');
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+    } catch (err: any) {
+      setChangePasswordError(err.message);
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setProfileError(null);
+    setProfileSuccess(null);
+    setProfileSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('email', user.email);
+      formData.append('dateOfBirth', profileDob);
+      formData.append('bio', profileBio);
+      formData.append('favoriteSubject', profileFavSubject);
+      formData.append('hobbies', profileHobbies);
+      if (profilePhotoFile) formData.append('photo', profilePhotoFile);
+
+      const resp = await fetch('/api/profile/update', { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to save profile.');
+
+      setUser(data.user);
+      if (localStorage.getItem('optics_v1_user')) {
+        localStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+      } else {
+        sessionStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+      }
+      setProfilePhotoFile(null);
+      setProfileSuccess('Profile updated successfully.');
+    } catch (err: any) {
+      setProfileError(err.message);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  // Forum
+  const fetchForumThreads = async () => {
+    setForumThreadsLoading(true);
+    try {
+      const resp = await fetch('/api/forum/threads');
+      const data = await resp.json();
+      setForumThreads(data.threads || []);
+    } catch (err) {
+      // Silent
+    } finally {
+      setForumThreadsLoading(false);
+    }
+  };
+
+  const fetchForumThreadDetail = async (id: string) => {
+    setForumThreadLoading(true);
+    try {
+      const resp = await fetch(`/api/forum/threads/${id}`);
+      const data = await resp.json();
+      if (resp.ok) {
+        setForumThreadDetail(data.thread);
+        setForumReplies(data.replies || []);
+      }
+    } catch (err) {
+      // Silent
+    } finally {
+      setForumThreadLoading(false);
+    }
+  };
+
+  const openForumThread = (id: string) => {
+    setForumActiveThreadId(id);
+    fetchForumThreadDetail(id);
+  };
+
+  const backToForumList = () => {
+    setForumActiveThreadId(null);
+    setForumThreadDetail(null);
+    setForumReplies([]);
+    fetchForumThreads();
+  };
+
+  const handlePostThread = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newThreadTitle.trim() || !newThreadBody.trim()) return;
+    setNewThreadPosting(true);
+    setNewThreadError(null);
+    try {
+      const resp = await fetch('/api/forum/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newThreadTitle, body: newThreadBody, authorEmail: user.email, authorName: user.name })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to post thread.');
+      setNewThreadTitle('');
+      setNewThreadBody('');
+      setShowNewThreadForm(false);
+      fetchForumThreads();
+    } catch (err: any) {
+      setNewThreadError(err.message);
+    } finally {
+      setNewThreadPosting(false);
+    }
+  };
+
+  const handlePostReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !forumActiveThreadId || !replyBody.trim()) return;
+    setReplyPosting(true);
+    setReplyError(null);
+    try {
+      const resp = await fetch(`/api/forum/threads/${forumActiveThreadId}/replies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: replyBody, authorEmail: user.email, authorName: user.name })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to post reply.');
+      setReplyBody('');
+      fetchForumThreadDetail(forumActiveThreadId);
+    } catch (err: any) {
+      setReplyError(err.message);
+    } finally {
+      setReplyPosting(false);
+    }
+  };
+
+  const handleDeleteForumThread = async (id: string) => {
+    if (!user) return;
+    try {
+      const resp = await fetch('/api/admin/forum/delete-thread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ id })
+      });
+      if (resp.ok) backToForumList();
+    } catch (err) {
+      // Silent
+    }
+  };
+
+  const handleDeleteForumReply = async (id: string) => {
+    if (!user || !forumActiveThreadId) return;
+    try {
+      const resp = await fetch('/api/admin/forum/delete-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        body: JSON.stringify({ id })
+      });
+      if (resp.ok) fetchForumThreadDetail(forumActiveThreadId);
+    } catch (err) {
+      // Silent
+    }
+  };
+
   // Admins dashboard fetchers
   const fetchAdminData = async () => {
     if (!user || !ADMIN_EMAILS.includes(user.email)) return;
@@ -1009,6 +1224,21 @@ export default function App() {
       fetchAssignments();
       fetchAnnouncements();
       fetchMissingReport();
+    }
+    if (activeView === 'profile' && user) {
+      setProfileDob(user.dateOfBirth || '');
+      setProfileBio(user.bio || '');
+      setProfileFavSubject(user.favoriteSubject || '');
+      setProfileHobbies(user.hobbies || '');
+      setProfileError(null);
+      setProfileSuccess(null);
+    }
+    if (activeView === 'forum' && user) {
+      setForumActiveThreadId(null);
+      setForumThreadDetail(null);
+      setForumReplies([]);
+      setShowNewThreadForm(false);
+      fetchForumThreads();
     }
   }, [activeView, user]);
 
@@ -1913,6 +2143,19 @@ export default function App() {
             <span>Homework</span>
           </button>
 
+          {/* Tab: Forum */}
+          <button
+            onClick={() => { changeView('forum'); setOpenMenu(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeView === 'forum'
+                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Forum</span>
+          </button>
+
           {/* Tab 7: About Us */}
           <button
             onClick={() => { changeView('about'); setOpenMenu(null); }}
@@ -1944,12 +2187,38 @@ export default function App() {
 
         {/* Right: Active user telemetry + Logout */}
         <div className="flex items-center gap-2.5">
-          <div className="hidden md:flex flex-col text-right leading-none">
-            <span className={`text-[10px] font-black transition-colors ${isLightMode ? 'text-slate-800' : 'text-slate-300'}`}>{user.name}</span>
-            <span className={`text-[9px] font-mono mt-0.5 transition-colors ${isLightMode ? 'text-cyan-700' : 'text-[#22d3ee]'}`}>
-              {user.email === 'test@rayoptica.com' ? 'Unrestricted (Unlimited Devices)' : `Approved (${user.devices?.length || 1}/3 Devices)`}
-            </span>
-          </div>
+          <button
+            onClick={() => changeView('profile')}
+            title="View your profile"
+            className="hidden md:flex items-center gap-2 cursor-pointer group"
+          >
+            <div className="flex flex-col text-right leading-none">
+              <span className={`text-[10px] font-black transition-colors group-hover:text-cyan-400 ${isLightMode ? 'text-slate-800' : 'text-slate-300'}`}>{user.name}</span>
+              <span className={`text-[9px] font-mono mt-0.5 transition-colors ${isLightMode ? 'text-cyan-700' : 'text-[#22d3ee]'}`}>
+                {user.email === 'test@rayoptica.com' ? 'Unrestricted (Unlimited Devices)' : `Approved (${user.devices?.length || 1}/3 Devices)`}
+              </span>
+            </div>
+            {user.photoUrl ? (
+              <img src={user.photoUrl} alt="Profile" className="w-7 h-7 rounded-full object-cover border border-cyan-500/30" />
+            ) : (
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center border ${isLightMode ? 'bg-slate-100 border-slate-300 text-slate-500' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>
+                <User className="w-3.5 h-3.5" />
+              </div>
+            )}
+          </button>
+
+          {/* Change Password Button */}
+          <button
+            onClick={() => { setShowChangePassword(true); setChangePasswordError(null); setChangePasswordSuccess(null); }}
+            title="Change Password"
+            className={`p-2 rounded-xl border cursor-pointer transition active:scale-95 ${
+              isLightMode
+                ? 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                : 'bg-slate-950 border-slate-850 text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Key className="w-4 h-4" />
+          </button>
 
           {/* Theme Toggler Button */}
           <button
@@ -1982,6 +2251,74 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {showChangePassword && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Key className="w-4 h-4 text-cyan-400" /> Change Password
+              </h3>
+              <button onClick={() => setShowChangePassword(false)} className={`cursor-pointer ${isLightMode ? 'text-slate-400 hover:text-slate-700' : 'text-slate-500 hover:text-slate-300'}`}>
+                ✕
+              </button>
+            </div>
+
+            {changePasswordError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{changePasswordError}</div>
+            )}
+            {changePasswordSuccess && (
+              <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{changePasswordSuccess}</div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Current Password</label>
+                <input
+                  type="password"
+                  value={currentPasswordInput}
+                  onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                  required
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>New Password</label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  required
+                  minLength={6}
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  required
+                  minLength={6}
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={changePasswordLoading}
+                className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+              >
+                {changePasswordLoading ? 'Updating...' : 'Update Password'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
         {/* ── 1. HOME HUB INITIAL VIEW PANEL ── */}
       {activeView === 'hub' && (
         <div className={`flex-1 overflow-y-auto px-4 py-10 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
@@ -3768,6 +4105,290 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {activeView === 'profile' && (
+        <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="space-y-1">
+              <h1 className={`text-2xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <User className="w-6 h-6 text-cyan-400" /> My Profile
+              </h1>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your academic and personal details.</p>
+            </div>
+
+            {profileError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{profileError}</div>
+            )}
+            {profileSuccess && (
+              <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2.5">{profileSuccess}</div>
+            )}
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-5 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div className="flex items-center gap-4">
+                {profilePhotoFile ? (
+                  <img src={URL.createObjectURL(profilePhotoFile)} alt="Preview" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" />
+                ) : user.photoUrl ? (
+                  <img src={user.photoUrl} alt="Profile" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" />
+                ) : (
+                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 ${isLightMode ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-slate-950 border-slate-700 text-slate-500'}`}>
+                    <User className="w-9 h-9" />
+                  </div>
+                )}
+                <div>
+                  <label className={`inline-block px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
+                    Change Photo
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => setProfilePhotoFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  {profilePhotoFile && <p className="text-[10px] text-slate-500 mt-1 truncate max-w-[160px]">{profilePhotoFile.name}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Name</p>
+                  <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.name}</p>
+                </div>
+                <div>
+                  <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Email</p>
+                  <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.email}</p>
+                </div>
+                {user.studentClass && (
+                  <div>
+                    <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Class</p>
+                    <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.studentClass}</p>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleProfileUpdate} className="space-y-3 pt-2 border-t border-slate-800/50">
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date of Birth</label>
+                  <input
+                    type="date"
+                    value={profileDob}
+                    onChange={(e) => setProfileDob(e.target.value)}
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>About Me</label>
+                  <textarea
+                    value={profileBio}
+                    onChange={(e) => setProfileBio(e.target.value)}
+                    rows={3}
+                    placeholder="A little about yourself..."
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Favorite Subject</label>
+                    <input
+                      type="text"
+                      value={profileFavSubject}
+                      onChange={(e) => setProfileFavSubject(e.target.value)}
+                      placeholder="e.g. Physics"
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Hobbies & Interests</label>
+                    <input
+                      type="text"
+                      value={profileHobbies}
+                      onChange={(e) => setProfileHobbies(e.target.value)}
+                      placeholder="e.g. Cricket, drawing"
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+                >
+                  {profileSaving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeView === 'forum' && (() => {
+        const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
+
+        if (forumActiveThreadId) {
+          return (
+            <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+              <div className="max-w-2xl mx-auto space-y-4">
+                <button onClick={backToForumList} className={`text-xs font-bold flex items-center gap-1 cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}>
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to Forum
+                </button>
+
+                {forumThreadLoading ? (
+                  <div className="text-center py-8 text-xs font-semibold text-slate-500">Loading thread...</div>
+                ) : forumThreadDetail ? (
+                  <>
+                    <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <h1 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{forumThreadDetail.title}</h1>
+                        {isAdmin && (
+                          <button onClick={() => handleDeleteForumThread(forumThreadDetail.id)} className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0" title="Delete thread">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                        {forumThreadDetail.authorName} • {new Date(forumThreadDetail.createdAt).toLocaleString()}
+                      </p>
+                      <p className={`text-sm mt-3 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{forumThreadDetail.body}</p>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <p className={`text-[10px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {forumReplies.length} {forumReplies.length === 1 ? 'Reply' : 'Replies'}
+                      </p>
+                      {forumReplies.map((r) => (
+                        <div key={r.id} className={`border rounded-xl p-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{r.authorName}</p>
+                            {isAdmin && (
+                              <button onClick={() => handleDeleteForumReply(r.id)} className="p-0.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0" title="Delete reply">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{new Date(r.createdAt).toLocaleString()}</p>
+                          <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{r.body}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={`border rounded-2xl p-4 shadow-lg space-y-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                      {replyError && (
+                        <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{replyError}</div>
+                      )}
+                      <form onSubmit={handlePostReply} className="space-y-2">
+                        <textarea
+                          value={replyBody}
+                          onChange={(e) => setReplyBody(e.target.value)}
+                          rows={3}
+                          required
+                          placeholder="Write a reply..."
+                          className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                        />
+                        <button
+                          type="submit"
+                          disabled={replyPosting}
+                          className="w-full py-2 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+                        >
+                          {replyPosting ? 'Posting...' : 'Post Reply'}
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-xs font-semibold text-slate-500">Thread not found.</div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+            <div className="max-w-2xl mx-auto space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h1 className={`text-2xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                    <MessageSquare className="w-6 h-6 text-cyan-400" /> Forum
+                  </h1>
+                  <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Ask doubts, discuss anything -- open to every class.</p>
+                </div>
+                <button
+                  onClick={() => setShowNewThreadForm(!showNewThreadForm)}
+                  className="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#22d3ee] text-slate-950 hover:bg-cyan-400 cursor-pointer transition shrink-0"
+                >
+                  {showNewThreadForm ? 'Cancel' : '+ New Thread'}
+                </button>
+              </div>
+
+              {showNewThreadForm && (
+                <div className={`border rounded-2xl p-4 shadow-lg space-y-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                  {newThreadError && (
+                    <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{newThreadError}</div>
+                  )}
+                  <form onSubmit={handlePostThread} className="space-y-2">
+                    <input
+                      type="text"
+                      value={newThreadTitle}
+                      onChange={(e) => setNewThreadTitle(e.target.value)}
+                      required
+                      placeholder="Title -- what's your question or topic?"
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                    />
+                    <textarea
+                      value={newThreadBody}
+                      onChange={(e) => setNewThreadBody(e.target.value)}
+                      rows={4}
+                      required
+                      placeholder="Describe your doubt or what you'd like to discuss..."
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                    />
+                    <button
+                      type="submit"
+                      disabled={newThreadPosting}
+                      className="w-full py-2 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+                    >
+                      {newThreadPosting ? 'Posting...' : 'Post Thread'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {forumThreadsLoading ? (
+                <div className="text-center py-8 text-xs font-semibold text-slate-500">Loading threads...</div>
+              ) : forumThreads.length === 0 ? (
+                <div className={`text-center py-10 rounded-2xl border ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                  <p className="text-xs font-semibold text-slate-500">No threads yet. Be the first to start one!</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {forumThreads.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => openForumThread(t.id)}
+                      className={`w-full text-left border rounded-2xl p-4 shadow-lg cursor-pointer transition ${isLightMode ? 'bg-white border-slate-200 hover:border-cyan-400' : 'bg-slate-900/60 border-slate-800 hover:border-cyan-500/50'}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{t.title}</p>
+                        {isAdmin && (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); handleDeleteForumThread(t.id); }}
+                            className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0"
+                            title="Delete thread"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                        {t.authorName} • {new Date(t.createdAt).toLocaleDateString()} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email) && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>

@@ -13,7 +13,12 @@ create table users (
   status text not null default 'pending',   -- pending | approved | rejected
   role text not null default 'student',     -- student | admin
   devices jsonb not null default '[]',      -- array of device fingerprints
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  photo_url text,                           -- profile photo, public URL in the "avatars" bucket
+  date_of_birth date,
+  bio text,
+  favorite_subject text,
+  hobbies text
 );
 
 -- 2. INVITE CODES — replaces data/db.json "inviteCodes"
@@ -62,6 +67,27 @@ create table announcements (
   created_at timestamptz not null default now()
 );
 
+-- 6. FORUM THREADS — one shared forum, visible to all classes and the admin
+create table forum_threads (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  author_email text not null,
+  author_name text not null,
+  created_at timestamptz not null default now()
+);
+
+-- 7. FORUM REPLIES
+create table forum_replies (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references forum_threads(id) on delete cascade,
+  body text not null,
+  author_email text not null,
+  author_name text not null,
+  created_at timestamptz not null default now()
+);
+
 -- Helpful indexes
 create index idx_homework_student on homework_submissions(student_email);
 create index idx_users_status on users(status);
+create index idx_forum_replies_thread on forum_replies(thread_id);
