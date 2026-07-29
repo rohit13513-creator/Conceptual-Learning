@@ -93,6 +93,21 @@ create table forum_replies (
   created_at timestamptz not null default now()
 );
 
+-- 8. PENDING OTPS — email verification codes during registration (one row per in-progress signup)
+create table pending_otps (
+  email text primary key,
+  phone text,
+  phone_otp text not null,
+  expires_at timestamptz not null
+);
+
+-- 9. PASSWORD RESET OTPS — "forgot password" codes, emailed to the account holder
+create table password_reset_otps (
+  email text primary key,
+  otp text not null,
+  expires_at timestamptz not null
+);
+
 -- Helpful indexes
 create index idx_homework_student on homework_submissions(student_email);
 create index idx_users_status on users(status);

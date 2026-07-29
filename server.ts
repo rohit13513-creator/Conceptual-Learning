@@ -6199,20 +6199,17 @@ function buildApp(): express.Express {
     });
 
     sendSimulatedEmail(
-      phoneTrimmed,
-      "💬 Mobile SMS Verification Code - Ray-Optica",
-      `[Ray-Optica Mobile Gateway] Your mobile verification code is: ${phoneOtp}. Valid for 10 minutes.`,
+      emailNormalized,
+      "Your Verification Code - Conceptual Learning Online",
+      `Your verification code is: ${phoneOtp}. Valid for 10 minutes.\n\nIf you did not request this, you can ignore this email.`,
       'otp'
     );
 
-    console.log(`[OTP Generated] Phone OTP: ${phoneOtp} for ${emailNormalized}`);
+    console.log(`[OTP Generated] Verification code sent by email for ${emailNormalized}`);
 
     return res.json({
       success: true,
-      message: "Simulated Mobile SMS OTP code generated successfully!",
-      codes: {
-        phoneOtp
-      }
+      message: "A verification code has been sent to your email address.",
     });
   });
 
@@ -6571,6 +6568,74 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to update password. Please try again." });
     }
 
+    return res.json({ success: true });
+  });
+
+  // Forgot password, step 1: email a reset code to the account holder (if the email exists).
+  // Always returns the same generic message regardless of whether the account exists, so this
+  // can't be used to check which emails are registered.
+  app.post("/api/forgot-password/request", async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required." });
+
+    const emailNormalized = String(email).toLowerCase().trim();
+    const genericMessage = "If an account exists for that email, a reset code has been sent.";
+
+    const { data: userRow } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
+    if (userRow) {
+      const otp = String(Math.floor(1000 + Math.random() * 9000));
+      const { error: otpError } = await supabase.from("password_reset_otps").upsert({
+        email: emailNormalized,
+        otp,
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+
+      if (otpError) {
+        console.error("Error storing password reset OTP:", otpError.message);
+      } else {
+        sendSimulatedEmail(
+          emailNormalized,
+          "Password Reset Code - Conceptual Learning Online",
+          `Your password reset code is: ${otp}. Valid for 10 minutes.\n\nIf you did not request this, you can ignore this email -- your password will not change.`,
+          'otp'
+        );
+      }
+    }
+
+    return res.json({ success: true, message: genericMessage });
+  });
+
+  // Forgot password, step 2: verify the code and set a new password.
+  app.post("/api/forgot-password/reset", async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: "Email, code, and new password are all required." });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters." });
+    }
+
+    const emailNormalized = String(email).toLowerCase().trim();
+    const { data: pending } = await supabase.from("password_reset_otps").select("*").eq("email", emailNormalized).maybeSingle();
+    if (!pending) {
+      return res.status(400).json({ error: "No reset code was requested for this email, or it has already been used." });
+    }
+    if (new Date(pending.expires_at).getTime() < Date.now()) {
+      await supabase.from("password_reset_otps").delete().eq("email", emailNormalized);
+      return res.status(400).json({ error: "This reset code has expired. Please request a new one." });
+    }
+    if (pending.otp !== String(otp).trim()) {
+      return res.status(400).json({ error: "Incorrect reset code." });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    const { error: updateError } = await supabase.from("users").update({ password_hash: newHash }).eq("email", emailNormalized);
+    if (updateError) {
+      console.error("Error resetting password:", updateError.message);
+      return res.status(500).json({ error: "Failed to reset password. Please try again." });
+    }
+
+    await supabase.from("password_reset_otps").delete().eq("email", emailNormalized);
     return res.json({ success: true });
   });
 

@@ -519,7 +519,6 @@ export default function App() {
     return "Laptop";
   };
   const [deviceType, setDeviceType] = useState<'Laptop' | 'Mobile Phone' | 'Tablet'>(defaultDevice());
-  const [simulatedPhoneOtp, setSimulatedPhoneOtp] = useState<string>('');
 
   // Login & Register Form Inputs
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
@@ -534,7 +533,6 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
-  const [simulatedAlerts, setSimulatedAlerts] = useState<{ phoneOtp: string } | null>(null);
   const [publicEmails, setPublicEmails] = useState<any[]>([]);
   const [copiedCodeCode, setCopiedCodeCode] = useState<string | null>(null);
   
@@ -553,6 +551,17 @@ export default function App() {
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
   const [changePasswordSuccess, setChangePasswordSuccess] = useState<string | null>(null);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  // Forgot Password States
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<'request' | 'reset'>('request');
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordOtp, setForgotPasswordOtp] = useState('');
+  const [forgotPasswordNewPassword, setForgotPasswordNewPassword] = useState('');
+  const [forgotPasswordConfirmPassword, setForgotPasswordConfirmPassword] = useState('');
+  const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState<string | null>(null);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   // Profile States
   const [profileDob, setProfileDob] = useState('');
@@ -755,12 +764,6 @@ export default function App() {
       }
       setOtpSent(true);
       setAuthSuccess(data.message);
-      if (data.codes) {
-        setSimulatedPhoneOtp(data.codes.phoneOtp);
-        setSimulatedAlerts({
-          phoneOtp: data.codes.phoneOtp
-        });
-      }
       fetchPublicLogs();
     } catch (err: any) {
       setAuthError(err.message);
@@ -806,7 +809,6 @@ export default function App() {
       setLoginEmail(regEmail);
       setRegPhoneOtp('');
       setOtpSent(false);
-      setSimulatedAlerts(null);
     } catch (err: any) {
       setAuthError(err.message);
     } finally {
@@ -822,7 +824,6 @@ export default function App() {
     setRegPassword('');
     setRegPhoneOtp('');
     setOtpSent(false);
-    setSimulatedAlerts(null);
     setAuthError(null);
     setAuthSuccess(null);
     changeView('hub');
@@ -854,6 +855,62 @@ export default function App() {
       setChangePasswordError(err.message);
     } finally {
       setChangePasswordLoading(false);
+    }
+  };
+
+  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotPasswordEmail.trim()) return;
+    setForgotPasswordError(null);
+    setForgotPasswordSuccess(null);
+    setForgotPasswordLoading(true);
+    try {
+      const resp = await fetch('/api/forgot-password/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotPasswordEmail })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to send reset code.');
+      setForgotPasswordSuccess(data.message);
+      setForgotPasswordStep('reset');
+    } catch (err: any) {
+      setForgotPasswordError(err.message);
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  const handleForgotPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotPasswordError(null);
+    setForgotPasswordSuccess(null);
+    if (forgotPasswordNewPassword !== forgotPasswordConfirmPassword) {
+      setForgotPasswordError('New password and confirmation do not match.');
+      return;
+    }
+    setForgotPasswordLoading(true);
+    try {
+      const resp = await fetch('/api/forgot-password/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotPasswordEmail, otp: forgotPasswordOtp, newPassword: forgotPasswordNewPassword })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to reset password.');
+      setForgotPasswordSuccess('Password reset successfully. You can now log in with your new password.');
+      setForgotPasswordOtp('');
+      setForgotPasswordNewPassword('');
+      setForgotPasswordConfirmPassword('');
+      setLoginEmail(forgotPasswordEmail);
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setForgotPasswordStep('request');
+      }, 2000);
+    } catch (err: any) {
+      setForgotPasswordError(err.message);
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -1586,6 +1643,7 @@ export default function App() {
 
   if (!user) {
     return (
+      <>
       <div className={`flex flex-col items-center justify-center min-h-screen p-4 sm:p-8 font-sans select-none relative overflow-y-auto ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
         {/* Abstract Background Lights */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -1689,6 +1747,13 @@ export default function App() {
                     {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowForgotPassword(true); setForgotPasswordStep('request'); setForgotPasswordEmail(loginEmail); setForgotPasswordError(null); setForgotPasswordSuccess(null); }}
+                  className={`text-[10px] font-bold cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  Forgot password?
+                </button>
               </div>
 
               {/* Keep Me Logged In Checkbox */}
@@ -1797,30 +1862,25 @@ export default function App() {
                 </select>
               </div>
 
-              {/* OTP Verification Section (No Email OTP required!) */}
+              {/* Email OTP Verification Section */}
               {otpSent && (
                 <div className={`p-4 border rounded-xl space-y-3 ${isLightMode ? 'bg-cyan-50 border-cyan-200' : 'bg-cyan-950/30 border-cyan-800/40'}`}>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase font-mono tracking-wider text-cyan-400 block">⚡ Simulated SMS Gateway</span>
-                    <span className={`text-[10px] font-mono font-bold border px-2 py-0.5 rounded animate-pulse ${isLightMode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-[#0a1120] text-emerald-400 border-emerald-950'}`}>
-                      Simulated Code: {simulatedPhoneOtp}
-                    </span>
-                  </div>
+                  <span className="text-[10px] font-black uppercase font-mono tracking-wider text-cyan-400 block">✉️ Check Your Email</span>
 
                   <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phone SMS OTP</label>
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Verification Code</label>
                     <input
                       type="text"
                       maxLength={4}
                       value={regPhoneOtp}
                       onChange={(e) => setRegPhoneOtp(e.target.value)}
-                      placeholder="Enter 4-digit mobile OTP"
+                      placeholder="Enter 4-digit code"
                       className={`w-full text-center border rounded-lg py-2 px-3 text-xs font-mono tracking-widest focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-cyan-700' : 'bg-slate-950 border-slate-800 text-cyan-300'}`}
                     />
                   </div>
 
                   <p className={`text-[9.5px] leading-relaxed font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    * Interactive sandbox assist: Phone number verification is active. Input the generated mock SMS code <span className={`font-bold select-all ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{simulatedPhoneOtp}</span> above to establish validation!
+                    * We've sent a 4-digit verification code to your email address. Enter it above to continue. It's valid for 10 minutes.
                   </p>
                 </div>
               )}
@@ -1868,6 +1928,111 @@ export default function App() {
         </div>
 
       </div>
+
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowForgotPassword(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Key className="w-4 h-4 text-cyan-400" /> Reset Password
+              </h3>
+              <button onClick={() => setShowForgotPassword(false)} className={`cursor-pointer ${isLightMode ? 'text-slate-400 hover:text-slate-700' : 'text-slate-500 hover:text-slate-300'}`}>
+                ✕
+              </button>
+            </div>
+
+            {forgotPasswordError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{forgotPasswordError}</div>
+            )}
+            {forgotPasswordSuccess && (
+              <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{forgotPasswordSuccess}</div>
+            )}
+
+            {forgotPasswordStep === 'request' ? (
+              <form onSubmit={handleForgotPasswordRequest} className="space-y-3">
+                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                  Enter your registered email and we'll send a 4-digit reset code to it.
+                </p>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Email Address</label>
+                  <input
+                    type="email"
+                    value={forgotPasswordEmail}
+                    onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                    required
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forgotPasswordLoading}
+                  className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+                >
+                  {forgotPasswordLoading ? 'Sending...' : 'Send Reset Code'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleForgotPasswordReset} className="space-y-3">
+                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                  Enter the code sent to <span className="font-bold">{forgotPasswordEmail}</span> and choose a new password.
+                </p>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Reset Code</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={forgotPasswordOtp}
+                    onChange={(e) => setForgotPasswordOtp(e.target.value)}
+                    required
+                    placeholder="Enter 4-digit code"
+                    className={`w-full text-center border rounded-lg py-2 px-3 text-xs font-mono tracking-widest focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-cyan-700' : 'bg-slate-950 border-slate-800 text-cyan-300'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>New Password</label>
+                  <input
+                    type="password"
+                    value={forgotPasswordNewPassword}
+                    onChange={(e) => setForgotPasswordNewPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={forgotPasswordConfirmPassword}
+                    onChange={(e) => setForgotPasswordConfirmPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forgotPasswordLoading}
+                  className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
+                >
+                  {forgotPasswordLoading ? 'Resetting...' : 'Reset Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgotPasswordStep('request')}
+                  className={`w-full text-[10px] font-bold cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  Didn't get a code? Go back
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
