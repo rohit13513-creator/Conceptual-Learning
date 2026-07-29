@@ -477,6 +477,7 @@ export default function App() {
     status: 'pending' | 'approved' | 'rejected';
     devices: DeviceSession[];
     studentClass?: string;
+    studentType?: 'offline' | 'online';
   }
 
   const [user, setUser] = useState<ActiveUser | null>(null);
@@ -532,6 +533,7 @@ export default function App() {
   const [regPassword, setRegPassword] = useState('');
   const [regPhoneOtp, setRegPhoneOtp] = useState('');
   const [regStudentClass, setRegStudentClass] = useState<'VIII' | 'IX' | 'X' | 'XI' | 'XII'>('X');
+  const [regStudentType, setRegStudentType] = useState<'offline' | 'online'>('offline');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -798,7 +800,8 @@ export default function App() {
           phone: regPhone,
           whatsappNumber: regWhatsapp,
           phoneOtp: regPhoneOtp,
-          studentClass: regStudentClass
+          studentClass: regStudentClass,
+          studentType: regStudentType
         })
       });
       const data = await response.json();
@@ -1502,6 +1505,18 @@ export default function App() {
     else if (subject === 'Biology') changeView('bioNotes');
   };
 
+  const SUBJECT_CARDS: { id: 'Maths' | 'Physics' | 'Chemistry' | 'Biology'; icon: React.ElementType; color: string }[] = [
+    { id: 'Maths', icon: Calculator, color: 'from-violet-500/20 to-purple-600/20 border-violet-400 text-violet-400' },
+    { id: 'Physics', icon: Zap, color: 'from-cyan-500/20 to-blue-600/20 border-cyan-400 text-cyan-400' },
+    { id: 'Chemistry', icon: FlaskConical, color: 'from-emerald-500/20 to-teal-600/20 border-emerald-400 text-emerald-400' },
+    { id: 'Biology', icon: Dna, color: 'from-green-500/20 to-lime-600/20 border-green-400 text-green-400' },
+  ];
+
+  // For online (self-study) students, the home page shows their class's subjects directly --
+  // no homework boxes, since homework is only assigned to offline (regular class) students.
+  const onlineHomeClass: '8th' | '9th' | '10th' | null =
+    studentTrack === '8th' || studentTrack === '9th' || studentTrack === '10th' ? studentTrack : null;
+
   // Whenever a non-exempt student logs in, default their content track to their own registered
   // class instead of the hardcoded '10th' default -- this only sets the default; class-locked nav
   // below prevents them from ever switching it to another class.
@@ -1894,6 +1909,41 @@ export default function App() {
                   <option value="XI">Class XI</option>
                   <option value="XII">Class XII</option>
                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Are You an Offline Student?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={otpSent}
+                    onClick={() => setRegStudentType('offline')}
+                    className={`py-2.5 px-2 rounded-xl border text-[11px] font-black uppercase tracking-wide cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                      regStudentType === 'offline'
+                        ? 'bg-cyan-500 border-cyan-400 text-slate-950'
+                        : (isLightMode ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700')
+                    }`}
+                  >
+                    Yes, Offline
+                  </button>
+                  <button
+                    type="button"
+                    disabled={otpSent}
+                    onClick={() => setRegStudentType('online')}
+                    className={`py-2.5 px-2 rounded-xl border text-[11px] font-black uppercase tracking-wide cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                      regStudentType === 'online'
+                        ? 'bg-cyan-500 border-cyan-400 text-slate-950'
+                        : (isLightMode ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700')
+                    }`}
+                  >
+                    No, Online Only
+                  </button>
+                </div>
+                <p className={`text-[9.5px] leading-relaxed font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {regStudentType === 'offline'
+                    ? '* Offline students attend regular in-person class and will receive daily homework.'
+                    : '* Online students study independently through the app only -- no homework will be assigned.'}
+                </p>
               </div>
 
               {/* Email OTP Verification Section */}
@@ -2389,18 +2439,20 @@ export default function App() {
             );
           })()}
 
-          {/* Tab: Homework Upload */}
-          <button
-            onClick={() => { changeView('homework'); setOpenMenu(null); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-              activeView === 'homework'
-                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
-                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Homework</span>
-          </button>
+          {/* Tab: Homework Upload -- not applicable to online (self-study) students */}
+          {user.studentType !== 'online' && (
+            <button
+              onClick={() => { changeView('homework'); setOpenMenu(null); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeView === 'homework'
+                  ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                  : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+              }`}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Homework</span>
+            </button>
+          )}
 
           {/* Tab: Forum */}
           <button
@@ -2579,7 +2631,89 @@ export default function App() {
       )}
 
         {/* ── 1. HOME HUB INITIAL VIEW PANEL ── */}
-      {activeView === 'hub' && (
+      {activeView === 'hub' && user.studentType === 'online' && (
+        <div className={`flex-1 overflow-y-auto px-4 py-10 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
+          <div className="max-w-5xl mx-auto space-y-6">
+
+            <div className="space-y-1">
+              <span className={`text-xs uppercase font-mono font-black px-2.5 py-0.5 rounded border ${isLightMode ? 'text-cyan-800 bg-cyan-100 border-cyan-300' : 'text-cyan-400 bg-cyan-400/10 border border-cyan-500/20'}`}>
+                Home
+              </span>
+              <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>Welcome back, {user.name.split(' ')[0]}!</h1>
+              <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Online student -- study at your own pace. No homework is assigned to you.</p>
+            </div>
+
+            {/* Latest Updates box */}
+            <div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Megaphone className="w-4 h-4 text-amber-400" /> Latest Updates
+              </h2>
+              <div className={`mt-3 divide-y flex-1 ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                {announcementsLoading ? (
+                  <p className="text-[11px] font-semibold text-slate-500 py-3">Loading updates...</p>
+                ) : visibleAnnouncements.length === 0 ? (
+                  <p className="text-[11px] font-semibold text-slate-500 py-3">No updates posted yet.</p>
+                ) : (
+                  visibleAnnouncements.slice(0, 3).map((a) => (
+                    <div key={a.id} className="py-2.5">
+                      <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                      <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <button onClick={() => changeView('latestNews')} className={`mt-2 text-[11px] font-black self-start cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                View all updates →
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Subject</h2>
+              <p className={`text-xs font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Pick a subject to open its study notes.</p>
+            </div>
+
+            {onlineHomeClass === null ? (
+              <div className={`rounded-2xl border p-6 text-center space-y-2 ${isLightMode ? 'bg-cyan-50 border-cyan-300' : 'bg-cyan-950/20 border-cyan-500/20'}`}>
+                <p className={`text-sm font-black ${isLightMode ? 'text-cyan-800' : 'text-cyan-300'}`}>Subjects for your class aren't available yet</p>
+                <p className={`text-xs font-semibold ${isLightMode ? 'text-cyan-700' : 'text-cyan-200/80'}`}>Use the Notes menu above for your registered class's content.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {SUBJECT_CARDS.map((s) => {
+                    const available = SUBJECT_AVAILABILITY[onlineHomeClass][s.id];
+                    const Icon = s.icon;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => openSubject(onlineHomeClass, s.id)}
+                        className={`flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${s.color} ${!available ? 'opacity-70' : ''}`}
+                      >
+                        <Icon className="w-7 h-7 shrink-0" />
+                        <div>
+                          <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{s.id}</p>
+                          <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{available ? 'Notes available' : 'Coming soon'}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {underConstructionSubject && (
+                  <div className={`rounded-2xl border p-6 text-center space-y-2 ${isLightMode ? 'bg-amber-50 border-amber-300' : 'bg-amber-950/20 border-amber-500/20'}`}>
+                    <Construction className={`w-6 h-6 mx-auto ${isLightMode ? 'text-amber-600' : 'text-amber-400'}`} />
+                    <p className={`text-sm font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>{underConstructionSubject} notes for Class {onlineHomeClass.replace('th', '')} are under construction</p>
+                    <p className={`text-xs font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-200/80'}`}>They'll open here as soon as they're ready. Check back soon!</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {activeView === 'hub' && user.studentType !== 'online' && (
         <div className={`flex-1 overflow-y-auto px-4 py-10 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
           <div className="max-w-5xl mx-auto space-y-6">
 
@@ -4238,13 +4372,6 @@ export default function App() {
           ? (studentTrack === '8th' || studentTrack === '9th' || studentTrack === '10th' ? studentTrack : null)
           : studyingClass;
 
-        const SUBJECT_CARDS: { id: 'Maths' | 'Physics' | 'Chemistry' | 'Biology'; icon: React.ElementType; color: string }[] = [
-          { id: 'Maths', icon: Calculator, color: 'from-violet-500/20 to-purple-600/20 border-violet-400 text-violet-400' },
-          { id: 'Physics', icon: Zap, color: 'from-cyan-500/20 to-blue-600/20 border-cyan-400 text-cyan-400' },
-          { id: 'Chemistry', icon: FlaskConical, color: 'from-emerald-500/20 to-teal-600/20 border-emerald-400 text-emerald-400' },
-          { id: 'Biology', icon: Dna, color: 'from-green-500/20 to-lime-600/20 border-green-400 text-green-400' },
-        ];
-
         return (
           <div className={`flex-1 overflow-y-auto px-4 py-12 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
             <div className="max-w-4xl mx-auto space-y-8">
@@ -4735,6 +4862,9 @@ export default function App() {
                             <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950/40 text-cyan-400 border border-cyan-800/20">
                               Class: {pUser.studentClass || "10th"}
                             </span>
+                            <span className={`inline-block mt-1 ml-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${pUser.studentType === 'online' ? 'bg-violet-950/40 text-violet-400 border-violet-800/20' : 'bg-amber-950/40 text-amber-400 border-amber-800/20'}`}>
+                              {pUser.studentType === 'online' ? 'Online' : 'Offline'}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -4789,6 +4919,9 @@ export default function App() {
                                   <span className="text-[10px] text-emerald-400 font-mono select-text">💬 {item.whatsappNumber}</span>
                                 )}
                                 <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/40 border border-cyan-950/60 px-1.5 py-0.5 rounded font-extrabold">🎓 {item.studentClass || "10th"}</span>
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-extrabold border ${item.studentType === 'online' ? 'text-violet-400 bg-violet-950/40 border-violet-950/60' : 'text-amber-400 bg-amber-950/40 border-amber-950/60'}`}>
+                                  {item.studentType === 'online' ? '💻 Online' : '🏫 Offline'}
+                                </span>
                               </div>
                             </td>
                             <td className="py-3 px-4 font-mono text-[#22d3ee] font-bold">

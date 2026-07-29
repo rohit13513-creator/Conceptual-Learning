@@ -25,6 +25,7 @@ interface User {
   createdAt: string;
   role: "admin" | "student";
   studentClass?: string;
+  studentType: "offline" | "online";
   photoUrl: string | null;
   dateOfBirth: string | null;
   bio: string | null;
@@ -317,6 +318,7 @@ function mapUserRow(row: any): User {
     createdAt: row.created_at,
     role: row.role,
     studentClass: row.student_class,
+    studentType: row.student_type === "online" ? "online" : "offline",
     photoUrl: row.photo_url || null,
     dateOfBirth: row.date_of_birth || null,
     bio: row.bio || null,
@@ -6217,10 +6219,14 @@ function buildApp(): express.Express {
 
   // User Profile registration (Requires Phone OTP + Phone Number)
   app.post("/api/register", async (req, res) => {
-    const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass } = req.body;
+    const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass, studentType } = req.body;
 
     if (!name || !email || !password || !phone || !whatsappNumber || !phoneOtp) {
       return res.status(400).json({ error: "Please complete all fields and verify your email using the OTP prior to registering." });
+    }
+
+    if (studentType !== "offline" && studentType !== "online") {
+      return res.status(400).json({ error: "Please tell us whether you're an offline (regular class) or online (self-study) student." });
     }
 
     const emailNormalized = email.toLowerCase().trim();
@@ -6268,7 +6274,8 @@ function buildApp(): express.Express {
         status: "pending", // ALWAYS pending first!
         devices: [],
         role: "student",
-        student_class: studentClass || "10th"
+        student_class: studentClass || "10th",
+        student_type: studentType
       })
       .select()
       .single();
@@ -6942,11 +6949,12 @@ function buildApp(): express.Express {
 
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
-      supabase.from("users").select("email, name, student_class, role, status"),
+      supabase.from("users").select("email, name, student_class, role, status, student_type"),
       supabase.from("homework_submissions").select("student_email, assignment_id"),
     ]);
 
-    const students = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved");
+    // Online (self-study) students are never assigned homework, so they're excluded from the roster.
+    const students = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved" && u.student_type !== "online");
     const submittedByAssignment = new Map<string, Set<string>>();
     (submissionRows || []).forEach((s: any) => {
       if (!s.assignment_id) return;
