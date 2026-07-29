@@ -1924,7 +1924,7 @@ export default function App() {
                         : (isLightMode ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700')
                     }`}
                   >
-                    Yes, Offline
+                    Yes
                   </button>
                   <button
                     type="button"
@@ -1936,7 +1936,7 @@ export default function App() {
                         : (isLightMode ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700')
                     }`}
                   >
-                    No, Online Only
+                    No
                   </button>
                 </div>
                 <p className={`text-[9.5px] leading-relaxed font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
