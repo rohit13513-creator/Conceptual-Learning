@@ -9,6 +9,7 @@ create table users (
   name text not null,
   email text unique not null,
   phone text,
+  whatsapp_number text,
   password_hash text not null,
   status text not null default 'pending',   -- pending | approved | rejected
   role text not null default 'student',     -- student | admin

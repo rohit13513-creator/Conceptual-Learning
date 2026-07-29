@@ -19,6 +19,7 @@ interface User {
   name: string;
   email: string;
   phone?: string;
+  whatsappNumber?: string;
   status: "pending" | "approved" | "rejected";
   devices: DeviceSession[];
   createdAt: string;
@@ -310,6 +311,7 @@ function mapUserRow(row: any): User {
     name: row.name,
     email: row.email,
     phone: row.phone,
+    whatsappNumber: row.whatsapp_number,
     status: row.status,
     devices: row.devices || [],
     createdAt: row.created_at,
@@ -6215,10 +6217,10 @@ function buildApp(): express.Express {
 
   // User Profile registration (Requires Phone OTP + Phone Number)
   app.post("/api/register", async (req, res) => {
-    const { name, email, password, phone, phoneOtp, studentClass } = req.body;
+    const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass } = req.body;
 
-    if (!name || !email || !password || !phone || !phoneOtp) {
-      return res.status(400).json({ error: "Please complete all fields and verify your phone number using the OTP prior to registering." });
+    if (!name || !email || !password || !phone || !whatsappNumber || !phoneOtp) {
+      return res.status(400).json({ error: "Please complete all fields and verify your email using the OTP prior to registering." });
     }
 
     const emailNormalized = email.toLowerCase().trim();
@@ -6243,13 +6245,14 @@ function buildApp(): express.Express {
     }
 
     if (pending.phone_otp !== String(phoneOtp).trim()) {
-      return res.status(400).json({ error: "Invalid Phone OTP. Please double-check your mobile simulation code and enter again." });
+      return res.status(400).json({ error: "Invalid verification code. Please double-check the code from your email and enter again." });
     }
 
     // OTP keys are valid! Discard pending session.
     await supabase.from("pending_otps").delete().eq("email", emailNormalized);
 
     const targetPhone = phone.trim();
+    const targetWhatsapp = whatsappNumber.trim();
     const passwordHash = await bcrypt.hash(password, 10);
 
     // User is created strictly with 'pending' status by direct instruction.
@@ -6260,6 +6263,7 @@ function buildApp(): express.Express {
         name: name.trim(),
         email: emailNormalized,
         phone: targetPhone,
+        whatsapp_number: targetWhatsapp,
         password_hash: passwordHash,
         status: "pending", // ALWAYS pending first!
         devices: [],

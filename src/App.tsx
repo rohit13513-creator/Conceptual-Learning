@@ -527,6 +527,8 @@ export default function App() {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [regWhatsapp, setRegWhatsapp] = useState('');
+  const [regWhatsappSameAsPhone, setRegWhatsappSameAsPhone] = useState(true);
   const [regPassword, setRegPassword] = useState('');
   const [regPhoneOtp, setRegPhoneOtp] = useState('');
   const [regStudentClass, setRegStudentClass] = useState<'VIII' | 'IX' | 'X' | 'XI' | 'XII'>('X');
@@ -774,12 +776,12 @@ export default function App() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName || !regEmail || !regPhone || !regPassword) {
-      setAuthError('Please fill in Name, Email, Phone, and Password.');
+    if (!regName || !regEmail || !regPhone || !regWhatsapp || !regPassword) {
+      setAuthError('Please fill in Name, Email, Phone, WhatsApp Number, and Password.');
       return;
     }
     if (!regPhoneOtp) {
-      setAuthError('Please enter the 4-digit Phone verification OTP code sent to your mobile.');
+      setAuthError('Please enter the 4-digit verification code sent to your email.');
       return;
     }
     setAuthLoading(true);
@@ -794,6 +796,7 @@ export default function App() {
           email: regEmail,
           password: regPassword,
           phone: regPhone,
+          whatsappNumber: regWhatsapp,
           phoneOtp: regPhoneOtp,
           studentClass: regStudentClass
         })
@@ -1814,10 +1817,41 @@ export default function App() {
                 <input
                   type="tel"
                   value={regPhone}
-                  onChange={(e) => setRegPhone(e.target.value)}
+                  onChange={(e) => {
+                    setRegPhone(e.target.value);
+                    if (regWhatsappSameAsPhone) setRegWhatsapp(e.target.value);
+                  }}
                   placeholder="e.g. +91 99999 99999"
                   required
                   disabled={otpSent}
+                  className={`w-full border rounded-xl py-2.5 px-4 text-xs focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>WhatsApp Number</label>
+                  <label className="flex items-center gap-1.5 select-none">
+                    <input
+                      type="checkbox"
+                      checked={regWhatsappSameAsPhone}
+                      disabled={otpSent}
+                      onChange={(e) => {
+                        setRegWhatsappSameAsPhone(e.target.checked);
+                        if (e.target.checked) setRegWhatsapp(regPhone);
+                      }}
+                      className="w-3.5 h-3.5 rounded text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-cyan-500 disabled:opacity-50"
+                    />
+                    <span className={`text-[10px] font-semibold cursor-pointer ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Same as phone</span>
+                  </label>
+                </div>
+                <input
+                  type="tel"
+                  value={regWhatsapp}
+                  onChange={(e) => setRegWhatsapp(e.target.value)}
+                  placeholder="e.g. +91 99999 99999"
+                  required
+                  disabled={otpSent || regWhatsappSameAsPhone}
                   className={`w-full border rounded-xl py-2.5 px-4 text-xs focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                 />
               </div>
@@ -1890,7 +1924,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleRequestOtp}
-                  disabled={otpLoading || !regEmail || !regPhone || !regName || !regPassword}
+                  disabled={otpLoading || !regEmail || !regPhone || !regWhatsapp || !regName || !regPassword}
                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl cursor-pointer transition active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow"
                 >
                   {otpLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Send Verification OTP'}
@@ -4750,6 +4784,9 @@ export default function App() {
                               <div className="flex flex-wrap items-center gap-2 mt-1">
                                 {item.phone && (
                                   <span className="text-[10px] text-emerald-400 font-mono select-text">📞 {item.phone}</span>
+                                )}
+                                {item.whatsappNumber && item.whatsappNumber !== item.phone && (
+                                  <span className="text-[10px] text-emerald-400 font-mono select-text">💬 {item.whatsappNumber}</span>
                                 )}
                                 <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/40 border border-cyan-950/60 px-1.5 py-0.5 rounded font-extrabold">🎓 {item.studentClass || "10th"}</span>
                               </div>
