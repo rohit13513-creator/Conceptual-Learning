@@ -632,6 +632,12 @@ export default function App() {
   const [assignFile, setAssignFile] = useState<File | null>(null);
   const [assignUploading, setAssignUploading] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
+
+  // Feedback banner for Approve/Deny/Reset-Devices actions in the admin panel -- these are
+  // fire-and-forget row actions with no other visible confirmation, so without this a
+  // successful click looks identical to a silently-failed one.
+  const [adminActionMessage, setAdminActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -1260,6 +1266,7 @@ export default function App() {
     if (!user || !assignTitle.trim()) return;
     setAssignUploading(true);
     setAssignError(null);
+    setAssignSuccess(null);
     try {
       const formData = new FormData();
       formData.append('title', assignTitle);
@@ -1275,6 +1282,7 @@ export default function App() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post homework assignment.');
+      setAssignSuccess(`"${data.assignment?.title || assignTitle}" was posted successfully.`);
       setAssignTitle('');
       setAssignDescription('');
       setAssignSubject('');
@@ -1395,49 +1403,64 @@ export default function App() {
 
   const handleApproveUser = async (email: string) => {
     if (!user) return;
+    setAdminActionMessage(null);
     try {
       const resp = await fetch('/api/admin/approve-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ email })
       });
+      const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
+        setAdminActionMessage({ type: 'success', text: `Approved ${email}.` });
         fetchAdminData();
+      } else {
+        setAdminActionMessage({ type: 'error', text: data.error || `Failed to approve ${email}.` });
       }
     } catch (e) {
-      console.error(e);
+      setAdminActionMessage({ type: 'error', text: `Failed to approve ${email} -- check your connection and try again.` });
     }
   };
 
   const handleRejectUser = async (email: string) => {
     if (!user) return;
+    setAdminActionMessage(null);
     try {
       const resp = await fetch('/api/admin/reject-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ email })
       });
+      const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
+        setAdminActionMessage({ type: 'success', text: `Rejected ${email}.` });
         fetchAdminData();
+      } else {
+        setAdminActionMessage({ type: 'error', text: data.error || `Failed to reject ${email}.` });
       }
     } catch (e) {
-      console.error(e);
+      setAdminActionMessage({ type: 'error', text: `Failed to reject ${email} -- check your connection and try again.` });
     }
   };
 
   const handleResetDevices = async (email: string) => {
     if (!user) return;
+    setAdminActionMessage(null);
     try {
       const resp = await fetch('/api/admin/reset-devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ email })
       });
+      const data = await resp.json().catch(() => ({}));
       if (resp.ok) {
+        setAdminActionMessage({ type: 'success', text: `Cleared registered devices for ${email}.` });
         fetchAdminData();
+      } else {
+        setAdminActionMessage({ type: 'error', text: data.error || `Failed to reset devices for ${email}.` });
       }
     } catch (e) {
-      console.error(e);
+      setAdminActionMessage({ type: 'error', text: `Failed to reset devices for ${email} -- check your connection and try again.` });
     }
   };
 
@@ -4837,6 +4860,16 @@ export default function App() {
               </div>
             </div>
 
+            {adminActionMessage && (
+              <div className={`text-xs font-bold rounded-lg px-3 py-2.5 border ${
+                adminActionMessage.type === 'success'
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : 'text-red-400 bg-red-500/10 border-red-500/20'
+              }`}>
+                {adminActionMessage.text}
+              </div>
+            )}
+
             {/* Admin Panel Rows (single-column stack: guarantees no dead space regardless of how tall any card grows) */}
             <div className="space-y-6">
 
@@ -4984,6 +5017,9 @@ export default function App() {
 
                   {assignError && (
                     <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{assignError}</div>
+                  )}
+                  {assignSuccess && (
+                    <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{assignSuccess}</div>
                   )}
 
                   <form onSubmit={handleAssignHomework} className="space-y-3">
