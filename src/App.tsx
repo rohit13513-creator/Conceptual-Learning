@@ -641,6 +641,9 @@ export default function App() {
   // Active Roster table can get very long with many students -- collapsible so the admin can
   // hide it instead of scrolling past dozens of rows to reach the sections below.
   const [showRoster, setShowRoster] = useState(true);
+  // Which class-group sub-tables inside the roster are collapsed, keyed by studentClass
+  // (e.g. "X"). Empty by default -- every class group starts expanded.
+  const [collapsedRosterClasses, setCollapsedRosterClasses] = useState<Set<string>>(new Set());
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -1359,6 +1362,9 @@ export default function App() {
     if (activeView === 'homework' && user) {
       fetchMyHomework();
       fetchAssignments();
+    }
+    if (activeView === 'hub' && user && user.studentType !== 'online') {
+      fetchMyHomework();
     }
     if ((activeView === 'hub' || activeView === 'latestNews') && user) {
       fetchAssignments();
@@ -2899,6 +2905,46 @@ export default function App() {
                   {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
                 </button>
               </form>
+            </div>
+
+            <div className={`border rounded-2xl p-5 sm:p-6 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight uppercase font-mono tracking-widest text-[#22d3ee]">
+                Your Submissions ({mySubmissions.length})
+              </h3>
+              <div className={`mt-4 divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
+                {homeworkLoading ? (
+                  <div className="text-center py-6 text-xs font-semibold text-slate-500">Loading your submissions...</div>
+                ) : mySubmissions.length === 0 ? (
+                  <div className="text-center py-6 text-xs font-semibold text-slate-500">No homework submitted yet.</div>
+                ) : (
+                  mySubmissions.map((sub) => (
+                    <div key={sub.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{sub.subject || 'Homework Submission'}</p>
+                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(sub.submittedAt).toLocaleString()}</p>
+                        {sub.aiFeedback && (
+                          <p className={`text-[10px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {sub.aiScore != null && (
+                          <span className="text-xs font-black text-emerald-400">{sub.aiScore}/10</span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                          sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        }`}>
+                          {sub.status}
+                        </span>
+                        {sub.fileUrl && (
+                          <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-cyan-500/10 text-cyan-400 hover:text-cyan-300 cursor-pointer" title="View submitted file">
+                            <Eye className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
           </div>
@@ -4948,82 +4994,120 @@ export default function App() {
                   </button>
                   <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Review active devices per user. Clear session caches to unblock students with replacement browsers or tablets.</p>
 
-                  {showRoster && (
-                  <div className="mt-4 overflow-x-auto">
-                    <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
-                      <thead>
-                        <tr className={`uppercase tracking-wider font-mono text-[10px] pb-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                          <th className="py-2 pr-4 font-bold">Student Name</th>
-                          <th className="py-2 px-4 font-bold">Authorized Devices (Max 3)</th>
-                          <th className="py-2 px-4 font-bold">Status</th>
-                          <th className="py-2 pl-4 text-right font-bold">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
-                        {adminUsers.filter(u => u.role !== 'admin').map((item) => (
-                          <tr key={item.email} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
-                            <td className="py-3 pr-4">
-                              <p className="font-bold">{item.name}</p>
-                              <p className={`text-[10px] font-mono select-text ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{item.email}</p>
-                              <div className="flex flex-wrap items-center gap-2 mt-1">
-                                {item.phone && (
-                                  <span className="text-[10px] text-emerald-400 font-mono select-text">📞 {item.phone}</span>
-                                )}
-                                {item.whatsappNumber && item.whatsappNumber !== item.phone && (
-                                  <span className="text-[10px] text-emerald-400 font-mono select-text">💬 {item.whatsappNumber}</span>
-                                )}
-                                <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/40 border border-cyan-950/60 px-1.5 py-0.5 rounded font-extrabold">🎓 {item.studentClass || "10th"}</span>
-                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-extrabold border ${item.studentType === 'online' ? 'text-violet-400 bg-violet-950/40 border-violet-950/60' : 'text-amber-400 bg-amber-950/40 border-amber-950/60'}`}>
-                                  {item.studentType === 'online' ? '💻 Online' : '🏫 Offline'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 font-mono text-[#22d3ee] font-bold">
-                              <div>
-                                <span className={item.devices?.length >= 3 ? "text-yellow-500" : "text-cyan-400"}>
-                                  {item.devices?.length || 0} / 3 Devices registered
-                                </span>
-                                {item.devices?.length > 0 && (
-                                  <ul className="text-[9px] text-slate-500 mt-1 list-disc pl-3">
-                                    {item.devices.map((dev: any, i: number) => (
-                                      <li key={i}>{dev.deviceName} ({dev.deviceId})</li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                                item.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                              }`}>
-                                {item.status}
+                  {showRoster && (() => {
+                    const CLASS_ORDER = ['X', 'IX', 'VIII', 'XI', 'XII'];
+                    const nonAdminUsers = adminUsers.filter(u => u.role !== 'admin');
+                    const classesPresent: string[] = Array.from(new Set(nonAdminUsers.map((u: any) => u.studentClass || 'Unspecified')));
+                    const orderedClasses = [
+                      ...CLASS_ORDER.filter(c => classesPresent.includes(c)),
+                      ...classesPresent.filter(c => !CLASS_ORDER.includes(c)),
+                    ];
+                    const toggleClassGroup = (cls: string) => {
+                      setCollapsedRosterClasses(prev => {
+                        const next = new Set(prev);
+                        if (next.has(cls)) next.delete(cls); else next.add(cls);
+                        return next;
+                      });
+                    };
+
+                    return (
+                    <div className="mt-4 space-y-5">
+                      {orderedClasses.map((cls) => {
+                        const group = nonAdminUsers.filter(u => (u.studentClass || 'Unspecified') === cls);
+                        const isCollapsed = collapsedRosterClasses.has(cls);
+                        return (
+                          <div key={cls}>
+                            <button
+                              onClick={() => toggleClassGroup(cls)}
+                              className={`w-full flex items-center justify-between gap-2 cursor-pointer text-left px-3 py-2 rounded-lg border ${isLightMode ? 'bg-slate-50 border-slate-200 hover:bg-slate-100' : 'bg-slate-950/60 border-slate-800 hover:bg-slate-900'}`}
+                            >
+                              <span className={`text-xs font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
+                                {cls === 'Unspecified' ? 'Unspecified Class' : `Class ${cls}`} ({group.length})
                               </span>
-                            </td>
-                            <td className="py-3 pl-4 text-right">
-                              <div className="flex gap-1.5 justify-end">
-                                <button
-                                  onClick={() => handleResetDevices(item.email)}
-                                  className={`px-2.5 py-1.5 rounded border font-bold text-[10px] uppercase flex items-center gap-1 cursor-pointer ${isLightMode ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 hover:border-slate-400 text-slate-700' : 'bg-slate-950 hover:bg-slate-800 border-slate-800 hover:border-slate-700 text-slate-300'}`}
-                                  title="Clear registered devices count back to 0"
-                                >
-                                  <Smartphone className="w-3 h-3 text-cyan-400" />
-                                  <span>Reset Devices</span>
-                                </button>
-                                <button
-                                  onClick={() => handleRejectUser(item.email)}
-                                  className={`px-2 py-1.5 rounded hover:bg-red-500/15 transition cursor-pointer text-[10px] uppercase font-bold ${isLightMode ? 'text-slate-500 hover:text-red-600' : 'text-slate-400 hover:text-red-400'}`}
-                                  title="Suspend access"
-                                >
-                                  Suspend
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  )}
+                              <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-cyan-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} />
+                            </button>
+
+                            {!isCollapsed && (
+                            <div className="mt-2 overflow-x-auto">
+                              <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
+                                <thead>
+                                  <tr className={`uppercase tracking-wider font-mono text-[10px] pb-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    <th className="py-2 pr-4 font-bold">Student Name</th>
+                                    <th className="py-2 px-4 font-bold">Authorized Devices (Max 3)</th>
+                                    <th className="py-2 px-4 font-bold">Status</th>
+                                    <th className="py-2 pl-4 text-right font-bold">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
+                                  {group.map((item) => (
+                                    <tr key={item.email} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
+                                      <td className="py-3 pr-4">
+                                        <p className="font-bold">{item.name}</p>
+                                        <p className={`text-[10px] font-mono select-text ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{item.email}</p>
+                                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                                          {item.phone && (
+                                            <span className="text-[10px] text-emerald-400 font-mono select-text">📞 {item.phone}</span>
+                                          )}
+                                          {item.whatsappNumber && item.whatsappNumber !== item.phone && (
+                                            <span className="text-[10px] text-emerald-400 font-mono select-text">💬 {item.whatsappNumber}</span>
+                                          )}
+                                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-extrabold border ${item.studentType === 'online' ? 'text-violet-400 bg-violet-950/40 border-violet-950/60' : 'text-amber-400 bg-amber-950/40 border-amber-950/60'}`}>
+                                            {item.studentType === 'online' ? '💻 Online' : '🏫 Offline'}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-4 font-mono text-[#22d3ee] font-bold">
+                                        <div>
+                                          <span className={item.devices?.length >= 3 ? "text-yellow-500" : "text-cyan-400"}>
+                                            {item.devices?.length || 0} / 3 Devices registered
+                                          </span>
+                                          {item.devices?.length > 0 && (
+                                            <ul className="text-[9px] text-slate-500 mt-1 list-disc pl-3">
+                                              {item.devices.map((dev: any, i: number) => (
+                                                <li key={i}>{dev.deviceName} ({dev.deviceId})</li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                                          item.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                        }`}>
+                                          {item.status}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 pl-4 text-right">
+                                        <div className="flex gap-1.5 justify-end">
+                                          <button
+                                            onClick={() => handleResetDevices(item.email)}
+                                            className={`px-2.5 py-1.5 rounded border font-bold text-[10px] uppercase flex items-center gap-1 cursor-pointer ${isLightMode ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 hover:border-slate-400 text-slate-700' : 'bg-slate-950 hover:bg-slate-800 border-slate-800 hover:border-slate-700 text-slate-300'}`}
+                                            title="Clear registered devices count back to 0"
+                                          >
+                                            <Smartphone className="w-3 h-3 text-cyan-400" />
+                                            <span>Reset Devices</span>
+                                          </button>
+                                          <button
+                                            onClick={() => handleRejectUser(item.email)}
+                                            className={`px-2 py-1.5 rounded hover:bg-red-500/15 transition cursor-pointer text-[10px] uppercase font-bold ${isLightMode ? 'text-slate-500 hover:text-red-600' : 'text-slate-400 hover:text-red-400'}`}
+                                            title="Suspend access"
+                                          >
+                                            Suspend
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    );
+                  })()}
                 </div>
               </div>
 
