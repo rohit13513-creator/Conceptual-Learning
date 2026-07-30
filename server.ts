@@ -6992,21 +6992,25 @@ function buildApp(): express.Express {
       submittedByAssignment.get(s.assignment_id)!.add(s.student_email);
     });
 
-    const report = (assignmentRows || []).map((a: any) => {
-      const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
-      const submitted = submittedByAssignment.get(a.id) || new Set<string>();
-      const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
-      return {
-        id: a.id,
-        title: a.title,
-        targetClass: a.target_class,
-        assignedDate: a.assigned_date,
-        deadline: a.deadline,
-        rosterCount: roster.length,
-        submittedCount: submitted.size,
-        missing,
-      };
-    });
+    // Only call out students as "missing" once an assignment's deadline has actually passed --
+    // showing this before the deadline unfairly flags students who still have time left.
+    const report = (assignmentRows || [])
+      .filter((a: any) => !a.deadline || new Date(a.deadline).getTime() <= Date.now())
+      .map((a: any) => {
+        const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
+        const submitted = submittedByAssignment.get(a.id) || new Set<string>();
+        const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+        return {
+          id: a.id,
+          title: a.title,
+          targetClass: a.target_class,
+          assignedDate: a.assigned_date,
+          deadline: a.deadline,
+          rosterCount: roster.length,
+          submittedCount: submitted.size,
+          missing,
+        };
+      });
 
     return res.json({ report });
   });

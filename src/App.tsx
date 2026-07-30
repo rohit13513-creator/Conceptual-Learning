@@ -651,6 +651,7 @@ export default function App() {
   const [announceTargetClass, setAnnounceTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
   const [announceUploading, setAnnounceUploading] = useState(false);
   const [announceError, setAnnounceError] = useState<string | null>(null);
+  const [announceSuccess, setAnnounceSuccess] = useState<string | null>(null);
 
   // Device Fingerprinting and Session Relaunch Effect
   useEffect(() => {
@@ -1228,6 +1229,7 @@ export default function App() {
     if (!user || !announceTitle.trim() || !announceMessage.trim()) return;
     setAnnounceUploading(true);
     setAnnounceError(null);
+    setAnnounceSuccess(null);
     try {
       const resp = await fetch('/api/admin/announcements', {
         method: 'POST',
@@ -1236,6 +1238,7 @@ export default function App() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post announcement.');
+      setAnnounceSuccess('Update posted successfully.');
       setAnnounceTitle('');
       setAnnounceMessage('');
       setAnnounceTargetClass('All');
@@ -5146,6 +5149,9 @@ export default function App() {
 
                   {announceError && (
                     <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{announceError}</div>
+                  )}
+                  {announceSuccess && (
+                    <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{announceSuccess}</div>
                   )}
 
                   <form onSubmit={handlePostAnnouncement} className="space-y-3">
