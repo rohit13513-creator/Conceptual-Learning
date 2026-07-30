@@ -638,6 +638,9 @@ export default function App() {
   // fire-and-forget row actions with no other visible confirmation, so without this a
   // successful click looks identical to a silently-failed one.
   const [adminActionMessage, setAdminActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Active Roster table can get very long with many students -- collapsible so the admin can
+  // hide it instead of scrolling past dozens of rows to reach the sections below.
+  const [showRoster, setShowRoster] = useState(true);
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -1303,15 +1306,23 @@ export default function App() {
 
   const handleDeleteAssignment = async (id: string) => {
     if (!user) return;
+    setAdminActionMessage(null);
     try {
       const resp = await fetch('/api/admin/homework/delete-assignment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
         body: JSON.stringify({ id })
       });
-      if (resp.ok) { fetchAssignments(); fetchMissingReport(); }
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        setAdminActionMessage({ type: 'success', text: 'Assignment deleted.' });
+        fetchAssignments();
+        fetchMissingReport();
+      } else {
+        setAdminActionMessage({ type: 'error', text: data.error || 'Failed to delete the assignment.' });
+      }
     } catch (err) {
-      // Silent
+      setAdminActionMessage({ type: 'error', text: 'Failed to delete the assignment -- check your connection and try again.' });
     }
   };
 
@@ -4926,11 +4937,18 @@ export default function App() {
               {/* Approved users database */}
               <div>
                 <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-[#22d3ee]">
-                    <User className="w-4 h-4 text-cyan-400" /> Active Roster ({adminUsers.filter(u => u.status !== 'pending').length} Students)
-                  </h3>
+                  <button
+                    onClick={() => setShowRoster(!showRoster)}
+                    className="w-full flex items-center justify-between gap-2 cursor-pointer text-left"
+                  >
+                    <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-[#22d3ee]">
+                      <User className="w-4 h-4 text-cyan-400" /> Active Roster ({adminUsers.filter(u => u.status !== 'pending').length} Students)
+                    </h3>
+                    <ChevronDown className={`w-4 h-4 shrink-0 text-cyan-400 transition-transform ${showRoster ? 'rotate-180' : ''}`} />
+                  </button>
                   <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Review active devices per user. Clear session caches to unblock students with replacement browsers or tablets.</p>
 
+                  {showRoster && (
                   <div className="mt-4 overflow-x-auto">
                     <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
                       <thead>
@@ -5005,6 +5023,7 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               </div>
 

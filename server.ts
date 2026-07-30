@@ -6967,7 +6967,21 @@ function buildApp(): express.Express {
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: "Assignment id is required." });
 
-    await supabase.from("homework_assignments").delete().eq("id", id);
+    // Submissions reference this assignment by id, and the foreign key has no cascade behavior,
+    // so deleting the assignment while submissions still point to it silently fails at the
+    // database level. Unlink them first (they become general submissions, not tied to any
+    // listed assignment) so the assignment can always actually be deleted.
+    const { error: unlinkError } = await supabase.from("homework_submissions").update({ assignment_id: null }).eq("assignment_id", id);
+    if (unlinkError) {
+      console.error("Error unlinking submissions before assignment delete:", unlinkError.message);
+      return res.status(500).json({ error: "Failed to unlink existing submissions from this assignment." });
+    }
+
+    const { error: deleteError } = await supabase.from("homework_assignments").delete().eq("id", id);
+    if (deleteError) {
+      console.error("Error deleting homework assignment:", deleteError.message);
+      return res.status(500).json({ error: deleteError.message || "Failed to delete the assignment." });
+    }
     return res.json({ success: true });
   });
 
