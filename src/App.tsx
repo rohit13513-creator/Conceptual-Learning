@@ -1422,11 +1422,11 @@ export default function App() {
     }
   };
 
-  const MAX_HOMEWORK_FILES = 10;
+  const MAX_HOMEWORK_FILES = 15;
 
   const handleHomeworkFileSelect = (files: File[]) => {
     if (files.length > MAX_HOMEWORK_FILES) {
-      setHomeworkError(`Please select at most ${MAX_HOMEWORK_FILES} photos at a time -- you picked ${files.length}. The first ${MAX_HOMEWORK_FILES} have been kept; remove some and re-select if needed.`);
+      setHomeworkError(`Please select at most ${MAX_HOMEWORK_FILES} photos at a time -- you picked ${files.length}. The first ${MAX_HOMEWORK_FILES} have been kept. For longer homework, it's easier to scan all your pages into a single PDF (using your phone's scanner app, e.g. Google Drive, Adobe Scan, or your phone's built-in scanner) and upload that one PDF instead -- there's no page limit on PDFs.`);
       setHomeworkFiles(files.slice(0, MAX_HOMEWORK_FILES));
     } else {
       setHomeworkError(null);
@@ -2915,7 +2915,8 @@ export default function App() {
                   </div>
                 )}
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10 photos, 10MB per file)</label>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 15 photos, 10MB per file)</label>
+                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Got more than 15 pages? Scan them into one PDF with your phone's scanner app instead -- no page limit on PDFs.</p>
                   <input
                     type="file"
                     multiple
@@ -4413,7 +4414,8 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10 photos, 10MB per file)</label>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 15 photos, 10MB per file)</label>
+                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Got more than 15 pages? Scan them into one PDF with your phone's scanner app instead -- no page limit on PDFs.</p>
                   <input
                     ref={homeworkFileInputRef}
                     type="file"

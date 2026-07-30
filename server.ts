@@ -6732,7 +6732,7 @@ function buildApp(): express.Express {
 
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
   app.post("/api/homework/upload", (req, res, next) => {
-    homeworkUpload.array("files", 10)(req, res, (err: any) => {
+    homeworkUpload.array("files", 15)(req, res, (err: any) => {
       if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded file(s)." });
       next();
     });
