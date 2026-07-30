@@ -195,23 +195,51 @@ Look at the attached homework and respond with ONLY a JSON object, no other text
 {"score": <integer 0-10 for completeness and correctness>, "feedback": "<2-4 warm, specific, constructive sentences directly for the student -- praise what's right, gently point out mistakes or gaps, suggest what to revise>", "integrityFlag": <null, or a short string ONLY if the work strongly looks copied verbatim from a printed/online/AI source rather than solved by the student -- shown only to the teacher, never the student>}`;
 
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": process.env.ANTHROPIC_API_KEY as string,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 500,
-        messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
-      }),
-    });
-    const data = await resp.json();
-    const text = data?.content?.[0]?.text || "";
+    // Anthropic occasionally returns a transient 529 "Overloaded" or 429 rate-limit response --
+    // retry a couple of times with a short backoff before giving up on this submission.
+    let data: any;
+    let lastErrorMessage = "Claude did not return a parseable result.";
+    let succeeded = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2000));
+
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": process.env.ANTHROPIC_API_KEY as string,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          max_tokens: 500,
+          messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
+        }),
+      });
+      data = await resp.json();
+
+      if ((resp.status === 529 || resp.status === 429) && attempt < 2) {
+        lastErrorMessage = data?.error?.message || `Anthropic returned status ${resp.status}`;
+        continue;
+      }
+
+      // Claude may return a leading "thinking" content block before the actual text answer --
+      // find the text block by type rather than assuming it's always content[0].
+      const textBlock = (data?.content || []).find((b: any) => b.type === "text");
+      const text = textBlock?.text || "";
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!resp.ok || !jsonMatch) {
+        lastErrorMessage = data?.error?.message || "Claude did not return a parseable result.";
+        break;
+      }
+      succeeded = true;
+      break;
+    }
+    if (!succeeded) throw new Error(lastErrorMessage);
+
+    const textBlock = (data?.content || []).find((b: any) => b.type === "text");
+    const text = textBlock?.text || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!resp.ok || !jsonMatch) throw new Error(data?.error?.message || "Claude did not return a parseable result.");
     const parsed = JSON.parse(jsonMatch[0]);
 
     const { error: updateError } = await supabase.from("homework_submissions").update({
@@ -6819,7 +6847,9 @@ function buildApp(): express.Express {
 
     const submissions = await Promise.all((rows || []).map(async (r) => {
       const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
-      return mapHomeworkRow(r, signed?.signedUrl);
+      // integrityFlag is an admin-only signal -- never expose it to the student's own view.
+      const { integrityFlag, ...rest } = mapHomeworkRow(r, signed?.signedUrl);
+      return rest;
     }));
 
     return res.json({ submissions });
