@@ -1393,6 +1393,47 @@ export default function App() {
     }
   }, [activeView, user]);
 
+  // Phone camera photos are routinely 3-10MB each. Vercel's serverless functions reject any
+  // request body over ~4.5MB before our code even runs, returning a plain-text error instead of
+  // JSON -- so a handful of full-resolution photos was enough to break every upload. Shrinking
+  // each photo in the browser first (long edge capped, re-encoded as JPEG) keeps real submissions
+  // well under that ceiling without asking students to do anything differently.
+  const compressImageFile = async (file: File, maxDimension = 1600, quality = 0.75): Promise<File> => {
+    if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return file;
+    try {
+      const bitmap = await createImageBitmap(file);
+      let { width, height } = bitmap;
+      if (width > maxDimension || height > maxDimension) {
+        const scale = maxDimension / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' });
+    } catch {
+      return file;
+    }
+  };
+
+  const MAX_HOMEWORK_FILES = 10;
+
+  const handleHomeworkFileSelect = (files: File[]) => {
+    if (files.length > MAX_HOMEWORK_FILES) {
+      setHomeworkError(`Please select at most ${MAX_HOMEWORK_FILES} photos at a time -- you picked ${files.length}. The first ${MAX_HOMEWORK_FILES} have been kept; remove some and re-select if needed.`);
+      setHomeworkFiles(files.slice(0, MAX_HOMEWORK_FILES));
+    } else {
+      setHomeworkError(null);
+      setHomeworkFiles(files);
+    }
+  };
+
   const handleHomeworkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || homeworkFiles.length === 0) return;
@@ -1400,13 +1441,19 @@ export default function App() {
     setHomeworkError(null);
     setHomeworkSuccess(null);
     try {
+      const filesToUpload = await Promise.all(homeworkFiles.map((f) => compressImageFile(f)));
       const formData = new FormData();
       formData.append('email', user.email);
       formData.append('subject', homeworkSubject);
       if (selectedAssignmentId) formData.append('assignmentId', selectedAssignmentId);
-      homeworkFiles.forEach((f) => formData.append('files', f));
+      filesToUpload.forEach((f) => formData.append('files', f));
       const resp = await fetch('/api/homework/upload', { method: 'POST', body: formData });
-      const data = await resp.json();
+      let data: any = {};
+      try {
+        data = await resp.json();
+      } catch {
+        throw new Error('Upload failed -- the files may still be too large or your connection dropped mid-upload. Try uploading fewer photos at once.');
+      }
       if (!resp.ok) throw new Error(data.error || 'Failed to upload homework.');
       setHomeworkSuccess('Homework submitted successfully! It will be checked soon.');
       setHomeworkFiles([]);
@@ -2868,12 +2915,12 @@ export default function App() {
                   </div>
                 )}
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10MB per file)</label>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10 photos, 10MB per file)</label>
                   <input
                     type="file"
                     multiple
                     accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                    onChange={(e) => setHomeworkFiles(Array.from(e.target.files || []))}
+                    onChange={(e) => handleHomeworkFileSelect(Array.from(e.target.files || []))}
                     required
                     className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                   />
@@ -4366,13 +4413,13 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10MB per file)</label>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 10 photos, 10MB per file)</label>
                   <input
                     ref={homeworkFileInputRef}
                     type="file"
                     multiple
                     accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                    onChange={(e) => setHomeworkFiles(Array.from(e.target.files || []))}
+                    onChange={(e) => handleHomeworkFileSelect(Array.from(e.target.files || []))}
                     required
                     className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                   />
