@@ -180,19 +180,53 @@ async function checkHomeworkSubmission(submissionId: string) {
   const mediaType = isPdf ? "application/pdf" : (fileBlob.type || "image/jpeg");
 
   let assignmentContext = "";
+  let questionSheetBlock: any = null;
   if (sub.assignment_id) {
-    const { data: a } = await supabase.from("homework_assignments").select("title, description, subject").eq("id", sub.assignment_id).maybeSingle();
-    if (a) assignmentContext = `This was assigned as: "${a.title}"${a.description ? ` -- ${a.description}` : ""}${a.subject ? ` (Subject: ${a.subject})` : ""}.\n`;
+    const { data: a } = await supabase.from("homework_assignments").select("title, description, subject, file_path").eq("id", sub.assignment_id).maybeSingle();
+    if (a) {
+      assignmentContext = `This was assigned as: "${a.title}"${a.description ? ` -- ${a.description}` : ""}${a.subject ? ` (Subject: ${a.subject})` : ""}.\n`;
+
+      // If the teacher attached an official question sheet (common for textbook homework where
+      // different editions number questions differently), download it too so Claude can check
+      // the submission against the exact assigned questions rather than guessing from the title.
+      if (a.file_path) {
+        const { data: sheetBlob } = await supabase.storage.from(HOMEWORK_BUCKET).download(a.file_path);
+        if (sheetBlob) {
+          const sheetBuffer = await sheetBlob.arrayBuffer();
+          const sheetBase64 = Buffer.from(sheetBuffer).toString("base64");
+          const sheetIsPdf = sheetBlob.type === "application/pdf" || a.file_path.toLowerCase().endsWith(".pdf");
+          questionSheetBlock = sheetIsPdf
+            ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: sheetBase64 } }
+            : { type: "image", source: { type: "base64", media_type: sheetBlob.type || "image/jpeg", data: sheetBase64 } };
+        }
+      }
+    }
   }
 
   const contentBlock = isPdf
     ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
     : { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } };
 
+  const questionSheetNote = questionSheetBlock
+    ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is the official question sheet showing exactly which questions were assigned -- use it to know the full expected question list.\n"
+    : "";
+
   const prompt = `You are a supportive school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
-${assignmentContext}
-Look at the attached homework and respond with ONLY a JSON object, no other text, in exactly this shape:
-{"score": <integer 0-10 for completeness and correctness>, "feedback": "<2-4 warm, specific, constructive sentences directly for the student -- praise what's right, gently point out mistakes or gaps, suggest what to revise>", "integrityFlag": <null, or a short string ONLY if the work strongly looks copied verbatim from a printed/online/AI source rather than solved by the student -- shown only to the teacher, never the student>}`;
+${assignmentContext}${questionSheetNote}
+Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") instead of an answer -- this means the student is stuck and wants the teacher to explain that question in class. Treat this as a self-flagged doubt, NOT a wrong or missing answer, and never mark a doubt as incorrect.
+
+If you can tell how many questions were assigned (from the assignment description above, or by counting questions on the attached question sheet if one is included), account for every question number in your feedback:
+- Which were attempted and are correct
+- Which were attempted but have mistakes (briefly note what's wrong)
+- Which are marked as "doubt" (list the question numbers -- the teacher will explain these in class)
+- Which questions are simply missing -- no answer AND no doubt marker (list the question numbers)
+
+If any questions are missing without a doubt marker, say so plainly and state that the homework is incomplete (e.g. "This homework is INCOMPLETE -- Q9 to Q20 were not attempted or marked as doubt."). Let completeness weigh heavily in the score -- a submission missing many questions should not score highly even if what was done is correct.
+
+If you cannot tell how many questions were assigned, just grade what's shown as usual, without guessing at what might be missing.
+
+Respond with ONLY a JSON object, no other text, in exactly this shape:
+{"score": <integer 0-10 for completeness and correctness>, "feedback": "<specific, constructive feedback covering the above -- praise what's right, gently point out mistakes, list doubt and missing question numbers if applicable, and state incomplete/complete clearly>", "integrityFlag": <null, or a short string ONLY if the work strongly looks copied verbatim from a printed/online/AI source rather than solved by the student -- shown only to the teacher, never the student>}`;
 
   try {
     // Anthropic occasionally returns a transient 529 "Overloaded" or 429 rate-limit response --
@@ -212,8 +246,13 @@ Look at the attached homework and respond with ONLY a JSON object, no other text
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 500,
-          messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
+          max_tokens: 800,
+          messages: [{
+            role: "user",
+            content: questionSheetBlock
+              ? [contentBlock, questionSheetBlock, { type: "text", text: prompt }]
+              : [contentBlock, { type: "text", text: prompt }],
+          }],
         }),
       });
       data = await resp.json();
