@@ -2554,7 +2554,7 @@ export default function App() {
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Forum</span>
+            <span>Learners Adda</span>
           </button>
 
           {/* Tab 7: About Us */}
@@ -4748,7 +4748,7 @@ export default function App() {
             <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
               <div className="max-w-2xl mx-auto space-y-4">
                 <button onClick={backToForumList} className={`text-xs font-bold flex items-center gap-1 cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}>
-                  <ArrowLeft className="w-3.5 h-3.5" /> Back to Forum
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to Learners Adda
                 </button>
 
                 {forumThreadLoading ? (
@@ -4848,7 +4848,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h1 className={`text-2xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                    <MessageSquare className="w-6 h-6 text-cyan-400" /> Forum
+                    <MessageSquare className="w-6 h-6 text-cyan-400" /> Learners Adda
                   </h1>
                   <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Ask doubts, discuss anything -- open to every class.</p>
                 </div>
@@ -5609,7 +5609,7 @@ export default function App() {
             {/* Pending Forum Posts */}
             <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400">
-                <MessageSquare className="w-4 h-4 text-amber-400" /> Pending Forum Posts
+                <MessageSquare className="w-4 h-4 text-amber-400" /> Pending Learners Adda Posts
               </h3>
               <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>New threads and replies waiting for your approval before they become visible.</p>
 
