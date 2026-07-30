@@ -2901,13 +2901,14 @@ export default function App() {
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 {visibleAssignments.length > 0 && (
                   <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For? (optional)</label>
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
                     <select
                       value={selectedAssignmentId}
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                      required
                       className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                     >
-                      <option value="">General submission (not tied to a listed assignment)</option>
+                      <option value="" disabled>-- Select the assignment this is for --</option>
                       {visibleAssignments.map((a) => (
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
@@ -2947,7 +2948,7 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkFiles.length === 0}
+                  disabled={homeworkUploading || homeworkFiles.length === 0 || (visibleAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
@@ -4390,13 +4391,14 @@ export default function App() {
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 {visibleAssignments.length > 0 && (
                   <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For? (optional)</label>
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
                     <select
                       value={selectedAssignmentId}
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                      required
                       className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                     >
-                      <option value="">General submission (not tied to a listed assignment)</option>
+                      <option value="" disabled>-- Select the assignment this is for --</option>
                       {visibleAssignments.map((a) => (
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
@@ -4447,7 +4449,7 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkFiles.length === 0}
+                  disabled={homeworkUploading || homeworkFiles.length === 0 || (visibleAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
