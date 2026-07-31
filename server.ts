@@ -229,6 +229,22 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
 
 const CLAUDE_MODEL = "claude-sonnet-5";
 
+// Claude's JSON replies sometimes contain raw, unescaped control characters (usually literal
+// newlines inside the feedback string) which strict JSON.parse rejects outright. Escaping them
+// in place keeps the JSON structure untouched while making it actually parseable.
+function sanitizeModelJson(raw: string): string {
+  let out = "";
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i);
+    if (code === 10) out += "\n";
+    else if (code === 13) out += "\r";
+    else if (code === 9) out += "\t";
+    else if (code < 32) continue;
+    else out += raw[i];
+  }
+  return out;
+}
+
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
 // Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
 async function checkHomeworkSubmission(submissionId: string) {
@@ -313,7 +329,13 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
-          max_tokens: 800,
+          // Extended thinking can run away on this task -- with a question-sheet attachment
+          // (a second, denser document) it was consuming the entire token budget on internal
+          // reasoning and leaving nothing for the actual JSON answer, even at max_tokens 8192.
+          // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
+          // so thinking is switched off outright rather than chasing an ever-larger budget.
+          thinking: { type: "disabled" },
+          max_tokens: 1500,
           messages: [{
             role: "user",
             content: questionSheetBlock
@@ -338,6 +360,14 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
         lastErrorMessage = data?.error?.message || "Claude did not return a parseable result.";
         break;
       }
+      // The feedback string can contain raw newlines that Claude didn't escape, which strict
+      // JSON.parse rejects outright -- confirm it actually parses before accepting this attempt.
+      try {
+        JSON.parse(sanitizeModelJson(jsonMatch[0]));
+      } catch (parseErr: any) {
+        lastErrorMessage = `Claude's response wasn't valid JSON: ${parseErr.message}`;
+        break;
+      }
       succeeded = true;
       break;
     }
@@ -346,7 +376,7 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
     const textBlock = (data?.content || []).find((b: any) => b.type === "text");
     const text = textBlock?.text || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(sanitizeModelJson(jsonMatch[0]));
 
     const { error: updateError } = await supabase.from("homework_submissions").update({
       status: "checked",
