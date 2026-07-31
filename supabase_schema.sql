@@ -58,7 +58,8 @@ create table homework_submissions (
   ai_feedback text,
   admin_notes text,
   assignment_id uuid references homework_assignments(id),
-  integrity_flag text                       -- admin-only hint if the submission looks copied, never shown to the student
+  integrity_flag text,                      -- admin-only hint if the submission looks copied, never shown to the student
+  missing_questions jsonb                   -- question numbers (strings) still not attempted, used to scope resubmission checks
 );
 
 -- 5. ANNOUNCEMENTS — admin "push updates" feature (latest news, CBSE syllabus, etc.)

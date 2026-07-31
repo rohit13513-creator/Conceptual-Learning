@@ -235,6 +235,27 @@ async function checkHomeworkSubmission(submissionId: string) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
 
+  // A student who was told some questions were missing may send just those questions in a
+  // follow-up submission rather than resending everything. Look at their most recent checked
+  // submission for this same assignment so we only ask this file to cover what was actually
+  // still outstanding, instead of re-flagging already-completed questions as missing again.
+  let resubmissionNote = "";
+  if (sub.assignment_id) {
+    const { data: priorRows } = await supabase
+      .from("homework_submissions")
+      .select("id, submitted_at, missing_questions")
+      .eq("assignment_id", sub.assignment_id)
+      .eq("student_email", sub.student_email)
+      .eq("status", "checked")
+      .neq("id", submissionId)
+      .order("submitted_at", { ascending: false })
+      .limit(1);
+    const prior = priorRows?.[0];
+    if (prior && Array.isArray(prior.missing_questions) && prior.missing_questions.length > 0) {
+      resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still missing: ${prior.missing_questions.join(", ")}. This new submission is a follow-up meant to complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already done and checked from the earlier submission -- do NOT re-flag any question outside this list as missing just because it doesn't appear in this file. Only evaluate: whether each question in this list (${prior.missing_questions.join(", ")}) now appears and is correct, or is still missing/still a doubt. Base your "missingQuestions" output ONLY on this list, not the full original assigned range.\n`;
+    }
+  }
+
   const { data: fileBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
   if (downloadError || !fileBlob) {
     console.error(`Could not download homework file for submission ${submissionId}:`, downloadError?.message);
@@ -279,7 +300,7 @@ async function checkHomeworkSubmission(submissionId: string) {
     : "";
 
   const prompt = `You are a strict school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
-${assignmentContext}${questionSheetNote}
+${assignmentContext}${questionSheetNote}${resubmissionNote}
 Working out which questions were actually assigned:
 - The assignment title/description above is the AUTHORITATIVE source for which question numbers were assigned, especially if it states an explicit range or list (e.g. "RD Sharma Ex 6.1, Q21 to Q45", "Q1-10"). Use that stated range as ground truth.
 - Do NOT assume the numbering printed on an attached question sheet matches the assigned range. A question sheet may be numbered locally (e.g. 1-25 on the page) while the teacher actually assigned a different range from the source textbook (e.g. Q21-45) -- the sheet is just there to show what each question asks, not to redefine which numbers were assigned. Match the student's own question numbers (as they wrote them, e.g. "Ex.21", "Q21") against the range stated in the description, not against the sheet's internal numbering.
@@ -289,13 +310,15 @@ Working out which questions were actually assigned:
 
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") instead of an answer -- this means the student is stuck and wants the teacher to explain that question in class. Treat this as a self-flagged doubt, NOT a wrong or missing answer, and never mark a doubt as incorrect.
 
+Students often submit homework as phone photos of each page, one photo per page, which get combined into one file in the order they were uploaded. That order does not always match question order (e.g. a student may photograph pages out of sequence) -- this is normal and not a mistake. Never comment on question numbering being "inconsistent with page order/numbering" or similar; just work out which questions are present regardless of what order they appear in.
+
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct, properly formatted, and legible -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
 - Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
 - DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong.
-- DO list, by question number, any question that is simply missing from the assigned range -- no answer AND no doubt marker.
+- DO list, by question number, any question that is simply missing -- no answer AND no doubt marker -- and tell the student to complete and resubmit just those questions. Do not explain that there was no doubt marker or otherwise narrate how you decided a question counts as missing -- just list it.
 - DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
 - Comment on handwriting/presentation ONLY if it is genuinely hard to read or badly disorganized. If it's readable, say nothing about handwriting.
-- If any assigned questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
+- If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
 - If everything checked out -- fully correct, complete, proper format, legible -- the feedback should be short and simply say so, without listing anything.
 
 Call the submit_grade tool with your result.`;
@@ -313,8 +336,9 @@ Call the submit_grade tool with your result.`;
         score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 for completeness and correctness." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
+        missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
       },
-      required: ["score", "feedback", "integrityFlag"],
+      required: ["score", "feedback", "integrityFlag", "missingQuestions"],
     },
   };
 
@@ -378,8 +402,20 @@ Call the submit_grade tool with your result.`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
+      missing_questions: Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : [],
     }).eq("id", submissionId);
-    if (updateError) throw new Error(updateError.message);
+    if (updateError) {
+      // Falls back to a write without missing_questions if that column hasn't been migrated in
+      // yet on this database -- the grading result itself still gets saved either way.
+      console.warn("homework_submissions.missing_questions column unavailable (run the latest schema migration):", updateError.message);
+      const { error: fallbackError } = await supabase.from("homework_submissions").update({
+        status: "checked",
+        ai_score: typeof parsed.score === "number" ? parsed.score : null,
+        ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
+        integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
+      }).eq("id", submissionId);
+      if (fallbackError) throw new Error(fallbackError.message);
+    }
   } catch (err: any) {
     console.error(`Error checking homework submission ${submissionId}:`, err.message);
   }
