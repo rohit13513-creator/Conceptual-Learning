@@ -676,14 +676,24 @@ export default function App() {
     if (localUser) {
       try {
         const parsed = JSON.parse(localUser);
-        if (parsed?.token) setUser(parsed); else localStorage.removeItem('optics_v1_user');
+        if (parsed?.token) {
+          setUser(parsed);
+          if (ADMIN_EMAILS.includes(parsed.email)) changeView('admin');
+        } else {
+          localStorage.removeItem('optics_v1_user');
+        }
       } catch (e) {
         localStorage.removeItem('optics_v1_user');
       }
     } else if (sessionUser) {
       try {
         const parsed = JSON.parse(sessionUser);
-        if (parsed?.token) setUser(parsed); else sessionStorage.removeItem('optics_v1_user');
+        if (parsed?.token) {
+          setUser(parsed);
+          if (ADMIN_EMAILS.includes(parsed.email)) changeView('admin');
+        } else {
+          sessionStorage.removeItem('optics_v1_user');
+        }
       } catch (e) {
         sessionStorage.removeItem('optics_v1_user');
       }
@@ -738,7 +748,7 @@ export default function App() {
         localStorage.removeItem('optics_v1_user');
       }
       setAuthSuccess('Welcome back! Authentication approved.');
-      changeView('hub');
+      changeView(ADMIN_EMAILS.includes(authedUser.email) ? 'admin' : 'hub');
     } catch (err: any) {
       setAuthError(err.message);
     } finally {
@@ -4957,16 +4967,27 @@ export default function App() {
             {/* Admin Welcome Jumbotron */}
             <div className={`relative rounded-3xl overflow-hidden border border-amber-500/20 p-8 shadow-2xl ${isLightMode ? 'bg-gradient-to-r from-amber-50 via-white to-slate-50' : 'bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-950'}`}>
               <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-              <div className="space-y-4 relative z-10">
-                <span className="px-3 py-1 text-xs font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20">
-                  🛡️ Core Administrator Controls [Owner Only]
-                </span>
-                <h1 className={`text-2xl sm:text-3xl font-black tracking-tight leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                  Welcome back, {(user?.name || 'Admin').split(' ')[0]}!
-                </h1>
-                <p className={`text-xs sm:text-sm font-semibold leading-relaxed max-w-xl ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                  Approve/reject pending user registries, reset active device limits, and manage shareable Invite/Access Codes for WhatsApp & Instagram.
-                </p>
+              <div className="flex items-start justify-between gap-4 relative z-10">
+                <div className="space-y-4">
+                  <span className="px-3 py-1 text-xs font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20">
+                    🛡️ Core Administrator Controls [Owner Only]
+                  </span>
+                  <h1 className={`text-2xl sm:text-3xl font-black tracking-tight leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                    Welcome back, {(user?.name || 'Admin').split(' ')[0]}!
+                  </h1>
+                  <p className={`text-xs sm:text-sm font-semibold leading-relaxed max-w-xl ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Approve/reject pending user registries, reset active device limits, and manage shareable Invite/Access Codes for WhatsApp & Instagram.
+                  </p>
+                </div>
+                <button
+                  onClick={fetchAdminData}
+                  disabled={adminLoading}
+                  title="Refresh to check for new requests"
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${isLightMode ? 'bg-white border-amber-300 text-amber-700 hover:bg-amber-50' : 'bg-slate-900/60 border-amber-500/30 text-amber-400 hover:bg-amber-500/10'}`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${adminLoading ? 'animate-spin' : ''}`} />
+                  {adminLoading ? 'Refreshing…' : 'Refresh'}
+                </button>
               </div>
             </div>
 
