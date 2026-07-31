@@ -275,23 +275,28 @@ async function checkHomeworkSubmission(submissionId: string) {
     : { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } };
 
   const questionSheetNote = questionSheetBlock
-    ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is the official question sheet showing exactly which questions were assigned -- use it to know the full expected question list.\n"
+    ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is a question sheet, attached for reference on the content/wording of individual questions.\n"
     : "";
 
   const prompt = `You are a strict school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
 ${assignmentContext}${questionSheetNote}
+Working out which questions were actually assigned:
+- The assignment title/description above is the AUTHORITATIVE source for which question numbers were assigned, especially if it states an explicit range or list (e.g. "RD Sharma Ex 6.1, Q21 to Q45", "Q1-10"). Use that stated range as ground truth.
+- Do NOT assume the numbering printed on an attached question sheet matches the assigned range. A question sheet may be numbered locally (e.g. 1-25 on the page) while the teacher actually assigned a different range from the source textbook (e.g. Q21-45) -- the sheet is just there to show what each question asks, not to redefine which numbers were assigned. Match the student's own question numbers (as they wrote them, e.g. "Ex.21", "Q21") against the range stated in the description, not against the sheet's internal numbering.
+- If the student has correctly answered questions in the officially stated range, do not mark the homework incomplete just because those numbers don't match a differently-numbered question sheet.
+- If the student attempted extra questions outside the assigned range (bonus/extra practice), still check and grade those too -- do not ignore them and do not penalize the student for doing extra work.
+- If you genuinely cannot tell which questions were assigned (no range stated anywhere and no other way to infer it), just grade what's shown as usual, without guessing at what might be missing.
+
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") instead of an answer -- this means the student is stuck and wants the teacher to explain that question in class. Treat this as a self-flagged doubt, NOT a wrong or missing answer, and never mark a doubt as incorrect.
 
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct, properly formatted, and legible -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
 - Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
 - DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong.
-- DO list, by question number, any question that is simply missing -- no answer AND no doubt marker.
+- DO list, by question number, any question that is simply missing from the assigned range -- no answer AND no doubt marker.
 - DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
 - Comment on handwriting/presentation ONLY if it is genuinely hard to read or badly disorganized. If it's readable, say nothing about handwriting.
-- If you can tell how many questions were assigned (from the assignment description above, or by counting questions on the attached question sheet if included), and any are missing without a doubt marker, state plainly that the homework is INCOMPLETE. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
+- If any assigned questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
 - If everything checked out -- fully correct, complete, proper format, legible -- the feedback should be short and simply say so, without listing anything.
-
-If you cannot tell how many questions were assigned, just grade what's shown as usual, without guessing at what might be missing.
 
 Call the submit_grade tool with your result.`;
 
