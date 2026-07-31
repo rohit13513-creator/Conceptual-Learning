@@ -104,6 +104,11 @@ const supabase = createClient(
 
 const ADMIN_EMAILS = ["rohit13513@gmail.com", "conceptuallearningonline@gmail.com"];
 
+// Both addresses above keep full admin panel access, but all site email now sends and receives
+// only through the conceptuallearningonline inbox -- rohit13513 is kept in ADMIN_EMAILS purely
+// for login/authorization, not as a mail recipient.
+const ADMIN_NOTIFICATION_EMAILS = ["conceptuallearningonline@gmail.com"];
+
 // ── SESSION TOKENS ──
 // Every previous "auth" check in this file trusted a plain client-supplied email (or an
 // x-admin-email header) with nothing to prove the request actually came from that logged-in
@@ -6542,7 +6547,7 @@ function buildApp(): express.Express {
       </div>
     `;
 
-    for (const adminEmail of ADMIN_EMAILS) {
+    for (const adminEmail of ADMIN_NOTIFICATION_EMAILS) {
       sendSimulatedEmail(
         adminEmail,
         `📝 Action Required: New Student Registry [${newUser.name}]`,
