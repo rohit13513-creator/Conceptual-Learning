@@ -3,7 +3,7 @@ import { QUIZ_8TH, QUIZ_10TH, QUIZ_12TH, QUIZ_JEE } from "../quizData";
 import { QuizQuestion } from "../types";
 import { CheckCircle, XCircle, ChevronRight, Award, HelpCircle, GraduationCap, Sparkles, Clock, AlertTriangle, BookOpen, Play } from "lucide-react";
 
-type QuizGrade = "8th" | "10th" | "12th" | "jee";
+type QuizGrade = "8th" | "9th" | "10th" | "12th" | "jee";
 
 interface QuizProps {
   initialGrade?: QuizGrade;
@@ -36,6 +36,8 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
       // If we are passing custom questions (like CLASSVIII_SELF_ASSESSMENT or COMPETITION_SELF_ASSESSMENT)
       if (initialGrade === "8th") {
         duration = 1200; // 20 mins for Class VIII
+      } else if (initialGrade === "9th") {
+        duration = 1800; // 30 mins for Class IX Biology
       } else if (initialGrade === "10th") {
         duration = 1800; // 30 mins for Class X
       } else {
@@ -138,6 +140,7 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
     let duration = 1800;
     if (customQuestions) {
       if (initialGrade === "8th") duration = 1200;
+      else if (initialGrade === "9th") duration = 1800;
       else if (initialGrade === "10th") duration = 1800;
       else duration = 3600;
     } else {
@@ -440,6 +443,7 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
                   onClick={() => {
                     const nextGrades: Record<QuizGrade, QuizGrade> = {
                       "8th": "10th",
+                      "9th": "10th",
                       "10th": "12th",
                       "12th": "jee",
                       "jee": "8th",

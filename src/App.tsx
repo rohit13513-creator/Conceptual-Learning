@@ -52,6 +52,15 @@ import {
   CHEMISTRY10_SELF_ASSESSMENT,
 } from './data/chemistry10';
 import {
+  BIOLOGY9_NCERT_SOLVED,
+  BIOLOGY9_MCQS,
+  BIOLOGY9_VERY_SHORT,
+  BIOLOGY9_SHORT,
+  BIOLOGY9_LONG,
+  BIOLOGY9_COMPETENCY,
+  BIOLOGY9_SELF_ASSESSMENT,
+} from './data/biology9';
+import {
   COMPETITION_MCQS,
   COMPETITION_SELF_ASSESSMENT,
 } from './data/competitions';
@@ -1665,6 +1674,16 @@ export default function App() {
         assertion: CLASSX_ASSERTION_REASON,
         competency: CLASSX_CASE_COMPETENCY,
       };
+    } else if (preparingFor === '9th') {
+      return {
+        ncert: BIOLOGY9_NCERT_SOLVED,
+        mcqs: BIOLOGY9_MCQS,
+        veryshort: BIOLOGY9_VERY_SHORT,
+        short: BIOLOGY9_SHORT,
+        long: BIOLOGY9_LONG,
+        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        competency: BIOLOGY9_COMPETENCY,
+      };
     } else {
       return {
         ncert: [] as typeof CLASSX_NCERT_SOLVED,
@@ -2394,6 +2413,7 @@ export default function App() {
           {(() => {
             const ncertItems = filterNavItemsByClass([
               { label: 'Class VIII', grade: '8th', onClick: () => { setPreparingFor('8th'); changeView('ncert'); } },
+              { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); changeView('ncert'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('ncert'); } },
             ]);
@@ -2443,6 +2463,7 @@ export default function App() {
           {(() => {
             const qbankItems = filterNavItemsByClass([
               { label: 'Class VIII', grade: '8th', onClick: () => { setPreparingFor('8th'); changeView('qbank'); } },
+              { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); changeView('qbank'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('qbank'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('qbank'); } },
@@ -2493,6 +2514,7 @@ export default function App() {
           {(() => {
             const assessmentItems = filterNavItemsByClass([
               { label: 'Class VIII', grade: '8th', onClick: () => { setPreparingFor('8th'); changeView('assessment'); } },
+              { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); changeView('assessment'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('assessment'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('assessment'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('assessment'); } },
@@ -3145,7 +3167,7 @@ export default function App() {
                   <h3 className={`text-base font-bold mb-1 transition text-center leading-tight ${
                     isLightMode ? 'text-slate-800 group-hover:text-emerald-600' : 'text-slate-100 group-hover:text-emerald-400'
                   }`}>
-                    {preparingFor === '8th' ? 'Solved Class 8th NCERT' : 'Solved Class 10th NCERT'}
+                    {preparingFor === '8th' ? 'Solved Class 8th NCERT' : preparingFor === '9th' ? 'Solved Class 9th Textbook Qs' : 'Solved Class 10th NCERT'}
                   </h3>
                   <p className={`text-[11px] font-medium leading-relaxed ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                     Theoretical details, textbook numeric marks-model step answers.
@@ -3255,7 +3277,11 @@ export default function App() {
 
       {/* ── 1D. LEARN BIOLOGY (CLASS IX) STUDY MODULE ── */}
       {activeView === 'bioNotes' && (
-        <LearnBiology isLightMode={isLightMode} />
+        <LearnBiology
+          isLightMode={isLightMode}
+          onCompleteNotes={() => { setPreparingFor('9th'); changeView('ncert'); }}
+          onGoToSelfAssessment={() => { setPreparingFor('9th'); changeView('assessment'); }}
+        />
       )}
 
       {/* ── 2. SOLVED NCERT QUESTIONS EXPLORER ── */}
@@ -3338,10 +3364,10 @@ export default function App() {
               <div className="space-y-1">
                 <h2 className="text-xl font-black text-slate-100 tracking-tight flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-teal-400" />
-                  Solved NCERT Questions
+                  {preparingFor === '9th' ? 'Solved Textbook Questions' : 'Solved NCERT Questions'}
                 </h2>
                 <p className="text-sm font-semibold text-slate-300">
-                  Search & study official {preparingFor === '8th' ? 'Class VIII' : 'Class X'} {preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.
+                  Search & study official {preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -3394,7 +3420,7 @@ export default function App() {
                         
                         {/* Given values */}
                         <div className="space-y-2">
-                          <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">1. Extracted Values (Prior to substitution)</span>
+                          <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">1. {preparingFor === '9th' ? 'Key Concept / Context' : 'Extracted Values (Prior to substitution)'}</span>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {Object.entries(q.given).map(([key, val]) => (
                               <div key={key} className="bg-[#121927] border border-slate-800 p-3 rounded-xl">
@@ -3408,14 +3434,14 @@ export default function App() {
                         {/* Equations block */}
                         <div className="space-y-3 bg-slate-950/60 rounded-xl p-4.5 border border-slate-800">
                           <div>
-                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono mb-1">2. {preparingFor === '10th' && qbSubject === 'chemistry' ? 'Applied Concept / Reaction Pattern' : 'Applied Mirror / Lens Formula'}</span>
+                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono mb-1">2. {preparingFor === '9th' ? 'Key Concept Used' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Applied Concept / Reaction Pattern' : 'Applied Mirror / Lens Formula'}</span>
                             <span className="text-sm font-black text-yellow-300 font-mono bg-yellow-400/5 border border-yellow-400/15 py-1.5 px-3.5 rounded-xl inline-block">
                               {renderTextWithFractions(q.formulaUsed)}
                             </span>
                           </div>
 
                           <div className="space-y-2 pt-2">
-                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">3. Mathematical Progression Steps</span>
+                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">3. {preparingFor === '9th' ? 'Step-by-Step Explanation' : 'Mathematical Progression Steps'}</span>
                             <div className="space-y-2 pl-2">
                               {q.derivationSteps.map((step, sIdx) => (
                                 <div key={sIdx} className="text-sm text-slate-250 font-medium leading-snug font-mono flex gap-2">
@@ -3430,7 +3456,7 @@ export default function App() {
                         {/* Outcomes */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                           <div className="bg-emerald-950/20 border border-emerald-500/25 rounded-xl p-4.5">
-                            <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold block font-mono mb-1">🎯 {preparingFor === '10th' && qbSubject === 'chemistry' ? 'FINAL ANSWER' : 'FINAL NUMERICAL CONCLUSION'}</span>
+                            <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold block font-mono mb-1">🎯 {preparingFor === '9th' || (preparingFor === '10th' && qbSubject === 'chemistry') ? 'FINAL ANSWER' : 'FINAL NUMERICAL CONCLUSION'}</span>
                             <p className="text-sm text-emerald-250 leading-relaxed font-semibold">{q.finalAnswer}</p>
                           </div>
 
@@ -3443,9 +3469,9 @@ export default function App() {
                         </div>
 
                         {/* Interactive trigger shortcut -- only meaningful for the Physics/Optics dataset,
-                            since these presets are ray-optics simulator variables and the Chemistry
-                            NCERT dataset reuses the same 1-4 id range for unrelated questions. */}
-                        {!(preparingFor === '10th' && qbSubject === 'chemistry') && (
+                            since these presets are ray-optics simulator variables and the Chemistry/
+                            Biology datasets reuse the same 1-4 id range for unrelated questions. */}
+                        {!(preparingFor === '10th' && qbSubject === 'chemistry') && preparingFor !== '9th' && (
                         <div className="flex justify-end pt-3 border-t border-slate-800">
                           <button
                             onClick={() => {
@@ -3501,8 +3527,8 @@ export default function App() {
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 mt-8">
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-cyan-400 bg-cyan-400/10 px-2.5 py-0.5 rounded border border-cyan-500/20">Next Chapter Milestone</span>
-                <h4 className="text-base font-bold text-slate-100 mt-1">Solved NCERT Exercises Completed!</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : 'optics'} concepts to the test in the Question Bank.</p>
+                <h4 className="text-base font-bold text-slate-100 mt-1">{preparingFor === '9th' ? 'Solved Textbook Exercises Completed!' : 'Solved NCERT Exercises Completed!'}</h4>
+                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? 'biology' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : 'optics'} concepts to the test in the Question Bank.</p>
               </div>
               <button
                 onClick={() => changeView('qbank')}
@@ -4228,7 +4254,7 @@ export default function App() {
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/25">Final Chapter Milestone</span>
                 <h4 className="text-base font-bold text-slate-100 mt-1">Question Bank Completed!</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : 'optics'} scoring badge.</p>
+                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '9th' ? 'biology' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : 'optics'} scoring badge.</p>
               </div>
               <button
                 onClick={() => changeView('assessment')}
@@ -4328,11 +4354,11 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' ? 'Class VIII' : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX (Biology)' : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
-                {preparingFor === '8th' ? 'Grade 8 Standard' : preparingFor === '10th' ? 'Grade 10 Standard' : 'Competitive / JEE'}
+                {preparingFor === '8th' ? 'Grade 8 Standard' : preparingFor === '9th' ? 'Grade 9 Standard' : preparingFor === '10th' ? 'Grade 10 Standard' : 'Competitive / JEE'}
               </span>
             </div>
 
@@ -4340,16 +4366,18 @@ export default function App() {
             <div className="max-w-2xl mx-auto">
               <Quiz
                 key={`${preparingFor}_${qbSubject}`}
-                initialGrade={preparingFor === '8th' ? '8th' : preparingFor === '10th' ? '10th' : 'jee'}
+                initialGrade={preparingFor === '8th' ? '8th' : preparingFor === '9th' ? '9th' : preparingFor === '10th' ? '10th' : 'jee'}
                 customQuestions={
                   preparingFor === '8th'
                     ? CLASSVIII_SELF_ASSESSMENT
+                    : preparingFor === '9th'
+                    ? BIOLOGY9_SELF_ASSESSMENT
                     : preparingFor === '10th'
                     ? (qbSubject === 'chemistry' ? CHEMISTRY10_SELF_ASSESSMENT : CLASSX_SELF_ASSESSMENT)
                     : COMPETITION_SELF_ASSESSMENT
                 }
-                subjectTitle={preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : undefined}
-                subjectSubtitle={preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : undefined}
+                subjectTitle={preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '9th' ? 'Biology Self-Assessment' : undefined}
+                subjectSubtitle={preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '9th' ? 'Ready to test your knowledge of the Cell?' : undefined}
                 isLightMode={isLightMode}
               />
             </div>
