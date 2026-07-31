@@ -229,22 +229,6 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
 
 const CLAUDE_MODEL = "claude-sonnet-5";
 
-// Claude's JSON replies sometimes contain raw, unescaped control characters (usually literal
-// newlines inside the feedback string) which strict JSON.parse rejects outright. Escaping them
-// in place keeps the JSON structure untouched while making it actually parseable.
-function sanitizeModelJson(raw: string): string {
-  let out = "";
-  for (let i = 0; i < raw.length; i++) {
-    const code = raw.charCodeAt(i);
-    if (code === 10) out += "\n";
-    else if (code === 13) out += "\r";
-    else if (code === 9) out += "\t";
-    else if (code < 32) continue;
-    else out += raw[i];
-  }
-  return out;
-}
-
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
 // Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
 async function checkHomeworkSubmission(submissionId: string) {
@@ -294,28 +278,46 @@ async function checkHomeworkSubmission(submissionId: string) {
     ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is the official question sheet showing exactly which questions were assigned -- use it to know the full expected question list.\n"
     : "";
 
-  const prompt = `You are a supportive school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
+  const prompt = `You are a strict school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
 ${assignmentContext}${questionSheetNote}
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") instead of an answer -- this means the student is stuck and wants the teacher to explain that question in class. Treat this as a self-flagged doubt, NOT a wrong or missing answer, and never mark a doubt as incorrect.
 
-If you can tell how many questions were assigned (from the assignment description above, or by counting questions on the attached question sheet if one is included), account for every question number in your feedback:
-- Which were attempted and are correct
-- Which were attempted but have mistakes (briefly note what's wrong)
-- Which are marked as "doubt" (list the question numbers -- the teacher will explain these in class)
-- Which questions are simply missing -- no answer AND no doubt marker (list the question numbers)
-
-If any questions are missing without a doubt marker, say so plainly and state that the homework is incomplete (e.g. "This homework is INCOMPLETE -- Q9 to Q20 were not attempted or marked as doubt."). Let completeness weigh heavily in the score -- a submission missing many questions should not score highly even if what was done is correct.
+Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct, properly formatted, and legible -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
+- Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
+- DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong.
+- DO list, by question number, any question that is simply missing -- no answer AND no doubt marker.
+- DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
+- Comment on handwriting/presentation ONLY if it is genuinely hard to read or badly disorganized. If it's readable, say nothing about handwriting.
+- If you can tell how many questions were assigned (from the assignment description above, or by counting questions on the attached question sheet if included), and any are missing without a doubt marker, state plainly that the homework is INCOMPLETE. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
+- If everything checked out -- fully correct, complete, proper format, legible -- the feedback should be short and simply say so, without listing anything.
 
 If you cannot tell how many questions were assigned, just grade what's shown as usual, without guessing at what might be missing.
 
-Respond with ONLY a JSON object, no other text, in exactly this shape:
-{"score": <integer 0-10 for completeness and correctness>, "feedback": "<specific, constructive feedback covering the above -- praise what's right, gently point out mistakes, list doubt and missing question numbers if applicable, and state incomplete/complete clearly>", "integrityFlag": <null, or a short string ONLY if the work strongly looks copied verbatim from a printed/online/AI source rather than solved by the student -- shown only to the teacher, never the student>}`;
+Call the submit_grade tool with your result.`;
+
+  // Forcing a tool call instead of asking Claude to write raw JSON as text sidesteps a whole
+  // class of bugs found the hard way: markdown code fences around the JSON, unescaped newlines
+  // or stray quotes inside the feedback string, and other free-text formatting drift. The
+  // Anthropic API guarantees tool_use input already matches this schema -- no text parsing at all.
+  const gradeTool = {
+    name: "submit_grade",
+    description: "Submit the grading result for this homework submission.",
+    input_schema: {
+      type: "object",
+      properties: {
+        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 for completeness and correctness." },
+        feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
+        integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
+      },
+      required: ["score", "feedback", "integrityFlag"],
+    },
+  };
 
   try {
     // Anthropic occasionally returns a transient 529 "Overloaded" or 429 rate-limit response --
     // retry a couple of times with a short backoff before giving up on this submission.
     let data: any;
-    let lastErrorMessage = "Claude did not return a parseable result.";
+    let lastErrorMessage = "Claude did not return a usable result.";
     let succeeded = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2000));
@@ -331,11 +333,13 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
           model: CLAUDE_MODEL,
           // Extended thinking can run away on this task -- with a question-sheet attachment
           // (a second, denser document) it was consuming the entire token budget on internal
-          // reasoning and leaving nothing for the actual JSON answer, even at max_tokens 8192.
+          // reasoning and leaving nothing for the actual answer, even at max_tokens 8192.
           // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
           // so thinking is switched off outright rather than chasing an ever-larger budget.
           thinking: { type: "disabled" },
           max_tokens: 1500,
+          tools: [gradeTool],
+          tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
             role: "user",
             content: questionSheetBlock
@@ -351,21 +355,9 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
         continue;
       }
 
-      // Claude may return a leading "thinking" content block before the actual text answer --
-      // find the text block by type rather than assuming it's always content[0].
-      const textBlock = (data?.content || []).find((b: any) => b.type === "text");
-      const text = textBlock?.text || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!resp.ok || !jsonMatch) {
-        lastErrorMessage = data?.error?.message || "Claude did not return a parseable result.";
-        break;
-      }
-      // The feedback string can contain raw newlines that Claude didn't escape, which strict
-      // JSON.parse rejects outright -- confirm it actually parses before accepting this attempt.
-      try {
-        JSON.parse(sanitizeModelJson(jsonMatch[0]));
-      } catch (parseErr: any) {
-        lastErrorMessage = `Claude's response wasn't valid JSON: ${parseErr.message}`;
+      const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
+      if (!resp.ok || !toolUseBlock || typeof toolUseBlock.input?.score !== "number") {
+        lastErrorMessage = data?.error?.message || "Claude did not return a usable result.";
         break;
       }
       succeeded = true;
@@ -373,16 +365,14 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
     }
     if (!succeeded) throw new Error(lastErrorMessage);
 
-    const textBlock = (data?.content || []).find((b: any) => b.type === "text");
-    const text = textBlock?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(sanitizeModelJson(jsonMatch[0]));
+    const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
+    const parsed = toolUseBlock.input;
 
     const { error: updateError } = await supabase.from("homework_submissions").update({
       status: "checked",
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
-      integrity_flag: typeof parsed.integrityFlag === "string" ? parsed.integrityFlag : null,
+      integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
