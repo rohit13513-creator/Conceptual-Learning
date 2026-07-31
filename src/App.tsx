@@ -93,6 +93,7 @@ import {
   Sun,
   Moon,
   Upload,
+  Download,
   Calculator,
   Dna,
   FlaskConical,
@@ -4370,12 +4371,18 @@ export default function App() {
                           {new Date(a.createdAt).toLocaleDateString()} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
                         </p>
                         {a.deadline && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(a.deadline)}</p>}
+                        {a.fileUrl && (
+                          <a
+                            href={a.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download
+                            className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors ${isLightMode ? 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'}`}
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download Question PDF
+                          </a>
+                        )}
                       </div>
-                      {a.fileUrl && (
-                        <a href={a.fileUrl} target="_blank" rel="noreferrer" className="p-1.5 rounded hover:bg-cyan-500/10 text-cyan-400 shrink-0 cursor-pointer" title="View assignment file">
-                          <Eye className="w-4 h-4" />
-                        </a>
-                      )}
                     </div>
                   ))}
                 </div>
