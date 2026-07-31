@@ -10,6 +10,7 @@ import { Quiz } from './components/Quiz';
 import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
 import LearnChemistry from './components/LearnChemistry';
 import { LearnBiology } from './components/LearnBiology';
+import { PhotoUploader } from './components/PhotoUploader';
 import { CompetitiveOptics } from './components/CompetitiveOptics';
 import { AboutUs } from './components/AboutUs';
 import ReactionSimulator from './components/ReactionSimulator';
@@ -620,9 +621,12 @@ export default function App() {
   const [checkNowResult, setCheckNowResult] = useState<string | null>(null);
 
   // Homework Upload States
-  const homeworkFileInputRef = useRef<HTMLInputElement>(null);
   const [homeworkSubject, setHomeworkSubject] = useState('');
-  const [homeworkFiles, setHomeworkFiles] = useState<File[]>([]);
+  const [homeworkMode, setHomeworkMode] = useState<'photos' | 'pdf'>('photos');
+  const [homeworkSessionId, setHomeworkSessionId] = useState(() => crypto.randomUUID());
+  const [homeworkPhotoTempPaths, setHomeworkPhotoTempPaths] = useState<string[]>([]);
+  const [homeworkPhotosUploading, setHomeworkPhotosUploading] = useState(false);
+  const [homeworkPdfFile, setHomeworkPdfFile] = useState<File | null>(null);
   const [homeworkUploading, setHomeworkUploading] = useState(false);
   const [homeworkError, setHomeworkError] = useState<string | null>(null);
   const [homeworkSuccess, setHomeworkSuccess] = useState<string | null>(null);
@@ -640,6 +644,10 @@ export default function App() {
   const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
   const [assignAssignedDate, setAssignAssignedDate] = useState(todayDateStr);
   const [assignFile, setAssignFile] = useState<File | null>(null);
+  const [assignMode, setAssignMode] = useState<'photos' | 'pdf'>('pdf');
+  const [assignSessionId, setAssignSessionId] = useState(() => crypto.randomUUID());
+  const [assignPhotoTempPaths, setAssignPhotoTempPaths] = useState<string[]>([]);
+  const [assignPhotosUploading, setAssignPhotosUploading] = useState(false);
   const [assignUploading, setAssignUploading] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
@@ -1299,7 +1307,11 @@ export default function App() {
       formData.append('subject', assignSubject);
       formData.append('targetClass', assignTargetClass);
       formData.append('assignedDate', assignAssignedDate);
-      if (assignFile) formData.append('file', assignFile);
+      if (assignMode === 'photos') {
+        if (assignPhotoTempPaths.length > 0) formData.append('photoSessionId', assignSessionId);
+      } else if (assignFile) {
+        formData.append('file', assignFile);
+      }
       const resp = await fetch('/api/admin/homework/assign', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${user.token}` },
@@ -1314,6 +1326,8 @@ export default function App() {
       setAssignTargetClass('All');
       setAssignAssignedDate(todayDateStr);
       setAssignFile(null);
+      setAssignPhotoTempPaths([]);
+      setAssignSessionId(crypto.randomUUID());
       fetchAssignments();
       fetchMissingReport();
     } catch (err: any) {
@@ -1409,74 +1423,51 @@ export default function App() {
     }
   }, [activeView, user]);
 
-  // Phone camera photos are routinely 3-10MB each. Vercel's serverless functions reject any
-  // request body over ~4.5MB before our code even runs, returning a plain-text error instead of
-  // JSON -- so a handful of full-resolution photos was enough to break every upload. Shrinking
-  // each photo in the browser first (long edge capped, re-encoded as JPEG) keeps real submissions
-  // well under that ceiling without asking students to do anything differently.
-  const compressImageFile = async (file: File, maxDimension = 1600, quality = 0.75): Promise<File> => {
-    if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') return file;
-    try {
-      const bitmap = await createImageBitmap(file);
-      let { width, height } = bitmap;
-      if (width > maxDimension || height > maxDimension) {
-        const scale = maxDimension / Math.max(width, height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return file;
-      ctx.drawImage(bitmap, 0, 0, width, height);
-      const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-      if (!blob || blob.size >= file.size) return file;
-      return new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' });
-    } catch {
-      return file;
-    }
-  };
-
-  const MAX_HOMEWORK_FILES = 15;
-
-  const handleHomeworkFileSelect = (files: File[]) => {
-    if (files.length > MAX_HOMEWORK_FILES) {
-      setHomeworkError(`Please select at most ${MAX_HOMEWORK_FILES} photos at a time -- you picked ${files.length}. The first ${MAX_HOMEWORK_FILES} have been kept. For longer homework, it's easier to scan all your pages into a single PDF (using your phone's scanner app, e.g. Google Drive, Adobe Scan, or your phone's built-in scanner) and upload that one PDF instead -- there's no page limit on PDFs.`);
-      setHomeworkFiles(files.slice(0, MAX_HOMEWORK_FILES));
-    } else {
-      setHomeworkError(null);
-      setHomeworkFiles(files);
-    }
-  };
-
   const handleHomeworkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || homeworkFiles.length === 0) return;
+    if (!user) return;
+    if (homeworkMode === 'photos' && homeworkPhotoTempPaths.length === 0) return;
+    if (homeworkMode === 'pdf' && !homeworkPdfFile) return;
     setHomeworkUploading(true);
     setHomeworkError(null);
     setHomeworkSuccess(null);
     try {
-      const filesToUpload = await Promise.all(homeworkFiles.map((f) => compressImageFile(f)));
-      const formData = new FormData();
-      formData.append('subject', homeworkSubject);
-      if (selectedAssignmentId) formData.append('assignmentId', selectedAssignmentId);
-      filesToUpload.forEach((f) => formData.append('files', f));
-      const resp = await fetch('/api/homework/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${user.token}` },
-        body: formData
-      });
+      let resp: Response;
+      if (homeworkMode === 'photos') {
+        // Every photo in homeworkPhotoTempPaths already finished uploading individually (via
+        // PhotoUploader) -- this call carries no file data at all, just tells the server which
+        // already-uploaded session to merge and finalize into the submission.
+        resp = await fetch('/api/homework/finalize-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+          body: JSON.stringify({
+            sessionId: homeworkSessionId,
+            subject: homeworkSubject,
+            assignmentId: selectedAssignmentId || undefined,
+          }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('subject', homeworkSubject);
+        if (selectedAssignmentId) formData.append('assignmentId', selectedAssignmentId);
+        formData.append('files', homeworkPdfFile as File);
+        resp = await fetch('/api/homework/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${user.token}` },
+          body: formData,
+        });
+      }
       let data: any = {};
       try {
         data = await resp.json();
       } catch {
-        throw new Error('Upload failed -- the files may still be too large or your connection dropped mid-upload. Try uploading fewer photos at once.');
+        throw new Error('Upload failed -- your connection may have dropped. Please try again.');
       }
       if (!resp.ok) throw new Error(data.error || 'Failed to upload homework.');
       setHomeworkSuccess('Homework submitted successfully! It will be checked soon.');
-      setHomeworkFiles([]);
-      if (homeworkFileInputRef.current) homeworkFileInputRef.current.value = '';
+      setHomeworkPhotoTempPaths([]);
+      setHomeworkSessionId(crypto.randomUUID());
+      setHomeworkPdfFile(null);
       setHomeworkSubject('');
       setSelectedAssignmentId('');
       fetchMyHomework();
@@ -2958,43 +2949,36 @@ export default function App() {
                     </select>
                   </div>
                 )}
-                <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 15 photos, 10MB per file)</label>
-                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Got more than 15 pages? Scan them into one PDF with your phone's scanner app instead -- no page limit on PDFs.</p>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                    onChange={(e) => handleHomeworkFileSelect(Array.from(e.target.files || []))}
-                    required
-                    className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
-                  />
-                  {homeworkFiles.length > 0 && (
-                    <ul className="space-y-1 pt-1">
-                      {homeworkFiles.map((f, i) => (
-                        <li key={i} className={`flex items-center justify-between text-[10px] font-mono px-2 py-1 rounded ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-950 text-slate-400'}`}>
-                          <span className="truncate">{f.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setHomeworkFiles(homeworkFiles.filter((_, idx) => idx !== i))}
-                            className="text-red-400 hover:text-red-300 cursor-pointer ml-2 shrink-0"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {homeworkFiles.length > 1 && (
-                    <p className="text-[10px] font-semibold text-cyan-400">{homeworkFiles.length} photos will be combined into one PDF automatically.</p>
+                <div className="space-y-2">
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => setHomeworkMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => setHomeworkMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                  </div>
+                  {homeworkMode === 'photos' ? (
+                    <PhotoUploader
+                      key={homeworkSessionId}
+                      token={user!.token}
+                      sessionId={homeworkSessionId}
+                      isLightMode={isLightMode}
+                      disabled={homeworkUploading}
+                      accent="cyan"
+                      onChange={(paths, uploading) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); }}
+                    />
+                  ) : (
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => setHomeworkPdfFile(e.target.files?.[0] || null)}
+                      className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                    />
                   )}
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkFiles.length === 0 || (visibleAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (visibleAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
                 </button>
               </form>
             </div>
@@ -4470,44 +4454,43 @@ export default function App() {
                     className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF (max 15 photos, 10MB per file)</label>
-                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Got more than 15 pages? Scan them into one PDF with your phone's scanner app instead -- no page limit on PDFs.</p>
-                  <input
-                    ref={homeworkFileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                    onChange={(e) => handleHomeworkFileSelect(Array.from(e.target.files || []))}
-                    required
-                    className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
-                  />
-                  {homeworkFiles.length > 0 && (
-                    <ul className="space-y-1 pt-1">
-                      {homeworkFiles.map((f, i) => (
-                        <li key={i} className={`flex items-center justify-between text-[10px] font-mono px-2 py-1 rounded ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-950 text-slate-400'}`}>
-                          <span className="truncate">{f.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setHomeworkFiles(homeworkFiles.filter((_, idx) => idx !== i))}
-                            className="text-red-400 hover:text-red-300 cursor-pointer ml-2 shrink-0"
-                          >
-                            Remove
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {homeworkFiles.length > 1 && (
-                    <p className="text-[10px] font-semibold text-cyan-400">{homeworkFiles.length} photos will be combined into one PDF automatically.</p>
+                <div className="space-y-2">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF</label>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => setHomeworkMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => setHomeworkMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                  </div>
+                  {homeworkMode === 'photos' ? (
+                    <>
+                      <PhotoUploader
+                        key={homeworkSessionId}
+                        token={user!.token}
+                        sessionId={homeworkSessionId}
+                        isLightMode={isLightMode}
+                        disabled={homeworkUploading}
+                        accent="cyan"
+                        onChange={(paths, uploading) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); }}
+                      />
+                      <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Attach one photo per page -- use the camera button on a phone, or add photos from your gallery.</p>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => setHomeworkPdfFile(e.target.files?.[0] || null)}
+                        className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                      />
+                      <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Scan your pages into one PDF with your phone's scanner app (e.g. Google Drive or Adobe Scan) and upload it here -- no page limit.</p>
+                    </>
                   )}
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkFiles.length === 0 || (visibleAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (visibleAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
                 </button>
               </form>
             </div>
@@ -5307,21 +5290,37 @@ export default function App() {
                         className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Attach Question Sheet (optional)</label>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                        onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
-                        className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
-                      />
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => setAssignMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                        <button type="button" onClick={() => setAssignMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                      </div>
+                      {assignMode === 'photos' ? (
+                        <PhotoUploader
+                          key={assignSessionId}
+                          token={user!.token}
+                          sessionId={assignSessionId}
+                          isLightMode={isLightMode}
+                          disabled={assignUploading}
+                          accent="amber"
+                          onChange={(paths, uploading) => { setAssignPhotoTempPaths(paths); setAssignPhotosUploading(uploading); }}
+                        />
+                      ) : (
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
+                          className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                        />
+                      )}
                     </div>
                     <button
                       type="submit"
-                      disabled={assignUploading || !assignTitle.trim()}
+                      disabled={assignUploading || assignPhotosUploading || !assignTitle.trim()}
                       className="w-full py-2 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50"
                     >
-                      {assignUploading ? 'Posting...' : 'Post Assignment'}
+                      {assignUploading ? 'Posting...' : assignPhotosUploading ? 'Photos still uploading...' : 'Post Assignment'}
                     </button>
                   </form>
 

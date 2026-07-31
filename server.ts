@@ -232,6 +232,40 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
   return Buffer.from(await pdfDoc.save());
 }
 
+// Photos uploaded one at a time (via /api/homework/upload-photo) land here temporarily, keyed by
+// the uploader's email + a client-generated session id, so a multi-photo submission never has to
+// go through the server in a single large multipart request (that's what was silently truncating
+// on Vercel's ~4.5MB serverless body limit -- the exact "10 photos in, only 1 saved" failure mode).
+const HOMEWORK_TEMP_PREFIX = "homework-temp";
+
+// Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
+// deletes the temp copies. Returns null if no photos were found for that session.
+async function mergeSessionPhotos(email: string, sessionId: string): Promise<Buffer | null> {
+  const folder = `${HOMEWORK_TEMP_PREFIX}/${email}/${sessionId}`;
+  const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
+  if (listError || !fileList || fileList.length === 0) return null;
+
+  const sorted = fileList.slice().sort((a, b) => {
+    const orderA = parseInt(a.name.split("-")[0], 10) || 0;
+    const orderB = parseInt(b.name.split("-")[0], 10) || 0;
+    return orderA - orderB;
+  });
+
+  const buffers: { buffer: Buffer }[] = [];
+  for (const f of sorted) {
+    const { data: blob } = await supabase.storage.from(HOMEWORK_BUCKET).download(`${folder}/${f.name}`);
+    if (blob) buffers.push({ buffer: Buffer.from(await blob.arrayBuffer()) });
+  }
+  if (buffers.length === 0) return null;
+
+  const merged = await mergeImagesToPdf(buffers);
+
+  // Best-effort cleanup -- a failure here shouldn't fail the submission itself.
+  await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+
+  return merged;
+}
+
 const CLAUDE_MODEL = "claude-sonnet-5";
 
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
@@ -6910,6 +6944,106 @@ function buildApp(): express.Express {
 
   // ── HOMEWORK UPLOAD & REVIEW ──
 
+  // Uploads exactly one photo into a temporary holding area for an in-progress multi-photo
+  // submission/assignment. Used by both students (homework) and admins (assignment question
+  // sheets) -- each call is a small, single-file request, so it can never hit the platform's
+  // request-body size limit no matter how many photos the user attaches in total.
+  app.post("/api/homework/upload-photo", (req, res, next) => {
+    homeworkUpload.single("photo")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the photo." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, order } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No photo was received." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (req.file.mimetype === "application/pdf") {
+      return res.status(400).json({ error: "This endpoint only accepts photos. Upload a PDF separately as a single file." });
+    }
+
+    const orderNum = parseInt(order, 10) || 0;
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const tempPath = `${HOMEWORK_TEMP_PREFIX}/${auth.email}/${safeSessionId}/${String(orderNum).padStart(3, "0")}-${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(tempPath, req.file.buffer, {
+      contentType: req.file.mimetype,
+    });
+    if (uploadError) {
+      console.error("Temp photo upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload this photo. Please try again." });
+    }
+
+    return res.json({ success: true, tempPath });
+  });
+
+  // Removes one previously uploaded temp photo (e.g. the user wants to retake/remove it before
+  // finishing their submission). Only lets a user delete their own temp files.
+  app.delete("/api/homework/upload-photo", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { tempPath } = req.body;
+    if (!tempPath || typeof tempPath !== "string" || !tempPath.startsWith(`${HOMEWORK_TEMP_PREFIX}/${auth.email}/`)) {
+      return res.status(400).json({ error: "Invalid photo reference." });
+    }
+    const { error: removeError } = await supabase.storage.from(HOMEWORK_BUCKET).remove([tempPath]);
+    if (removeError) return res.status(500).json({ error: "Failed to remove this photo." });
+    return res.json({ success: true });
+  });
+
+  // Student finishes a photo-based submission: merges every photo already uploaded for this
+  // session into one PDF and saves the submission. This request carries no file data at all
+  // (just JSON), so it stays tiny regardless of how many photos were attached.
+  app.post("/api/homework/finalize-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, subject, assignmentId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+
+    const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", auth.email).maybeSingle();
+    if (!targetUser) return res.status(404).json({ error: "Student account not found." });
+    if (targetUser.status !== "approved") return res.status(403).json({ error: "Only approved students can submit homework." });
+
+    let merged: Buffer | null;
+    try {
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+    } catch (mergeErr: any) {
+      console.error("Error merging session photos:", mergeErr.message);
+      return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
+    }
+    if (!merged) {
+      return res.status(400).json({ error: "No uploaded photos were found for this submission. Please attach at least one photo and wait for it to finish uploading before submitting." });
+    }
+
+    const filePath = `${auth.email}/${Date.now()}-submission.pdf`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, merged, {
+      contentType: "application/pdf",
+    });
+    if (uploadError) {
+      console.error("Homework file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to save the combined homework PDF. Please try again." });
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("homework_submissions")
+      .insert({
+        student_email: auth.email,
+        file_path: filePath,
+        subject: subject ? String(subject).trim() : null,
+        assignment_id: assignmentId ? String(assignmentId) : null,
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error saving homework submission record:", insertError?.message);
+      return res.status(500).json({ error: "PDF created but failed to save the submission record." });
+    }
+
+    return res.json({ success: true, submission: mapHomeworkRow(insertedRow) });
+  });
+
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
   app.post("/api/homework/upload", (req, res, next) => {
     homeworkUpload.array("files", 15)(req, res, (err: any) => {
@@ -7073,8 +7207,12 @@ function buildApp(): express.Express {
       next();
     });
   }, async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
-    const { title, description, subject, targetClass, assignedDate } = req.body;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!ADMIN_EMAILS.includes(auth.email)) {
+      return res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
+    }
+    const { title, description, subject, targetClass, assignedDate, photoSessionId } = req.body;
     if (!title) return res.status(400).json({ error: "Assignment title is required." });
 
     const today = todayIST();
@@ -7084,7 +7222,27 @@ function buildApp(): express.Express {
     }
 
     let filePath: string | null = null;
-    if (req.file) {
+    if (photoSessionId) {
+      // Question sheet was attached as one-by-one photos rather than a single direct file --
+      // merge whatever was uploaded to that session into one PDF.
+      let merged: Buffer | null;
+      try {
+        merged = await mergeSessionPhotos(auth.email, String(photoSessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+      } catch (mergeErr: any) {
+        console.error("Error merging assignment session photos:", mergeErr.message);
+        return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
+      }
+      if (merged) {
+        filePath = `assignments/${Date.now()}-question-sheet.pdf`;
+        const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, merged, {
+          contentType: "application/pdf",
+        });
+        if (uploadError) {
+          console.error("Assignment photo-session upload error:", uploadError.message);
+          return res.status(500).json({ error: "Failed to upload assignment file." });
+        }
+      }
+    } else if (req.file) {
       const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       filePath = `assignments/${Date.now()}-${safeName}`;
       const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, req.file.buffer, {
