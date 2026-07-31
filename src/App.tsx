@@ -2433,7 +2433,7 @@ export default function App() {
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5" />
-                  <span>Solve NCERT</span>
+                  <span>NCERT Solved</span>
                   {ncertItems.length > 1 && (
                     <ChevronDown className={`w-3 h-3 transition-transform ${openMenu === 'ncert' ? 'rotate-180' : ''}`} />
                   )}
