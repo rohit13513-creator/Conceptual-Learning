@@ -2885,6 +2885,17 @@ export default function App() {
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {a.deadline && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(a.deadline)}</p>}
+                        {a.fileUrl && (
+                          <a
+                            href={a.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download
+                            className={`mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border transition-colors ${isLightMode ? 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'}`}
+                          >
+                            <Download className="w-3 h-3" /> Download PDF
+                          </a>
+                        )}
                       </div>
                     ))
                   )}
