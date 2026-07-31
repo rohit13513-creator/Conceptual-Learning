@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "crypto";
 import express from "express";
 import path from "path";
 import nodemailer from "nodemailer";
@@ -102,6 +103,72 @@ const supabase = createClient(
 );
 
 const ADMIN_EMAILS = ["rohit13513@gmail.com", "conceptuallearningonline@gmail.com"];
+
+// ── SESSION TOKENS ──
+// Every previous "auth" check in this file trusted a plain client-supplied email (or an
+// x-admin-email header) with nothing to prove the request actually came from that logged-in
+// user -- anyone who knew or guessed an email could act as them. These signed, HMAC-based
+// tokens are issued once at login and verified on every subsequent request; the client cannot
+// forge one without knowing SESSION_SECRET, which never leaves the server.
+const SESSION_SECRET = process.env.SESSION_SECRET || "";
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function base64url(input: Buffer): string {
+  return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function signSessionToken(payload: { email: string; role: string }): string {
+  const body = { ...payload, exp: Date.now() + SESSION_MAX_AGE_MS };
+  const payloadB64 = base64url(Buffer.from(JSON.stringify(body)));
+  const sig = base64url(crypto.createHmac("sha256", SESSION_SECRET).update(payloadB64).digest());
+  return `${payloadB64}.${sig}`;
+}
+
+function verifySessionToken(token: string): { email: string; role: string } | null {
+  if (!token || !SESSION_SECRET) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, sig] = parts;
+  const expectedSig = base64url(crypto.createHmac("sha256", SESSION_SECRET).update(payloadB64).digest());
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (!payload.exp || payload.exp < Date.now() || !payload.email) return null;
+    return { email: String(payload.email).toLowerCase().trim(), role: String(payload.role || "student") };
+  } catch {
+    return null;
+  }
+}
+
+// Verifies the Authorization: Bearer <token> header and returns the authenticated identity, or
+// sends a 401 and returns null. Every endpoint that acts on a specific user's data must call
+// this and use the returned email as the identity -- never a client-supplied body/query email.
+function requireAuth(req: express.Request, res: express.Response): { email: string; role: string } | null {
+  const authHeader = (req.headers["authorization"] as string) || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const payload = verifySessionToken(token);
+  if (!payload) {
+    res.status(401).json({ error: "Your session has expired or is invalid. Please log in again." });
+    return null;
+  }
+  return payload;
+}
+
+// A short-lived, single-purpose signed token used only in the account-approval email link, so
+// that link can't be forged just by knowing (or guessing) the target's email address.
+function signApprovalToken(email: string): string {
+  return base64url(crypto.createHmac("sha256", SESSION_SECRET).update(`approve:${email}`).digest());
+}
+
+function verifyApprovalToken(email: string, token: string): boolean {
+  if (!token || !SESSION_SECRET) return false;
+  const expected = signApprovalToken(email);
+  const tokenBuf = Buffer.from(token);
+  const expectedBuf = Buffer.from(expected);
+  return tokenBuf.length === expectedBuf.length && crypto.timingSafeEqual(tokenBuf, expectedBuf);
+}
 
 const HOMEWORK_BUCKET = "homework";
 const homeworkUpload = multer({
@@ -6318,7 +6385,10 @@ function buildApp(): express.Express {
     }
 
     if (pending.phone_otp !== String(phoneOtp).trim()) {
-      return res.status(400).json({ error: "Invalid verification code. Please double-check the code from your email and enter again." });
+      // Invalidate the code on any wrong guess -- a 4-digit code with unlimited retries within
+      // its 10-minute window would otherwise be brute-forceable in a few thousand requests.
+      await supabase.from("pending_otps").delete().eq("email", emailNormalized);
+      return res.status(400).json({ error: "Invalid verification code. Please click 'Send Verification OTP' again to get a new code." });
     }
 
     // OTP keys are valid! Discard pending session.
@@ -6357,7 +6427,7 @@ function buildApp(): express.Express {
     // Send notification email to Rohit (Owner) with dynamic click-to-approve links
     const requestHost = `${req.protocol}://${req.get('host')}`;
     const appUrl = (process.env.APP_URL || requestHost || "").replace(/\/$/, "");
-    const approveUrl = `${appUrl}/api/user/approve-external?email=${encodeURIComponent(newUser.email)}`;
+    const approveUrl = `${appUrl}/api/user/approve-external?email=${encodeURIComponent(newUser.email)}&token=${encodeURIComponent(signApprovalToken(newUser.email))}`;
 
     const textBody = `Hello Rohit,\n\nA new student has successfully completed verification and submitted their registration request:\n\n` +
       `- Name: ${newUser.name}\n` +
@@ -6430,12 +6500,17 @@ function buildApp(): express.Express {
 
   // External GET entry point to approve students on a single click from incoming email CTA buttons
   app.get("/api/user/approve-external", async (req, res) => {
-    const { email } = req.query;
+    const { email, token } = req.query;
     if (!email) {
       return res.status(400).send("<h1>Missing mandatory email field</h1>");
     }
 
     const targetEmail = String(email).toLowerCase().trim();
+    // Without this, anyone who knows (or guesses) a pending student's email address could hit
+    // this link directly and self-approve their own account, skipping admin review entirely.
+    if (!verifyApprovalToken(targetEmail, String(token || ""))) {
+      return res.status(403).send("<h1>Invalid or expired approval link.</h1>");
+    }
     const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
 
     if (!targetUser) {
@@ -6520,32 +6595,6 @@ function buildApp(): express.Express {
     `);
   });
 
-  // Simulated direct email approval webhook for Rohit's Inbox Action Buttons
-  app.post("/api/simulated-email/approve", async (req, res) => {
-    const { studentEmail } = req.body;
-    if (!studentEmail) {
-      return res.status(400).json({ error: "Student email is required." });
-    }
-
-    const targetEmail = studentEmail.toLowerCase().trim();
-    const { data: targetUser } = await supabase.from("users").select("*").eq("email", targetEmail).maybeSingle();
-    if (!targetUser) {
-      return res.status(404).json({ error: "Student account not found in database." });
-    }
-
-    await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
-
-    // Send congrats notification email to Student
-    sendSimulatedEmail(
-      targetEmail,
-      "🎉 Account Approved: Welcome to Ray-Optica!",
-      `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`,
-      'outgoing'
-    );
-
-    return res.json({ success: true, message: `Successfully approved student: ${targetEmail}` });
-  });
-
   // User Login & Device Limitation Gate
   app.post("/api/login", async (req, res) => {
     const { email, password, deviceId, deviceName } = req.body;
@@ -6562,9 +6611,28 @@ function buildApp(): express.Express {
       return res.status(401).json({ error: "No user found with this email. Please check spelling or register." });
     }
 
+    // Brute-force lockout: too many wrong passwords locks the account out temporarily, so a
+    // script can't just guess passwords forever.
+    const now = Date.now();
+    const lockedUntilMs = userRow.locked_until ? new Date(userRow.locked_until).getTime() : 0;
+    if (lockedUntilMs > now) {
+      const minutesLeft = Math.max(1, Math.ceil((lockedUntilMs - now) / 60000));
+      return res.status(429).json({ error: `Too many failed login attempts. Please try again in ${minutesLeft} minute(s).` });
+    }
+
     const passwordMatches = await bcrypt.compare(password, userRow.password_hash);
     if (!passwordMatches) {
+      const attempts = (userRow.failed_login_attempts || 0) + 1;
+      const lockoutUpdates: Record<string, any> = { failed_login_attempts: attempts };
+      if (attempts >= 8) lockoutUpdates.locked_until = new Date(now + 15 * 60 * 1000).toISOString();
+      const { error: lockoutError } = await supabase.from("users").update(lockoutUpdates).eq("email", emailNormalized);
+      if (lockoutError) console.warn("Login lockout tracking unavailable (run the latest schema migration):", lockoutError.message);
       return res.status(401).json({ error: "Invalid password. Please try again." });
+    }
+
+    if (userRow.failed_login_attempts || userRow.locked_until) {
+      const { error: clearError } = await supabase.from("users").update({ failed_login_attempts: 0, locked_until: null }).eq("email", emailNormalized);
+      if (clearError) console.warn("Login lockout tracking unavailable (run the latest schema migration):", clearError.message);
     }
 
     if (userRow.status === "pending") {
@@ -6612,9 +6680,11 @@ function buildApp(): express.Express {
 
     // Return authenticated user state without payload password
     const safeUser = mapUserRow({ ...userRow, devices });
+    const token = signSessionToken({ email: emailNormalized, role: userRow.role });
     return res.status(200).json({
       message: "Login successful!",
-      user: safeUser
+      user: safeUser,
+      token
     });
   });
 
@@ -6703,7 +6773,11 @@ function buildApp(): express.Express {
       return res.status(400).json({ error: "This reset code has expired. Please request a new one." });
     }
     if (pending.otp !== String(otp).trim()) {
-      return res.status(400).json({ error: "Incorrect reset code." });
+      // Invalidate the code on any wrong guess -- otherwise a 4-digit code is brute-forceable
+      // within its 10-minute window, which would let an attacker take over any account (student
+      // or admin) just by knowing their email address.
+      await supabase.from("password_reset_otps").delete().eq("email", emailNormalized);
+      return res.status(400).json({ error: "Incorrect reset code. Please request a new one." });
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
@@ -6724,10 +6798,11 @@ function buildApp(): express.Express {
       next();
     });
   }, async (req, res) => {
-    const { email, dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
-    if (!email) return res.status(400).json({ error: "Email is required." });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
 
-    const emailNormalized = email.toLowerCase().trim();
+    const emailNormalized = auth.email;
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
     if (!existingUser) return res.status(404).json({ error: "Account not found." });
 
@@ -6776,13 +6851,15 @@ function buildApp(): express.Express {
       next();
     });
   }, async (req, res) => {
-    const { email, subject, assignmentId } = req.body;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { subject, assignmentId } = req.body;
     const files = (req.files as Express.Multer.File[]) || [];
-    if (!email || files.length === 0) {
-      return res.status(400).json({ error: "Email and at least one homework file are required." });
+    if (files.length === 0) {
+      return res.status(400).json({ error: "At least one homework file is required." });
     }
 
-    const emailNormalized = email.toLowerCase().trim();
+    const emailNormalized = auth.email;
     const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", emailNormalized).maybeSingle();
     if (!targetUser) {
       return res.status(404).json({ error: "Student account not found." });
@@ -6875,8 +6952,9 @@ function buildApp(): express.Express {
 
   // Student views their own homework submission history
   app.get("/api/homework/mine", async (req, res) => {
-    const email = String(req.query.email || "").toLowerCase().trim();
-    if (!email) return res.status(400).json({ error: "Email is required." });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const email = auth.email;
 
     const { data: rows } = await supabase
       .from("homework_submissions")
@@ -7081,7 +7159,11 @@ function buildApp(): express.Express {
 
   // Admin posts a new announcement/update (latest news, CBSE syllabus, etc.)
   app.post("/api/admin/announcements", async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth || !ADMIN_EMAILS.includes(auth.email)) {
+      if (auth) res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
+      return;
+    }
     const { title, message, targetClass } = req.body;
     if (!title || !message) return res.status(400).json({ error: "Title and message are required." });
 
@@ -7091,7 +7173,7 @@ function buildApp(): express.Express {
         title: String(title).trim(),
         message: String(message).trim(),
         target_class: targetClass || "All",
-        created_by: (req.headers["x-admin-email"] as string || "").toLowerCase().trim(),
+        created_by: auth.email,
       })
       .select()
       .single();
@@ -7135,7 +7217,12 @@ function buildApp(): express.Express {
   // List every thread visible to the requester (approved ones + their own pending ones),
   // most recent first, with a count of approved replies for each.
   app.get("/api/forum/threads", async (req, res) => {
-    const requester = String(req.query.email || "").toLowerCase().trim();
+    // Auth is optional here (approved threads are visible to everyone) but if a valid token is
+    // present, it's what determines which of the requester's own pending threads they can see --
+    // never the unverified ?email= query param, which anyone could set to any value.
+    const authHeader = (req.headers["authorization"] as string) || "";
+    const tokenPayload = verifySessionToken(authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "");
+    const requester = tokenPayload?.email || "";
 
     const [{ data: threadRows }, { data: replyRows }] = await Promise.all([
       supabase.from("forum_threads").select("*").order("created_at", { ascending: false }).limit(200),
@@ -7166,12 +7253,17 @@ function buildApp(): express.Express {
       next();
     });
   }, async (req, res) => {
-    const { title, body, authorEmail, authorName } = req.body;
-    if (!title || !body || !authorEmail || !authorName) {
-      return res.status(400).json({ error: "Title, body, and author details are required." });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { title, body } = req.body;
+    if (!title || !body) {
+      return res.status(400).json({ error: "Title and body are required." });
     }
 
-    const emailNormalized = String(authorEmail).toLowerCase().trim();
+    const emailNormalized = auth.email;
+    const { data: authorRow } = await supabase.from("users").select("name").eq("email", emailNormalized).maybeSingle();
+    if (!authorRow) return res.status(404).json({ error: "Account not found." });
+
     let imageUrl: string | null = null;
     if (req.file) {
       imageUrl = await uploadForumImage(req.file, "threads");
@@ -7184,7 +7276,7 @@ function buildApp(): express.Express {
         title: String(title).trim(),
         body: String(body).trim(),
         author_email: emailNormalized,
-        author_name: String(authorName).trim(),
+        author_name: authorRow.name,
         image_url: imageUrl,
         status: ADMIN_EMAILS.includes(emailNormalized) ? "approved" : "pending",
       })
@@ -7202,7 +7294,9 @@ function buildApp(): express.Express {
   // View one thread plus the replies visible to the requester
   app.get("/api/forum/threads/:id", async (req, res) => {
     const { id } = req.params;
-    const requester = String(req.query.email || "").toLowerCase().trim();
+    const authHeader = (req.headers["authorization"] as string) || "";
+    const tokenPayload = verifySessionToken(authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "");
+    const requester = tokenPayload?.email || "";
     const isAdmin = ADMIN_EMAILS.includes(requester);
 
     const [{ data: threadRow }, { data: replyRows }] = await Promise.all([
@@ -7230,16 +7324,21 @@ function buildApp(): express.Express {
       next();
     });
   }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const { id } = req.params;
-    const { body, authorEmail, authorName } = req.body;
-    if (!body || !authorEmail || !authorName) {
-      return res.status(400).json({ error: "Reply body and author details are required." });
+    const { body } = req.body;
+    if (!body) {
+      return res.status(400).json({ error: "Reply body is required." });
     }
 
     const { data: threadRow } = await supabase.from("forum_threads").select("id").eq("id", id).maybeSingle();
     if (!threadRow) return res.status(404).json({ error: "Thread not found." });
 
-    const emailNormalized = String(authorEmail).toLowerCase().trim();
+    const emailNormalized = auth.email;
+    const { data: authorRow } = await supabase.from("users").select("name").eq("email", emailNormalized).maybeSingle();
+    if (!authorRow) return res.status(404).json({ error: "Account not found." });
+
     let imageUrl: string | null = null;
     if (req.file) {
       imageUrl = await uploadForumImage(req.file, "replies");
@@ -7252,7 +7351,7 @@ function buildApp(): express.Express {
         thread_id: id,
         body: String(body).trim(),
         author_email: emailNormalized,
-        author_name: String(authorName).trim(),
+        author_name: authorRow.name,
         image_url: imageUrl,
         status: ADMIN_EMAILS.includes(emailNormalized) ? "approved" : "pending",
       })
@@ -7328,25 +7427,12 @@ function buildApp(): express.Express {
     return res.json({ success: true });
   });
 
-  // Publicly queryable simulated alerts for sandbox verification
-  app.get("/api/public/logs", async (req, res) => {
-    const { data: logRows } = await supabase
-      .from("email_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    return res.json({
-      emailLogs: (logRows || []).map((r) => ({
-        id: r.id, to: r.to_email, subject: r.subject, body: r.body, timestamp: r.created_at, type: r.type
-      }))
-    });
-  });
-
   // ── ADMIN PROTECTED ENDPOINTS ──
   // Checks admin authorization headers / payload parameter
   function checkAdminAuth(req: express.Request, res: express.Response) {
-    const requester = (req.headers["x-admin-email"] as string || "").toLowerCase().trim();
-    if (!ADMIN_EMAILS.includes(requester)) {
+    const auth = requireAuth(req, res);
+    if (!auth) return false; // requireAuth already sent a 401
+    if (!ADMIN_EMAILS.includes(auth.email)) {
       res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
       return false;
     }

@@ -478,6 +478,7 @@ export default function App() {
     devices: DeviceSession[];
     studentClass?: string;
     studentType?: 'offline' | 'online';
+    token: string;
   }
 
   const [user, setUser] = useState<ActiveUser | null>(null);
@@ -537,7 +538,6 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
-  const [publicEmails, setPublicEmails] = useState<any[]>([]);
   const [copiedCodeCode, setCopiedCodeCode] = useState<string | null>(null);
   
   const [authError, setAuthError] = useState<string | null>(null);
@@ -669,17 +669,21 @@ export default function App() {
     setDeviceId(devId);
     setDeviceName(deviceType);
 
+    // Sessions saved before login started issuing signed tokens have no `token` field -- treat
+    // those as logged out instead of showing a broken UI where every request 401s.
     const localUser = localStorage.getItem('optics_v1_user');
     const sessionUser = sessionStorage.getItem('optics_v1_user');
     if (localUser) {
       try {
-        setUser(JSON.parse(localUser));
+        const parsed = JSON.parse(localUser);
+        if (parsed?.token) setUser(parsed); else localStorage.removeItem('optics_v1_user');
       } catch (e) {
         localStorage.removeItem('optics_v1_user');
       }
     } else if (sessionUser) {
       try {
-        setUser(JSON.parse(sessionUser));
+        const parsed = JSON.parse(sessionUser);
+        if (parsed?.token) setUser(parsed); else sessionStorage.removeItem('optics_v1_user');
       } catch (e) {
         sessionStorage.removeItem('optics_v1_user');
       }
@@ -724,12 +728,13 @@ export default function App() {
       if (!response.ok) {
         throw new Error(data.error || 'Authentication failed.');
       }
-      setUser(data.user);
+      const authedUser = { ...data.user, token: data.token };
+      setUser(authedUser);
       if (keepLoggedIn) {
-        localStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+        localStorage.setItem('optics_v1_user', JSON.stringify(authedUser));
         sessionStorage.removeItem('optics_v1_user');
       } else {
-        sessionStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+        sessionStorage.setItem('optics_v1_user', JSON.stringify(authedUser));
         localStorage.removeItem('optics_v1_user');
       }
       setAuthSuccess('Welcome back! Authentication approved.');
@@ -740,26 +745,6 @@ export default function App() {
       setAuthLoading(false);
     }
   };
-
-  // Fetch public email logs (simulated student inbox)
-  const fetchPublicLogs = async () => {
-    try {
-      const resp = await fetch('/api/public/logs');
-      if (resp.ok) {
-        const data = await resp.json();
-        setPublicEmails(data.emailLogs || []);
-      }
-    } catch (err) {
-      console.warn("Error fetching logs:", err);
-    }
-  };
-
-  // Poll logs periodically so student can grab verification codes without leaving page
-  useEffect(() => {
-    fetchPublicLogs();
-    const interval = setInterval(fetchPublicLogs, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleRequestOtp = async () => {
     if (!regEmail || !regPhone) {
@@ -781,7 +766,6 @@ export default function App() {
       }
       setOtpSent(true);
       setAuthSuccess(data.message);
-      fetchPublicLogs();
     } catch (err: any) {
       setAuthError(err.message);
     } finally {
@@ -941,22 +925,26 @@ export default function App() {
     setProfileSaving(true);
     try {
       const formData = new FormData();
-      formData.append('email', user.email);
       formData.append('dateOfBirth', profileDob);
       formData.append('bio', profileBio);
       formData.append('favoriteSubject', profileFavSubject);
       formData.append('hobbies', profileHobbies);
       if (profilePhotoFile) formData.append('photo', profilePhotoFile);
 
-      const resp = await fetch('/api/profile/update', { method: 'POST', body: formData });
+      const resp = await fetch('/api/profile/update', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+        body: formData
+      });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to save profile.');
 
-      setUser(data.user);
+      const updatedUser = { ...data.user, token: user.token };
+      setUser(updatedUser);
       if (localStorage.getItem('optics_v1_user')) {
-        localStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+        localStorage.setItem('optics_v1_user', JSON.stringify(updatedUser));
       } else {
-        sessionStorage.setItem('optics_v1_user', JSON.stringify(data.user));
+        sessionStorage.setItem('optics_v1_user', JSON.stringify(updatedUser));
       }
       setProfilePhotoFile(null);
       setProfileSuccess('Profile updated successfully.');
@@ -971,7 +959,9 @@ export default function App() {
   const fetchForumThreads = async () => {
     setForumThreadsLoading(true);
     try {
-      const resp = await fetch(`/api/forum/threads?email=${encodeURIComponent(user?.email || '')}`);
+      const resp = await fetch('/api/forum/threads', {
+        headers: user?.token ? { 'Authorization': `Bearer ${user.token}` } : {}
+      });
       const data = await resp.json();
       setForumThreads(data.threads || []);
     } catch (err) {
@@ -984,7 +974,9 @@ export default function App() {
   const fetchForumThreadDetail = async (id: string) => {
     setForumThreadLoading(true);
     try {
-      const resp = await fetch(`/api/forum/threads/${id}?email=${encodeURIComponent(user?.email || '')}`);
+      const resp = await fetch(`/api/forum/threads/${id}`, {
+        headers: user?.token ? { 'Authorization': `Bearer ${user.token}` } : {}
+      });
       const data = await resp.json();
       if (resp.ok) {
         setForumThreadDetail(data.thread);
@@ -1018,11 +1010,13 @@ export default function App() {
       const formData = new FormData();
       formData.append('title', newThreadTitle);
       formData.append('body', newThreadBody);
-      formData.append('authorEmail', user.email);
-      formData.append('authorName', user.name);
       if (newThreadImage) formData.append('image', newThreadImage);
 
-      const resp = await fetch('/api/forum/threads', { method: 'POST', body: formData });
+      const resp = await fetch('/api/forum/threads', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+        body: formData
+      });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post thread.');
       setNewThreadTitle('');
@@ -1045,11 +1039,13 @@ export default function App() {
     try {
       const formData = new FormData();
       formData.append('body', replyBody);
-      formData.append('authorEmail', user.email);
-      formData.append('authorName', user.name);
       if (replyImage) formData.append('image', replyImage);
 
-      const resp = await fetch(`/api/forum/threads/${forumActiveThreadId}/replies`, { method: 'POST', body: formData });
+      const resp = await fetch(`/api/forum/threads/${forumActiveThreadId}/replies`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+        body: formData
+      });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to post reply.');
       setReplyBody('');
@@ -1067,7 +1063,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/forum/delete-thread', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       if (resp.ok) { backToForumList(); fetchForumPending(); }
@@ -1081,7 +1077,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/forum/delete-reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       if (resp.ok) {
@@ -1097,7 +1093,7 @@ export default function App() {
     if (!user || !ADMIN_EMAILS.includes(user.email)) return;
     setForumPendingLoading(true);
     try {
-      const resp = await fetch('/api/admin/forum/pending', { headers: { 'x-admin-email': user.email } });
+      const resp = await fetch('/api/admin/forum/pending', { headers: { 'Authorization': `Bearer ${user.token}` } });
       const data = await resp.json();
       setForumPendingThreads(data.threads || []);
       setForumPendingReplies(data.replies || []);
@@ -1113,7 +1109,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/forum/approve-thread', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       if (resp.ok) fetchForumPending();
@@ -1127,7 +1123,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/forum/approve-reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       if (resp.ok) fetchForumPending();
@@ -1143,8 +1139,8 @@ export default function App() {
     setAdminError(null);
     try {
       const [dashResp, homeworkResp] = await Promise.all([
-        fetch('/api/admin/dashboard', { headers: { 'x-admin-email': user.email } }),
-        fetch('/api/admin/homework', { headers: { 'x-admin-email': user.email } })
+        fetch('/api/admin/dashboard', { headers: { 'Authorization': `Bearer ${user.token}` } }),
+        fetch('/api/admin/homework', { headers: { 'Authorization': `Bearer ${user.token}` } })
       ]);
       const data = await dashResp.json();
       if (!dashResp.ok) {
@@ -1171,7 +1167,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/homework/check-now', {
         method: 'POST',
-        headers: { 'x-admin-email': user.email },
+        headers: { 'Authorization': `Bearer ${user.token}` },
       });
       const data = await resp.json();
       setCheckNowResult(resp.ok ? `Checked ${data.checked} submission(s).` : (data.error || 'Failed to run check.'));
@@ -1239,7 +1235,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/announcements', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ title: announceTitle, message: announceMessage, targetClass: announceTargetClass })
       });
       const data = await resp.json();
@@ -1261,7 +1257,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/announcements/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       if (resp.ok) fetchAnnouncements();
@@ -1286,7 +1282,7 @@ export default function App() {
       if (assignFile) formData.append('file', assignFile);
       const resp = await fetch('/api/admin/homework/assign', {
         method: 'POST',
-        headers: { 'x-admin-email': user.email },
+        headers: { 'Authorization': `Bearer ${user.token}` },
         body: formData
       });
       const data = await resp.json();
@@ -1313,7 +1309,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/homework/delete-assignment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ id })
       });
       const data = await resp.json().catch(() => ({}));
@@ -1333,7 +1329,7 @@ export default function App() {
     if (!user) return;
     setMissingReportLoading(true);
     try {
-      const resp = await fetch('/api/admin/homework/missing', { headers: { 'x-admin-email': user.email } });
+      const resp = await fetch('/api/admin/homework/missing', { headers: { 'Authorization': `Bearer ${user.token}` } });
       const data = await resp.json();
       setMissingReport(data.report || []);
     } catch (err) {
@@ -1348,7 +1344,7 @@ export default function App() {
     if (!user) return;
     setHomeworkLoading(true);
     try {
-      const resp = await fetch(`/api/homework/mine?email=${encodeURIComponent(user.email)}`);
+      const resp = await fetch('/api/homework/mine', { headers: { 'Authorization': `Bearer ${user.token}` } });
       const data = await resp.json();
       setMySubmissions(data.submissions || []);
     } catch (err) {
@@ -1443,11 +1439,14 @@ export default function App() {
     try {
       const filesToUpload = await Promise.all(homeworkFiles.map((f) => compressImageFile(f)));
       const formData = new FormData();
-      formData.append('email', user.email);
       formData.append('subject', homeworkSubject);
       if (selectedAssignmentId) formData.append('assignmentId', selectedAssignmentId);
       filesToUpload.forEach((f) => formData.append('files', f));
-      const resp = await fetch('/api/homework/upload', { method: 'POST', body: formData });
+      const resp = await fetch('/api/homework/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+        body: formData
+      });
       let data: any = {};
       try {
         data = await resp.json();
@@ -1474,7 +1473,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/approve-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ email })
       });
       const data = await resp.json().catch(() => ({}));
@@ -1495,7 +1494,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/reject-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ email })
       });
       const data = await resp.json().catch(() => ({}));
@@ -1516,7 +1515,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/reset-devices', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ email })
       });
       const data = await resp.json().catch(() => ({}));
@@ -1537,7 +1536,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/create-invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ studentName: newStudentName })
       });
       if (resp.ok) {
@@ -1554,7 +1553,7 @@ export default function App() {
     try {
       const resp = await fetch('/api/admin/delete-invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-email': user.email },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
         body: JSON.stringify({ code })
       });
       if (resp.ok) {

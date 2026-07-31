@@ -20,7 +20,9 @@ create table users (
   date_of_birth date,
   bio text,
   favorite_subject text,
-  hobbies text
+  hobbies text,
+  failed_login_attempts int not null default 0,
+  locked_until timestamptz
 );
 
 -- 2. INVITE CODES — replaces data/db.json "inviteCodes"
