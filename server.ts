@@ -7376,25 +7376,26 @@ function buildApp(): express.Express {
       submittedByAssignment.get(s.assignment_id)!.add(s.student_email);
     });
 
-    // Only call out students as "missing" once an assignment's deadline has actually passed --
-    // showing this before the deadline unfairly flags students who still have time left.
-    const report = (assignmentRows || [])
-      .filter((a: any) => !a.deadline || new Date(a.deadline).getTime() <= Date.now())
-      .map((a: any) => {
-        const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
-        const submitted = submittedByAssignment.get(a.id) || new Set<string>();
-        const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
-        return {
-          id: a.id,
-          title: a.title,
-          targetClass: a.target_class,
-          assignedDate: a.assigned_date,
-          deadline: a.deadline,
-          rosterCount: roster.length,
-          submittedCount: submitted.size,
-          missing,
-        };
-      });
+    // Covers every recent assignment, including today's whose deadline hasn't passed yet -- an
+    // admin following up on a still-open assignment needs to see who hasn't submitted in real
+    // time, not only after it's too late to matter. `deadlinePassed` lets the UI distinguish
+    // "hasn't submitted yet, still has time" from "deadline has passed" without hiding either.
+    const report = (assignmentRows || []).map((a: any) => {
+      const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
+      const submitted = submittedByAssignment.get(a.id) || new Set<string>();
+      const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+      return {
+        id: a.id,
+        title: a.title,
+        targetClass: a.target_class,
+        assignedDate: a.assigned_date,
+        deadline: a.deadline,
+        deadlinePassed: !!a.deadline && new Date(a.deadline).getTime() <= Date.now(),
+        rosterCount: roster.length,
+        submittedCount: submitted.size,
+        missing,
+      };
+    });
 
     return res.json({ report });
   });
