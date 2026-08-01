@@ -782,7 +782,7 @@ export default function App() {
     }
   };
 
-  const handleRequestOtp = async () => {
+  const handleRequestOtp = async (successMessage?: string) => {
     if (!regEmail || !regPhone) {
       setAuthError('Please fill in both Email Address and Phone Number to request a mobile verification OTP.');
       return;
@@ -801,7 +801,7 @@ export default function App() {
         throw new Error(data.error || 'Failed to dispatch verification code.');
       }
       setOtpSent(true);
-      setAuthSuccess(data.message);
+      setAuthSuccess(successMessage || data.message);
     } catch (err: any) {
       setAuthError(err.message);
     } finally {
@@ -842,14 +842,25 @@ export default function App() {
         throw new Error(data.error || 'Registration failed.');
       }
       setAuthSuccess(data.message);
-      
+
       // Verification was successful! Set auth tab back to login where pending notice will guide the student.
       setAuthTab('login');
       setLoginEmail(regEmail);
       setRegPhoneOtp('');
       setOtpSent(false);
     } catch (err: any) {
-      setAuthError(err.message);
+      // A stale/expired/wrong code leaves the student on this same screen with no visible way to
+      // get a fresh one -- the "Send Verification OTP" button only exists one screen back, behind
+      // a "Back" button that's easy to miss, so a failed code used to be a dead end (this was the
+      // #1 registration complaint: students stuck re-submitting an already-invalidated code).
+      // Any OTP-related failure now clears the stale code and immediately requests a fresh one
+      // automatically, instead of requiring the student to notice and click Back themselves.
+      if (err.message && err.message.includes('OTP')) {
+        setRegPhoneOtp('');
+        handleRequestOtp("That code didn't work or expired -- we've sent a fresh verification code to your email. Please check your inbox and enter the new code.");
+      } else {
+        setAuthError(err.message);
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -2246,7 +2257,7 @@ export default function App() {
               {!otpSent ? (
                 <button
                   type="button"
-                  onClick={handleRequestOtp}
+                  onClick={() => handleRequestOtp()}
                   disabled={otpLoading || !regEmail || !regPhone || !regWhatsapp || !regName || !regPassword}
                   className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl cursor-pointer transition active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow"
                 >
