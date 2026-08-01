@@ -3069,7 +3069,10 @@ export default function App() {
                   ) : (
                     visibleAssignments.slice(0, 3).map((a) => (
                       <div key={a.id} className="py-2.5">
-                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                        <p className={`text-xs font-bold flex items-center gap-1.5 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {a.title}
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30">New</span>
+                        </p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {getEffectiveDeadline(a) && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(getEffectiveDeadline(a))}</p>}
                         {a.fileUrl && (
@@ -4711,7 +4714,10 @@ export default function App() {
                   {visibleAssignments.map((a) => (
                     <div key={a.id} className="py-3 flex items-start justify-between gap-2">
                       <div>
-                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                        <p className={`text-xs font-bold flex items-center gap-1.5 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
+                          {a.title}
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30">New</span>
+                        </p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {a.description && <p className={`text-[11px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.description}</p>}
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
