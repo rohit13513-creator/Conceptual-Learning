@@ -4570,6 +4570,7 @@ export default function App() {
                   'Handwriting quality or neatness -- even if it\'s a bit messy, your score is not reduced for it.',
                   'Cutting, crossing out, or scribbling over a mistake and redoing it -- correcting yourself is completely normal.',
                   'Marking a question as "doubt" -- this just tells your teacher to explain it in class, it is never treated as wrong.',
+                  'Starting a question\'s working on one page and finishing it on a later page -- this is normal when writing by hand and never counts against you.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
@@ -4588,6 +4589,27 @@ export default function App() {
                   'A question that is completely missing -- no answer written, and not marked as doubt.',
                   'A question that is attempted but solved incorrectly.',
                   'A question solved without the proper CBSE method/steps -- e.g. skipping required working or not showing the final answer clearly.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <AlertTriangle className="w-4 h-4 text-amber-400" /> Late submission penalty
+              </h2>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Submitting after your class's deadline deducts a flat 2 marks from your score, on top of the regular checking above. This is separate from and unaffected by anything else -- a late but otherwise perfect submission loses exactly 2 marks.
+              </p>
+              <ul className="space-y-2">
+                {[
+                  'Class X -- 2 marks deducted if submitted after 4:45 PM the following day.',
+                  'Class IX -- 2 marks deducted if submitted after 5:45 PM the following day.',
+                  'Class VIII -- 2 marks deducted if submitted after 6:45 PM the following day.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />

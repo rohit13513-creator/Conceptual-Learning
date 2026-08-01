@@ -344,9 +344,11 @@ async function checkHomeworkSubmission(submissionId: string) {
 
   let assignmentContext = "";
   let questionSheetBlock: any = null;
+  let assignmentForDeadline: { target_class: string; assigned_date: string; deadline: string | null } | null = null;
   if (sub.assignment_id) {
-    const { data: a } = await supabase.from("homework_assignments").select("title, description, subject, file_path").eq("id", sub.assignment_id).maybeSingle();
+    const { data: a } = await supabase.from("homework_assignments").select("title, description, subject, file_path, target_class, assigned_date, deadline").eq("id", sub.assignment_id).maybeSingle();
     if (a) {
+      assignmentForDeadline = { target_class: a.target_class, assigned_date: a.assigned_date, deadline: a.deadline };
       assignmentContext = `This was assigned as: "${a.title}"${a.description ? ` -- ${a.description}` : ""}${a.subject ? ` (Subject: ${a.subject})` : ""}.\n`;
 
       // If the teacher attached an official question sheet (common for textbook homework where
@@ -392,6 +394,7 @@ SCORING RULES (CBSE board guidelines -- follow these exactly, the score must nev
 - NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
 - NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault.
 - NEVER treat a question marked "doubt" as a scoring deduction -- it is a self-flagged request for the teacher's help, not a wrong or missing answer, and must not lower the score.
+- NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. Read across pages to find the full answer to a question before judging whether it's complete or correct; only flag it if the answer is genuinely missing or wrong after accounting for this.
 - DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
 
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct or complete -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
@@ -479,6 +482,26 @@ Call the submit_grade tool with your result.`;
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
     const parsed = toolUseBlock.input;
 
+    // Deterministic 2-mark late-submission penalty -- applied after Claude's judgment-based
+    // score, on top of it, never as part of the AI's own reasoning (so it can't be talked out
+    // of it or vary submission to submission). A submission is late if it landed after the
+    // student's own class-effective deadline (each class has its own cutoff time).
+    if (assignmentForDeadline && typeof parsed.score === "number") {
+      let effectiveDeadline: string | null = assignmentForDeadline.deadline;
+      if (assignmentForDeadline.target_class === "All") {
+        const { data: studentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
+        const mappedTarget = studentRow?.student_class ? CLASS_TO_TARGET[studentRow.student_class] : null;
+        if (mappedTarget && assignmentForDeadline.assigned_date) {
+          effectiveDeadline = computeDeadline(assignmentForDeadline.assigned_date, mappedTarget);
+        }
+      }
+      if (effectiveDeadline && sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime()) {
+        parsed.score = Math.max(0, parsed.score - 2);
+        const lateNote = "Submitted after the homework deadline -- 2 marks deducted as per the late-submission rule.";
+        parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
+      }
+    }
+
     const { error: updateError } = await supabase.from("homework_submissions").update({
       status: "checked",
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
@@ -553,6 +576,10 @@ function computeDeadline(assignedDate: string, targetClass: string): string {
   const nextDateStr = next.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   return new Date(`${nextDateStr}T${time}+05:30`).toISOString();
 }
+
+// Maps users.student_class (Roman numeral) <-> homework_assignments.target_class ("Nth")
+const CLASS_TO_TARGET: Record<string, string> = { VIII: "8th", IX: "9th", X: "10th", XII: "12th" };
+const TARGET_TO_LABEL: Record<string, string> = { "8th": "VIII", "9th": "IX", "10th": "X", "12th": "XII" };
 
 function mapAnnouncementRow(row: any): Announcement {
   return {
@@ -7543,9 +7570,6 @@ function buildApp(): express.Express {
   // Admin report: for each recent assignment, which target-class students have not submitted yet.
   app.get("/api/admin/homework/missing", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
-
-    const CLASS_TO_TARGET: Record<string, string> = { VIII: "8th", IX: "9th", X: "10th", XII: "12th" };
-    const TARGET_TO_LABEL: Record<string, string> = { "8th": "VIII", "9th": "IX", "10th": "X", "12th": "XII" };
 
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
