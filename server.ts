@@ -351,14 +351,21 @@ Some students write a question number followed by the word "doubt" (sometimes mi
 
 Students often submit homework as phone photos of each page, one photo per page, which get combined into one file in the order they were uploaded. That order does not always match question order (e.g. a student may photograph pages out of sequence) -- this is normal and not a mistake. Never comment on question numbering being "inconsistent with page order/numbering" or similar; just work out which questions are present regardless of what order they appear in.
 
-Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct, properly formatted, and legible -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
+SCORING RULES (CBSE board guidelines -- follow these exactly, the score must never be reduced for anything outside this list):
+- The score is based ONLY on two things: (1) whether every assigned question was attempted, and (2) whether each attempted question was solved correctly and via the proper CBSE method/steps (not just a bare final answer where working is required).
+- NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
+- NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault.
+- NEVER treat a question marked "doubt" as a scoring deduction -- it is a self-flagged request for the teacher's help, not a wrong or missing answer, and must not lower the score.
+- DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
+
+Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct or complete -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
 - Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
+- Do NOT comment on handwriting, neatness, presentation, or crossed-out/cut corrections at all, even in passing -- these never affect the score and are not worth mentioning. The only exception is a question whose content is so illegible you genuinely cannot tell what was written -- in that case, name the question number and ask for it to be rewritten clearly, without implying any score penalty.
 - DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong.
 - DO list, by question number, any question that is simply missing -- no answer AND no doubt marker -- and tell the student to complete and resubmit just those questions. Do not explain that there was no doubt marker or otherwise narrate how you decided a question counts as missing -- just list it.
 - DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
-- Comment on handwriting/presentation ONLY if it is genuinely hard to read or badly disorganized. If it's readable, say nothing about handwriting.
-- If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them. Let completeness and correctness weigh heavily in the score -- a submission with wrong or missing questions should not score highly.
-- If everything checked out -- fully correct, complete, proper format, legible -- the feedback should be short and simply say so, without listing anything.
+- If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them.
+- If everything checked out -- fully attempted, complete, and correct per CBSE method -- the feedback should be short and simply say so, without listing anything.
 
 Call the submit_grade tool with your result.`;
 
@@ -372,7 +379,7 @@ Call the submit_grade tool with your result.`;
     input_schema: {
       type: "object",
       properties: {
-        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 for completeness and correctness." },
+        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
@@ -495,12 +502,17 @@ function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-// Deadline for homework assigned on a given IST date: 8:00 PM IST the following day.
-function computeDeadline(assignedDate: string): string {
-  const next = new Date(`${assignedDate}T00:00:00+05:30`);
-  next.setDate(next.getDate() + 1);
-  const nextDateStr = next.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  return new Date(`${nextDateStr}T20:00:00+05:30`).toISOString();
+// Deadline for homework assigned on a given IST date: same-day cutoff, timed to each class's
+// tuition slot -- Class VIII 6:45pm, Class IX 5:45pm, Class X 4:45pm. "All"/other target classes
+// fall back to the latest (most generous) cutoff so no class is shortchanged.
+const DEADLINE_TIME_BY_CLASS: Record<string, string> = {
+  "8th": "18:45:00",
+  "9th": "17:45:00",
+  "10th": "16:45:00",
+};
+function computeDeadline(assignedDate: string, targetClass: string): string {
+  const time = DEADLINE_TIME_BY_CLASS[targetClass] || "18:45:00";
+  return new Date(`${assignedDate}T${time}+05:30`).toISOString();
 }
 
 function mapAnnouncementRow(row: any): Announcement {
@@ -7041,7 +7053,13 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
 
-    return res.json({ success: true, submission: mapHomeworkRow(insertedRow) });
+    // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
+    // because a serverless function invocation can be frozen the instant its response is sent, which
+    // would silently kill a background check before Claude ever replied.
+    await checkHomeworkSubmission(insertedRow.id);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
   });
 
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
@@ -7119,7 +7137,13 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
     }
 
-    return res.json({ success: true, submission: mapHomeworkRow(insertedRow) });
+    // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
+    // because a serverless function invocation can be frozen the instant its response is sent, which
+    // would silently kill a background check before Claude ever replied.
+    await checkHomeworkSubmission(insertedRow.id);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
   });
 
   // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still
@@ -7178,11 +7202,12 @@ function buildApp(): express.Express {
 
     const [{ data: rows }, { data: userRows }, { data: assignmentRows }] = await Promise.all([
       supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(300),
-      supabase.from("users").select("email, name"),
+      supabase.from("users").select("email, name, student_class"),
       supabase.from("homework_assignments").select("id, title, deadline"),
     ]);
 
     const nameByEmail = new Map((userRows || []).map((u: any) => [u.email, u.name]));
+    const classByEmail = new Map((userRows || []).map((u: any) => [u.email, u.student_class]));
     const titleById = new Map((assignmentRows || []).map((a: any) => [a.id, a.title]));
     const deadlineById = new Map((assignmentRows || []).map((a: any) => [a.id, a.deadline]));
 
@@ -7192,6 +7217,7 @@ function buildApp(): express.Express {
       return {
         ...mapHomeworkRow(r, signed?.signedUrl),
         studentName: nameByEmail.get(r.student_email) || r.student_email,
+        studentClass: classByEmail.get(r.student_email) || null,
         assignmentTitle: r.assignment_id ? (titleById.get(r.assignment_id) || null) : null,
         isLate: deadline ? new Date(r.submitted_at).getTime() > new Date(deadline).getTime() : false,
       };
@@ -7263,7 +7289,7 @@ function buildApp(): express.Express {
         target_class: targetClass || "All",
         file_path: filePath,
         assigned_date: finalAssignedDate,
-        deadline: computeDeadline(finalAssignedDate),
+        deadline: computeDeadline(finalAssignedDate, targetClass || "All"),
       })
       .select()
       .single();

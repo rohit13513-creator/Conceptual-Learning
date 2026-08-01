@@ -454,10 +454,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -662,6 +662,7 @@ export default function App() {
   // Which class-group sub-tables inside the roster are collapsed, keyed by studentClass
   // (e.g. "X"). Empty by default -- every class group starts expanded.
   const [collapsedRosterClasses, setCollapsedRosterClasses] = useState<Set<string>>(new Set());
+  const [collapsedHomeworkClasses, setCollapsedHomeworkClasses] = useState<Set<string>>(new Set());
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -1228,8 +1229,22 @@ export default function App() {
   };
 
   const visibleAssignments = useMemo(() => {
-    return assignments.filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack);
+    const now = Date.now();
+    return assignments.filter(a =>
+      (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack) &&
+      (!a.deadline || new Date(a.deadline).getTime() > now)
+    );
   }, [assignments, isClassExempt, studentTrack]);
+
+  // The "which homework is this for" dropdown normally mirrors visibleAssignments (deadline-locked
+  // out once expired), but a student improving a low score on an already-submitted assignment must
+  // still be able to select it even after its deadline -- so whatever assignment is currently
+  // selected (e.g. pre-filled by the Resubmit button) stays in the option list regardless.
+  const homeworkDropdownAssignments = useMemo(() => {
+    if (!selectedAssignmentId || visibleAssignments.some(a => a.id === selectedAssignmentId)) return visibleAssignments;
+    const stillSelected = assignments.find(a => a.id === selectedAssignmentId);
+    return stillSelected ? [...visibleAssignments, stillSelected] : visibleAssignments;
+  }, [visibleAssignments, assignments, selectedAssignmentId]);
 
   const formatDeadline = (deadline?: string) => {
     if (!deadline) return null;
@@ -1464,7 +1479,13 @@ export default function App() {
         throw new Error('Upload failed -- your connection may have dropped. Please try again.');
       }
       if (!resp.ok) throw new Error(data.error || 'Failed to upload homework.');
-      setHomeworkSuccess('Homework submitted successfully! It will be checked soon.');
+      const checkedStatus = data.submission?.status;
+      const checkedScore = data.submission?.aiScore;
+      setHomeworkSuccess(
+        checkedStatus === 'checked'
+          ? `Homework submitted and checked!${checkedScore != null ? ` Score: ${checkedScore}/10.` : ''} See the feedback below.`
+          : 'Homework submitted successfully! It is being checked and feedback will appear below shortly.'
+      );
       setHomeworkPhotoTempPaths([]);
       setHomeworkSessionId(crypto.randomUUID());
       setHomeworkPdfFile(null);
@@ -1476,6 +1497,19 @@ export default function App() {
     } finally {
       setHomeworkUploading(false);
     }
+  };
+
+  // Pre-fills the upload form with a low-scoring submission's assignment so the student can add
+  // corrected/missing pages -- the backend already scopes re-checking to just what was previously
+  // marked missing, so this naturally raises the score rather than grading everything from scratch.
+  const handleResubmitClick = (sub: any) => {
+    if (!sub.assignmentId) return;
+    setSelectedAssignmentId(sub.assignmentId);
+    setHomeworkSubject(sub.subject || '');
+    setHomeworkMode('photos');
+    setHomeworkError(null);
+    setHomeworkSuccess(null);
+    document.getElementById('homework-upload-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleApproveUser = async (email: string) => {
@@ -2920,10 +2954,18 @@ export default function App() {
             </div>
 
             {/* Upload Homework box */}
-            <div className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <Upload className="w-4 h-4 text-cyan-400" /> Upload Homework
-              </h2>
+            <div id="homework-upload-form" className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                  <Upload className="w-4 h-4 text-cyan-400" /> Upload Homework
+                </h2>
+                <button
+                  onClick={() => changeView('homeworkGuidelines')}
+                  className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  <Info className="w-3 h-3" /> Guidelines
+                </button>
+              </div>
 
               {homeworkError && (
                 <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{homeworkError}</div>
@@ -2933,7 +2975,7 @@ export default function App() {
               )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
-                {visibleAssignments.length > 0 && (
+                {homeworkDropdownAssignments.length > 0 && (
                   <div className="space-y-1">
                     <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
                     <select
@@ -2943,7 +2985,7 @@ export default function App() {
                       className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                     >
                       <option value="" disabled>-- Select the assignment this is for --</option>
-                      {visibleAssignments.map((a) => (
+                      {homeworkDropdownAssignments.map((a) => (
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
                     </select>
@@ -2975,10 +3017,10 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (visibleAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (homeworkDropdownAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
                 </button>
               </form>
             </div>
@@ -3015,6 +3057,16 @@ export default function App() {
                           <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-cyan-500/10 text-cyan-400 hover:text-cyan-300 cursor-pointer" title="View submitted file">
                             <Eye className="w-3.5 h-3.5" />
                           </a>
+                        )}
+                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 8 && sub.assignmentId && (
+                          <button
+                            type="button"
+                            onClick={() => handleResubmitClick(sub)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 cursor-pointer transition"
+                            title="Add corrected or missing pages to improve this score"
+                          >
+                            <RefreshCw className="w-3 h-3" /> Improve Score
+                          </button>
                         )}
                       </div>
                     </div>
@@ -4370,14 +4422,112 @@ export default function App() {
         </div>
       )}
 
+      {activeView === 'homeworkGuidelines' && user && (
+        <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+          <div className="max-w-3xl mx-auto space-y-6">
+            <button onClick={goBack} className={`flex items-center gap-1.5 text-xs font-bold cursor-pointer ${isLightMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}>
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h1 className={`text-xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Award className="w-5 h-5 text-cyan-400" /> Homework Scoring Guidelines
+              </h1>
+              <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                Every homework submission is checked against CBSE board guidelines. Here's exactly how your score is decided, so there are no surprises.
+              </p>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> These never affect your score
+              </h2>
+              <ul className="space-y-2">
+                {[
+                  'Handwriting quality or neatness -- even if it\'s a bit messy, your score is not reduced for it.',
+                  'Cutting, crossing out, or scribbling over a mistake and redoing it -- correcting yourself is completely normal.',
+                  'Marking a question as "doubt" -- this just tells your teacher to explain it in class, it is never treated as wrong.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <AlertTriangle className="w-4 h-4 text-amber-400" /> These do affect your score
+              </h2>
+              <ul className="space-y-2">
+                {[
+                  'A question that is completely missing -- no answer written, and not marked as doubt.',
+                  'A question that is attempted but solved incorrectly.',
+                  'A question solved without the proper CBSE method/steps -- e.g. skipping required working or not showing the final answer clearly.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Info className="w-4 h-4 text-cyan-400" /> Precautions for a good score
+              </h2>
+              <ul className="space-y-2">
+                {[
+                  'Attempt every question that was assigned. If you genuinely don\'t know one, write "doubt" next to its number instead of leaving it blank.',
+                  'Show your full working/steps in the proper CBSE format, not just the final answer.',
+                  'Submit clear photos of every page (or one combined PDF) -- if a page is completely unreadable, that specific question can\'t be checked.',
+                  'Submit before the deadline for your class -- once it passes, that homework is removed from the list and can no longer be submitted for the first time.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <span className="text-cyan-400 font-black mt-0.5 shrink-0">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <RefreshCw className="w-4 h-4 text-amber-400" /> Got a low score? You can improve it
+              </h2>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Our goal is never to mark you down permanently -- it's to help you get it right. If your score is low, an "Improve Score" button appears next to that submission in "Your Submissions". Add photos of just the missing or corrected questions and resubmit -- they'll be checked against what you already turned in to raise your score, without needing to redo everything from scratch.
+              </p>
+            </div>
+
+            <button
+              onClick={() => changeView('homework')}
+              className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition"
+            >
+              Back to Homework
+            </button>
+          </div>
+        </div>
+      )}
+
       {activeView === 'homework' && user && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
           <div className="max-w-3xl mx-auto space-y-6">
 
             <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <FileText className="w-5 h-5 text-amber-400" /> Homework Assigned
-              </h2>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                  <FileText className="w-5 h-5 text-amber-400" /> Homework Assigned
+                </h2>
+                <button
+                  onClick={() => changeView('homeworkGuidelines')}
+                  className={`flex items-center gap-1 text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  <Info className="w-3.5 h-3.5" /> Scoring Guidelines
+                </button>
+              </div>
               {assignmentsLoading ? (
                 <div className="text-center py-4 text-xs font-semibold text-slate-500">Loading assignments...</div>
               ) : visibleAssignments.length === 0 ? (
@@ -4412,12 +4562,15 @@ export default function App() {
               )}
             </div>
 
-            <div className={`border rounded-2xl p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+            <div id="homework-upload-form" className={`border rounded-2xl p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                 <Upload className="w-5 h-5 text-cyan-400" /> Submit Homework
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. It will be checked and feedback will be sent here.
+                Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. It will be checked and feedback will be sent here.{' '}
+                <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`underline cursor-pointer font-black ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                  See how your score is calculated.
+                </button>
               </p>
 
               {homeworkError && (
@@ -4428,7 +4581,7 @@ export default function App() {
               )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
-                {visibleAssignments.length > 0 && (
+                {homeworkDropdownAssignments.length > 0 && (
                   <div className="space-y-1">
                     <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
                     <select
@@ -4438,7 +4591,7 @@ export default function App() {
                       className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                     >
                       <option value="" disabled>-- Select the assignment this is for --</option>
-                      {visibleAssignments.map((a) => (
+                      {homeworkDropdownAssignments.map((a) => (
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
                     </select>
@@ -4487,10 +4640,10 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (visibleAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (homeworkDropdownAssignments.length > 0 && !selectedAssignmentId)}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
                 </button>
               </form>
             </div>
@@ -4527,6 +4680,16 @@ export default function App() {
                           <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-cyan-500/10 text-cyan-400 hover:text-cyan-300 cursor-pointer" title="View submitted file">
                             <Eye className="w-3.5 h-3.5" />
                           </a>
+                        )}
+                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 8 && sub.assignmentId && (
+                          <button
+                            type="button"
+                            onClick={() => handleResubmitClick(sub)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 cursor-pointer transition"
+                            title="Add corrected or missing pages to improve this score"
+                          >
+                            <RefreshCw className="w-3 h-3" /> Improve Score
+                          </button>
                         )}
                       </div>
                     </div>
@@ -5548,7 +5711,7 @@ export default function App() {
                   <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-[#22d3ee]">
                     <FileText className="w-4 h-4 text-cyan-400" /> Homework Submissions ({adminHomework.length})
                   </h3>
-                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework uploaded by students. Checked automatically every 30 minutes.</p>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework uploaded by students is checked immediately. "Check Pending Now" is only needed to retry anything that failed.</p>
                 </div>
                 <button
                   onClick={handleCheckHomeworkNow}
@@ -5562,74 +5725,110 @@ export default function App() {
                 <p className={`text-[11px] mt-2 font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{checkNowResult}</p>
               )}
 
-              <div className="mt-4 overflow-x-auto">
-                <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
-                  <thead>
-                    <tr className={`uppercase tracking-wider font-mono text-[10px] pb-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                      <th className="py-2 pr-4 font-bold">Student</th>
-                      <th className="py-2 px-4 font-bold">Assignment / Subject</th>
-                      <th className="py-2 px-4 font-bold">Submitted</th>
-                      <th className="py-2 px-4 font-bold">Status</th>
-                      <th className="py-2 px-4 font-bold">Remarks</th>
-                      <th className="py-2 pl-4 text-right font-bold">File</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
-                    {adminHomework.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-6 text-xs font-semibold text-slate-500">No homework submitted yet.</td>
-                      </tr>
-                    ) : (
-                      adminHomework.map((sub) => (
-                        <tr key={sub.id} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
-                          <td className="py-3 pr-4">
-                            <p className="font-bold">{sub.studentName}</p>
-                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{sub.studentEmail}</p>
-                          </td>
-                          <td className="py-3 px-4">
-                            {sub.assignmentTitle && <p className="font-bold text-amber-400">{sub.assignmentTitle}</p>}
-                            <p className={sub.assignmentTitle ? `text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}` : ''}>{sub.subject || (sub.assignmentTitle ? '' : '—')}</p>
-                          </td>
-                          <td className={`py-3 px-4 font-mono text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                            {new Date(sub.submittedAt).toLocaleString()}
-                            {sub.isLate && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider">Late</span>}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                              sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
-                            }`}>
-                              {sub.status}
+              {adminHomework.length === 0 ? (
+                <p className="text-center py-6 text-xs font-semibold text-slate-500">No homework submitted yet.</p>
+              ) : (() => {
+                const CLASS_ORDER = ['X', 'IX', 'VIII', 'XI', 'XII'];
+                const classesPresent: string[] = Array.from(new Set(adminHomework.map((s: any) => s.studentClass || 'Unspecified')));
+                const orderedClasses = [
+                  ...CLASS_ORDER.filter(c => classesPresent.includes(c)),
+                  ...classesPresent.filter(c => !CLASS_ORDER.includes(c)),
+                ];
+                const toggleHomeworkClassGroup = (cls: string) => {
+                  setCollapsedHomeworkClasses(prev => {
+                    const next = new Set(prev);
+                    if (next.has(cls)) next.delete(cls); else next.add(cls);
+                    return next;
+                  });
+                };
+
+                return (
+                  <div className="mt-4 space-y-5">
+                    {orderedClasses.map((cls) => {
+                      const group = adminHomework.filter((s: any) => (s.studentClass || 'Unspecified') === cls);
+                      const isCollapsed = collapsedHomeworkClasses.has(cls);
+                      return (
+                        <div key={cls}>
+                          <button
+                            onClick={() => toggleHomeworkClassGroup(cls)}
+                            className={`w-full flex items-center justify-between gap-2 cursor-pointer text-left px-3 py-2 rounded-lg border ${isLightMode ? 'bg-slate-50 border-slate-200 hover:bg-slate-100' : 'bg-slate-950/60 border-slate-800 hover:bg-slate-900'}`}
+                          >
+                            <span className={`text-xs font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
+                              {cls === 'Unspecified' ? 'Unspecified Class' : `Class ${cls}`} ({group.length})
                             </span>
-                          </td>
-                          <td className="py-3 px-4 max-w-[240px]">
-                            {sub.aiFeedback ? (
-                              <>
-                                {sub.aiScore != null && <span className="font-black text-emerald-400 mr-1.5">{sub.aiScore}/10</span>}
-                                <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
-                              </>
-                            ) : (
-                              <span className="text-slate-500 italic">Not checked yet</span>
-                            )}
-                            {sub.integrityFlag && (
-                              <div className="mt-1.5 flex items-start gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
-                                <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
-                                <span className="text-red-400 font-semibold">{sub.integrityFlag}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3 pl-4 text-right">
-                            {sub.fileUrl && (
-                              <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase inline-flex items-center gap-1">
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-cyan-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} />
+                          </button>
+
+                          {!isCollapsed && (
+                            <div className="mt-2 overflow-x-auto">
+                              <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
+                                <thead>
+                                  <tr className={`uppercase tracking-wider font-mono text-[10px] pb-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    <th className="py-2 pr-4 font-bold">Student</th>
+                                    <th className="py-2 px-4 font-bold">Assignment / Subject</th>
+                                    <th className="py-2 px-4 font-bold">Submitted</th>
+                                    <th className="py-2 px-4 font-bold">Status</th>
+                                    <th className="py-2 px-4 font-bold">Remarks</th>
+                                    <th className="py-2 pl-4 text-right font-bold">File</th>
+                                  </tr>
+                                </thead>
+                                <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
+                                  {group.map((sub: any) => (
+                                    <tr key={sub.id} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
+                                      <td className="py-3 pr-4">
+                                        <p className="font-bold">{sub.studentName}</p>
+                                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{sub.studentEmail}</p>
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        {sub.assignmentTitle && <p className="font-bold text-amber-400">{sub.assignmentTitle}</p>}
+                                        <p className={sub.assignmentTitle ? `text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}` : ''}>{sub.subject || (sub.assignmentTitle ? '' : '—')}</p>
+                                      </td>
+                                      <td className={`py-3 px-4 font-mono text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                        {new Date(sub.submittedAt).toLocaleString()}
+                                        {sub.isLate && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider">Late</span>}
+                                      </td>
+                                      <td className="py-3 px-4">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
+                                          sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                        }`}>
+                                          {sub.status}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-4 max-w-[240px]">
+                                        {sub.aiFeedback ? (
+                                          <>
+                                            {sub.aiScore != null && <span className="font-black text-emerald-400 mr-1.5">{sub.aiScore}/10</span>}
+                                            <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                          </>
+                                        ) : (
+                                          <span className="text-slate-500 italic">Not checked yet</span>
+                                        )}
+                                        {sub.integrityFlag && (
+                                          <div className="mt-1.5 flex items-start gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
+                                            <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
+                                            <span className="text-red-400 font-semibold">{sub.integrityFlag}</span>
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="py-3 pl-4 text-right">
+                                        {sub.fileUrl && (
+                                          <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase inline-flex items-center gap-1">
+                                            <Eye className="w-3.5 h-3.5" /> View
+                                          </a>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Missing Homework Report */}
