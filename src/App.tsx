@@ -1345,7 +1345,30 @@ export default function App() {
       if (assignMode === 'photos') {
         if (assignPhotoTempPaths.length > 0) formData.append('photoSessionId', assignSessionId);
       } else if (assignFile) {
-        formData.append('file', assignFile);
+        // Large question-sheet PDFs were failing when sent as one request (Vercel's serverless
+        // body limit is ~4.5MB). Chunk it the same way student submissions are, so any file size
+        // works regardless of the platform's per-request ceiling.
+        const CHUNK_SIZE = 3 * 1024 * 1024;
+        const file = assignFile;
+        let order = 0;
+        for (let start = 0; start < file.size; start += CHUNK_SIZE) {
+          const chunk = file.slice(start, start + CHUNK_SIZE);
+          const chunkForm = new FormData();
+          chunkForm.append('sessionId', assignSessionId);
+          chunkForm.append('order', String(order));
+          chunkForm.append('chunk', chunk, 'chunk.part');
+          const chunkResp = await fetch('/api/homework/upload-chunk', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${user.token}` },
+            body: chunkForm,
+          });
+          if (!chunkResp.ok) {
+            const chunkData = await chunkResp.json().catch(() => ({}));
+            throw new Error(chunkData.error || 'Failed to upload part of the PDF. Please try again.');
+          }
+          order += 1;
+        }
+        formData.append('pdfSessionId', assignSessionId);
       }
       const resp = await fetch('/api/admin/homework/assign', {
         method: 'POST',
@@ -1482,14 +1505,38 @@ export default function App() {
           }),
         });
       } else {
-        const formData = new FormData();
-        formData.append('subject', homeworkSubject);
-        if (selectedAssignmentId) formData.append('assignmentId', selectedAssignmentId);
-        formData.append('files', homeworkPdfFile as File);
-        resp = await fetch('/api/homework/upload', {
+        // Large PDFs (a full scanned notebook can easily be 4-5MB+) were failing when sent as one
+        // request -- Vercel's serverless functions cap request bodies at ~4.5MB, well below what a
+        // single scan can reach. Splitting into small chunks keeps every individual request tiny,
+        // regardless of the total file size; the server reassembles them before checking.
+        const CHUNK_SIZE = 3 * 1024 * 1024;
+        const file = homeworkPdfFile as File;
+        let order = 0;
+        for (let start = 0; start < file.size; start += CHUNK_SIZE) {
+          const chunk = file.slice(start, start + CHUNK_SIZE);
+          const chunkForm = new FormData();
+          chunkForm.append('sessionId', homeworkSessionId);
+          chunkForm.append('order', String(order));
+          chunkForm.append('chunk', chunk, 'chunk.part');
+          const chunkResp = await fetch('/api/homework/upload-chunk', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${user.token}` },
+            body: chunkForm,
+          });
+          if (!chunkResp.ok) {
+            const chunkData = await chunkResp.json().catch(() => ({}));
+            throw new Error(chunkData.error || 'Failed to upload part of the PDF. Please try again.');
+          }
+          order += 1;
+        }
+        resp = await fetch('/api/homework/finalize-pdf-submission', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${user.token}` },
-          body: formData,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+          body: JSON.stringify({
+            sessionId: homeworkSessionId,
+            subject: homeworkSubject,
+            assignmentId: selectedAssignmentId || undefined,
+          }),
         });
       }
       let data: any = {};
@@ -3013,8 +3060,8 @@ export default function App() {
                 )}
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => setHomeworkMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => setHomeworkMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <PhotoUploader
@@ -4630,8 +4677,8 @@ export default function App() {
                 <div className="space-y-2">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF</label>
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => setHomeworkMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => setHomeworkMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <>
@@ -5476,8 +5523,8 @@ export default function App() {
                     <div className="space-y-2">
                       <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Attach Question Sheet (optional)</label>
                       <div className="flex gap-1.5">
-                        <button type="button" onClick={() => setAssignMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
-                        <button type="button" onClick={() => setAssignMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                        <button type="button" onClick={() => { setAssignMode('pdf'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                        <button type="button" onClick={() => { setAssignMode('photos'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
                       </div>
                       {assignMode === 'photos' ? (
                         <PhotoUploader

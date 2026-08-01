@@ -186,6 +186,14 @@ const homeworkUpload = multer({
   },
 });
 
+// For raw byte-range pieces of a large file (see /api/homework/upload-chunk) -- a Blob produced
+// by File.slice() reports no meaningful MIME type of its own, so this intentionally has no
+// fileFilter restricting to image/PDF types the way homeworkUpload does.
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 }, // a little above the ~3MB chunk size actually sent
+});
+
 const AVATAR_BUCKET = "avatars";
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -264,6 +272,34 @@ async function mergeSessionPhotos(email: string, sessionId: string): Promise<Buf
   await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
 
   return merged;
+}
+
+// Same temp-then-assemble idea as mergeSessionPhotos, but for a single large file (e.g. one big
+// PDF) split into small byte chunks client-side -- each chunk upload stays tiny regardless of the
+// total file size, so a 4-5MB+ PDF never has to cross the server in one request either.
+async function concatenateSessionChunks(email: string, sessionId: string): Promise<Buffer | null> {
+  const folder = `${HOMEWORK_TEMP_PREFIX}/${email}/${sessionId}`;
+  const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
+  if (listError || !fileList || fileList.length === 0) return null;
+
+  const sorted = fileList.slice().sort((a, b) => {
+    const orderA = parseInt(a.name.split("-")[0], 10) || 0;
+    const orderB = parseInt(b.name.split("-")[0], 10) || 0;
+    return orderA - orderB;
+  });
+
+  const chunks: Buffer[] = [];
+  for (const f of sorted) {
+    const { data: blob } = await supabase.storage.from(HOMEWORK_BUCKET).download(`${folder}/${f.name}`);
+    if (blob) chunks.push(Buffer.from(await blob.arrayBuffer()));
+  }
+  if (chunks.length === 0) return null;
+
+  const combined = Buffer.concat(chunks);
+
+  await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+
+  return combined;
 }
 
 const CLAUDE_MODEL = "claude-sonnet-5";
@@ -7007,6 +7043,90 @@ function buildApp(): express.Express {
     return res.json({ success: true });
   });
 
+  // One small piece of a large file (e.g. a single big PDF split client-side into ~3MB slices).
+  // Used so a single 4-5MB+ PDF never has to cross the server in one request -- that's what was
+  // silently failing on Vercel's ~4.5MB serverless body limit for students with large scans.
+  app.post("/api/homework/upload-chunk", (req, res, next) => {
+    chunkUpload.single("chunk")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process this chunk." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, order } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No data was received." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+
+    const orderNum = parseInt(order, 10) || 0;
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const tempPath = `${HOMEWORK_TEMP_PREFIX}/${auth.email}/${safeSessionId}/${String(orderNum).padStart(4, "0")}-${Date.now()}.part`;
+
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(tempPath, req.file.buffer, {
+      contentType: "application/octet-stream",
+    });
+    if (uploadError) {
+      console.error("Temp chunk upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload this piece of the file. Please try again." });
+    }
+
+    return res.json({ success: true, tempPath });
+  });
+
+  // Student finishes a single-large-PDF submission: reassembles every chunk already uploaded for
+  // this session back into the original PDF and saves the submission. Carries no file data itself.
+  app.post("/api/homework/finalize-pdf-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, subject, assignmentId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+
+    const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", auth.email).maybeSingle();
+    if (!targetUser) return res.status(404).json({ error: "Student account not found." });
+    if (targetUser.status !== "approved") return res.status(403).json({ error: "Only approved students can submit homework." });
+
+    let combined: Buffer | null;
+    try {
+      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+    } catch (concatErr: any) {
+      console.error("Error reassembling PDF chunks:", concatErr.message);
+      return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
+    }
+    if (!combined) {
+      return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
+    }
+
+    const filePath = `${auth.email}/${Date.now()}-submission.pdf`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, combined, {
+      contentType: "application/pdf",
+    });
+    if (uploadError) {
+      console.error("Homework file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to save the reassembled homework PDF. Please try again." });
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("homework_submissions")
+      .insert({
+        student_email: auth.email,
+        file_path: filePath,
+        subject: subject ? String(subject).trim() : null,
+        assignment_id: assignmentId ? String(assignmentId) : null,
+      })
+      .select()
+      .single();
+
+    if (insertError || !insertedRow) {
+      console.error("Error saving homework submission record:", insertError?.message);
+      return res.status(500).json({ error: "PDF created but failed to save the submission record." });
+    }
+
+    await checkHomeworkSubmission(insertedRow.id);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
+  });
+
   // Student finishes a photo-based submission: merges every photo already uploaded for this
   // session into one PDF and saves the submission. This request carries no file data at all
   // (just JSON), so it stays tiny regardless of how many photos were attached.
@@ -7241,7 +7361,7 @@ function buildApp(): express.Express {
     if (!ADMIN_EMAILS.includes(auth.email)) {
       return res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
     }
-    const { title, description, subject, targetClass, assignedDate, photoSessionId } = req.body;
+    const { title, description, subject, targetClass, assignedDate, photoSessionId, pdfSessionId } = req.body;
     if (!title) return res.status(400).json({ error: "Assignment title is required." });
 
     const today = todayIST();
@@ -7268,6 +7388,27 @@ function buildApp(): express.Express {
         });
         if (uploadError) {
           console.error("Assignment photo-session upload error:", uploadError.message);
+          return res.status(500).json({ error: "Failed to upload assignment file." });
+        }
+      }
+    } else if (pdfSessionId) {
+      // A large single PDF attached via chunked upload -- reassemble the pieces instead of
+      // trusting a single direct file upload, which fails for question sheets close to or over
+      // Vercel's ~4.5MB serverless body limit.
+      let combined: Buffer | null;
+      try {
+        combined = await concatenateSessionChunks(auth.email, String(pdfSessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+      } catch (concatErr: any) {
+        console.error("Error reassembling assignment PDF chunks:", concatErr.message);
+        return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
+      }
+      if (combined) {
+        filePath = `assignments/${Date.now()}-question-sheet.pdf`;
+        const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, combined, {
+          contentType: "application/pdf",
+        });
+        if (uploadError) {
+          console.error("Assignment PDF-chunk upload error:", uploadError.message);
           return res.status(500).json({ error: "Failed to upload assignment file." });
         }
       }
