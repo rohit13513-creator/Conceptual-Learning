@@ -302,7 +302,10 @@ async function concatenateSessionChunks(email: string, sessionId: string): Promi
   return combined;
 }
 
-const CLAUDE_MODEL = "claude-sonnet-5";
+// Haiku 4.5 -- switched from Sonnet 5 specifically to cut per-check API cost, since this is a
+// bounded, structured grading task rather than open-ended reasoning. Worth spot-checking real
+// submissions after this change to confirm grading quality holds up on messy handwriting.
+const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
 // Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
@@ -379,10 +382,16 @@ async function checkHomeworkSubmission(submissionId: string) {
     ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is a question sheet, attached for reference on the content/wording of individual questions.\n"
     : "";
 
-  const prompt = `You are a strict school teacher's assistant checking a student's handwritten homework submission (subject: ${sub.subject || "unspecified"}) for a CBSE-curriculum Indian school student.
-${assignmentContext}${questionSheetNote}${resubmissionNote}
+  // Split into a STATIC system prompt (byte-identical on every single call, across every student
+  // and every assignment) and a small per-request user message with only what actually varies.
+  // Anthropic's prompt caching only helps when the cached portion is an exact repeated prefix --
+  // this split, plus cache_control below, means the ~500-word instruction block is billed at full
+  // price once and then at a fraction of that on every subsequent check within the cache window,
+  // instead of being paid for in full on every single submission.
+  const systemPrompt = `You are a strict school teacher's assistant checking a student's handwritten homework submission for a CBSE-curriculum Indian school student.
+
 Working out which questions were actually assigned:
-- The assignment title/description above is the AUTHORITATIVE source for which question numbers were assigned, especially if it states an explicit range or list (e.g. "RD Sharma Ex 6.1, Q21 to Q45", "Q1-10"). Use that stated range as ground truth.
+- The assignment title/description given to you is the AUTHORITATIVE source for which question numbers were assigned, especially if it states an explicit range or list (e.g. "RD Sharma Ex 6.1, Q21 to Q45", "Q1-10"). Use that stated range as ground truth.
 - Do NOT assume the numbering printed on an attached question sheet matches the assigned range. A question sheet may be numbered locally (e.g. 1-25 on the page) while the teacher actually assigned a different range from the source textbook (e.g. Q21-45) -- the sheet is just there to show what each question asks, not to redefine which numbers were assigned. Match the student's own question numbers (as they wrote them, e.g. "Ex.21", "Q21") against the range stated in the description, not against the sheet's internal numbering.
 - If the student has correctly answered questions in the officially stated range, do not mark the homework incomplete just because those numbers don't match a differently-numbered question sheet.
 - If the student attempted extra questions outside the assigned range (bonus/extra practice), still check and grade those too -- do not ignore them and do not penalize the student for doing extra work.
@@ -410,6 +419,9 @@ Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or de
 - If everything checked out -- fully attempted, complete, and correct per CBSE method -- the feedback should be short and simply say so, without listing anything.
 
 Call the submit_grade tool with your result.`;
+
+  const prompt = `This submission is for subject: ${sub.subject || "unspecified"}.
+${assignmentContext}${questionSheetNote}${resubmissionNote}`;
 
   // Forcing a tool call instead of asking Claude to write raw JSON as text sidesteps a whole
   // class of bugs found the hard way: markdown code fences around the JSON, unescaped newlines
@@ -449,6 +461,11 @@ Call the submit_grade tool with your result.`;
         },
         body: JSON.stringify({
           model: CLAUDE_MODEL,
+          // Cache the static instruction block (see systemPrompt above) -- identical on every
+          // call, so after the first write in a cache window every subsequent homework check
+          // reads it back at a fraction of the normal input-token cost instead of paying full
+          // price for the same ~500-word instructions on every single submission.
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           // Extended thinking can run away on this task -- with a question-sheet attachment
           // (a second, denser document) it was consuming the entire token budget on internal
           // reasoning and leaving nothing for the actual answer, even at max_tokens 8192.
