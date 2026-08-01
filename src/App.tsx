@@ -11,6 +11,7 @@ import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
 import LearnChemistry from './components/LearnChemistry';
 import { LearnBiology } from './components/LearnBiology';
 import { PhotoUploader } from './components/PhotoUploader';
+import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
 import { CompetitiveOptics } from './components/CompetitiveOptics';
 import { AboutUs } from './components/AboutUs';
 import ReactionSimulator from './components/ReactionSimulator';
@@ -629,6 +630,7 @@ export default function App() {
   const [homeworkPhotosUploading, setHomeworkPhotosUploading] = useState(false);
   const [homeworkPdfFile, setHomeworkPdfFile] = useState<File | null>(null);
   const [homeworkUploading, setHomeworkUploading] = useState(false);
+  const [homeworkUploadProgress, setHomeworkUploadProgress] = useState(0);
   const [homeworkError, setHomeworkError] = useState<string | null>(null);
   const [homeworkSuccess, setHomeworkSuccess] = useState<string | null>(null);
   const [mySubmissions, setMySubmissions] = useState<any[]>([]);
@@ -651,6 +653,7 @@ export default function App() {
   const [assignPhotoTempPaths, setAssignPhotoTempPaths] = useState<string[]>([]);
   const [assignPhotosUploading, setAssignPhotosUploading] = useState(false);
   const [assignUploading, setAssignUploading] = useState(false);
+  const [assignUploadProgress, setAssignUploadProgress] = useState(0);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
 
@@ -1391,6 +1394,7 @@ export default function App() {
       return;
     }
 
+    setAssignUploadProgress(0);
     try {
       const formData = new FormData();
       formData.append('title', assignTitle);
@@ -1403,37 +1407,36 @@ export default function App() {
       } else if (assignFile) {
         // Large question-sheet PDFs were failing when sent as one request (Vercel's serverless
         // body limit is ~4.5MB). Chunk it the same way student submissions are, so any file size
-        // works regardless of the platform's per-request ceiling.
+        // works regardless of the platform's per-request ceiling. Each chunk retries on its own if
+        // the connection drops, and progress tracks bytes uploaded across the whole file.
         const CHUNK_SIZE = 3 * 1024 * 1024;
         const file = assignFile;
+        const totalSize = file.size;
+        let uploadedBytes = 0;
         let order = 0;
         for (let start = 0; start < file.size; start += CHUNK_SIZE) {
           const chunk = file.slice(start, start + CHUNK_SIZE);
+          const chunkSize = chunk.size;
           const chunkForm = new FormData();
           chunkForm.append('sessionId', assignSessionId);
           chunkForm.append('order', String(order));
           chunkForm.append('chunk', chunk, 'chunk.part');
-          const chunkResp = await fetch('/api/homework/upload-chunk', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${user.token}` },
-            body: chunkForm,
+          const chunkResult = await uploadWithRetry({
+            url: '/api/homework/upload-chunk',
+            token: user.token,
+            formData: chunkForm,
+            onProgress: (fraction) => setAssignUploadProgress(Math.round(((uploadedBytes + fraction * chunkSize) / totalSize) * 100)),
           });
-          if (!chunkResp.ok) {
-            const chunkData = await chunkResp.json().catch(() => ({}));
-            throw new Error(chunkData.error || 'Failed to upload part of the PDF. Please try again.');
-          }
+          if (!chunkResult.ok) throw new Error(chunkResult.data.error || 'Failed to upload part of the PDF. Please try again.');
+          uploadedBytes += chunkSize;
           order += 1;
+          setAssignUploadProgress(Math.round((uploadedBytes / totalSize) * 100));
         }
         formData.append('pdfSessionId', assignSessionId);
       }
-      const resp = await fetch('/api/admin/homework/assign', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${user.token}` },
-        body: formData
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to post homework assignment.');
-      setAssignSuccess(`"${data.assignment?.title || assignTitle}" was posted successfully.`);
+      const result = await uploadWithRetry({ url: '/api/admin/homework/assign', token: user.token, formData });
+      if (!result.ok) throw new Error(result.data.error || 'Failed to post homework assignment.');
+      setAssignSuccess(`"${result.data.assignment?.title || assignTitle}" was posted successfully.`);
       setAssignTitle('');
       setAssignDescription('');
       setAssignSubject('');
@@ -1448,6 +1451,7 @@ export default function App() {
       setAssignError(err.message);
     } finally {
       setAssignUploading(false);
+      setAssignUploadProgress(0);
     }
   };
 
@@ -1543,67 +1547,68 @@ export default function App() {
     if (homeworkMode === 'photos' && homeworkPhotoTempPaths.length === 0) return;
     if (homeworkMode === 'pdf' && !homeworkPdfFile) return;
     setHomeworkUploading(true);
+    setHomeworkUploadProgress(0);
     setHomeworkError(null);
     setHomeworkSuccess(null);
     try {
-      let resp: Response;
+      let result: { ok: boolean; data: any };
       if (homeworkMode === 'photos') {
         // Every photo in homeworkPhotoTempPaths already finished uploading individually (via
         // PhotoUploader) -- this call carries no file data at all, just tells the server which
         // already-uploaded session to merge and finalize into the submission.
-        resp = await fetch('/api/homework/finalize-submission', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
-          body: JSON.stringify({
+        setHomeworkUploadProgress(100);
+        result = await fetchJsonWithRetry({
+          url: '/api/homework/finalize-submission',
+          token: user.token,
+          body: {
             sessionId: homeworkSessionId,
             subject: homeworkSubject,
             assignmentId: selectedAssignmentId || undefined,
-          }),
+          },
         });
       } else {
         // Large PDFs (a full scanned notebook can easily be 4-5MB+) were failing when sent as one
         // request -- Vercel's serverless functions cap request bodies at ~4.5MB, well below what a
         // single scan can reach. Splitting into small chunks keeps every individual request tiny,
-        // regardless of the total file size; the server reassembles them before checking.
+        // regardless of the total file size; the server reassembles them before checking. Each
+        // chunk upload retries on its own if the connection drops, and overall progress is the
+        // bytes-uploaded-so-far fraction of the whole file, not just "chunk N of M".
         const CHUNK_SIZE = 3 * 1024 * 1024;
         const file = homeworkPdfFile as File;
+        const totalSize = file.size;
+        let uploadedBytes = 0;
         let order = 0;
         for (let start = 0; start < file.size; start += CHUNK_SIZE) {
           const chunk = file.slice(start, start + CHUNK_SIZE);
+          const chunkSize = chunk.size;
           const chunkForm = new FormData();
           chunkForm.append('sessionId', homeworkSessionId);
           chunkForm.append('order', String(order));
           chunkForm.append('chunk', chunk, 'chunk.part');
-          const chunkResp = await fetch('/api/homework/upload-chunk', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${user.token}` },
-            body: chunkForm,
+          const chunkResult = await uploadWithRetry({
+            url: '/api/homework/upload-chunk',
+            token: user.token,
+            formData: chunkForm,
+            onProgress: (fraction) => setHomeworkUploadProgress(Math.round(((uploadedBytes + fraction * chunkSize) / totalSize) * 100)),
           });
-          if (!chunkResp.ok) {
-            const chunkData = await chunkResp.json().catch(() => ({}));
-            throw new Error(chunkData.error || 'Failed to upload part of the PDF. Please try again.');
-          }
+          if (!chunkResult.ok) throw new Error(chunkResult.data.error || 'Failed to upload part of the PDF. Please try again.');
+          uploadedBytes += chunkSize;
           order += 1;
+          setHomeworkUploadProgress(Math.round((uploadedBytes / totalSize) * 100));
         }
-        resp = await fetch('/api/homework/finalize-pdf-submission', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
-          body: JSON.stringify({
+        result = await fetchJsonWithRetry({
+          url: '/api/homework/finalize-pdf-submission',
+          token: user.token,
+          body: {
             sessionId: homeworkSessionId,
             subject: homeworkSubject,
             assignmentId: selectedAssignmentId || undefined,
-          }),
+          },
         });
       }
-      let data: any = {};
-      try {
-        data = await resp.json();
-      } catch {
-        throw new Error('Upload failed -- your connection may have dropped. Please try again.');
-      }
-      if (!resp.ok) throw new Error(data.error || 'Failed to upload homework.');
-      const checkedStatus = data.submission?.status;
-      const checkedScore = data.submission?.aiScore;
+      if (!result.ok) throw new Error(result.data.error || 'Failed to upload homework.');
+      const checkedStatus = result.data.submission?.status;
+      const checkedScore = result.data.submission?.aiScore;
       setHomeworkSuccess(
         checkedStatus === 'checked'
           ? `Homework submitted and checked!${checkedScore != null ? ` Score: ${checkedScore}/10.` : ''} See the feedback below.`
@@ -1619,6 +1624,7 @@ export default function App() {
       setHomeworkError(err.message);
     } finally {
       setHomeworkUploading(false);
+      setHomeworkUploadProgress(0);
     }
   };
 
@@ -3142,6 +3148,14 @@ export default function App() {
                     />
                   )}
                 </div>
+                {homeworkUploading && homeworkMode === 'pdf' && (
+                  <div className="space-y-1">
+                    <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
+                      <div className="h-full bg-cyan-400 transition-all duration-200" style={{ width: `${homeworkUploadProgress}%` }} />
+                    </div>
+                    <p className={`text-[10px] font-bold text-right ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{homeworkUploadProgress}% uploaded</p>
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
@@ -4791,6 +4805,14 @@ export default function App() {
                     </>
                   )}
                 </div>
+                {homeworkUploading && homeworkMode === 'pdf' && (
+                  <div className="space-y-1">
+                    <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
+                      <div className="h-full bg-cyan-400 transition-all duration-200" style={{ width: `${homeworkUploadProgress}%` }} />
+                    </div>
+                    <p className={`text-[10px] font-bold text-right ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{homeworkUploadProgress}% uploaded</p>
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
@@ -5634,6 +5656,14 @@ export default function App() {
                             className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                           />
                         )}
+                      </div>
+                    )}
+                    {assignUploading && assignMode === 'pdf' && !editingAssignmentId && (
+                      <div className="space-y-1">
+                        <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
+                          <div className="h-full bg-amber-400 transition-all duration-200" style={{ width: `${assignUploadProgress}%` }} />
+                        </div>
+                        <p className={`text-[10px] font-bold text-right ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{assignUploadProgress}% uploaded</p>
                       </div>
                     )}
                     <div className="flex gap-2">

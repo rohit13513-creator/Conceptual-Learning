@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Plus, Camera, X, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { uploadWithRetry } from '../utils/uploadWithRetry';
 
 interface PhotoItem {
   id: string;
@@ -9,6 +10,7 @@ interface PhotoItem {
   tempPath?: string;
   errorMessage?: string;
   order: number;
+  progress: number;
 }
 
 interface PhotoUploaderProps {
@@ -69,15 +71,16 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
       formData.append('photo', compressed);
       formData.append('sessionId', sessionId);
       formData.append('order', String(item.order));
-      const resp = await fetch('/api/homework/upload-photo', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
+      // Retries automatically on a dropped connection (waiting for the browser to come back
+      // online between attempts) rather than failing the whole photo outright.
+      const result = await uploadWithRetry({
+        url: '/api/homework/upload-photo',
+        token,
+        formData,
+        onProgress: (fraction) => setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, progress: Math.round(fraction * 100) } : p))),
       });
-      let data: any = {};
-      try { data = await resp.json(); } catch { /* fallthrough to generic error below */ }
-      if (!resp.ok) throw new Error(data.error || 'Failed to upload this photo.');
-      setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, status: 'done', tempPath: data.tempPath } : p)));
+      if (!result.ok) throw new Error(result.data.error || 'Failed to upload this photo.');
+      setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, status: 'done', tempPath: result.data.tempPath, progress: 100 } : p)));
     } catch (err: any) {
       setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, status: 'error', errorMessage: err.message || 'Upload failed.' } : p)));
     }
@@ -95,6 +98,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
         previewUrl: URL.createObjectURL(file),
         status: 'uploading',
         order,
+        progress: 0,
       };
       setPhotos((prev) => [...prev, item]);
       await uploadPhoto(item);
@@ -105,7 +109,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
     setPhotos((prev) => {
       const item = prev.find((p) => p.id === id);
       if (item) {
-        const resetItem = { ...item, status: 'uploading' as const, errorMessage: undefined };
+        const resetItem = { ...item, status: 'uploading' as const, errorMessage: undefined, progress: 0 };
         uploadPhoto(resetItem);
         return prev.map((p) => (p.id === id ? resetItem : p));
       }
@@ -139,8 +143,12 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
             <div key={p.id} className={`relative aspect-square rounded-lg overflow-hidden border ${isLightMode ? 'border-slate-200 bg-slate-100' : 'border-slate-800 bg-slate-950'}`}>
               <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
               {p.status === 'uploading' && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1">
                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
+                  <span className="text-[10px] font-black text-white">{p.progress}%</span>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                    <div className="h-full bg-cyan-400 transition-all duration-200" style={{ width: `${p.progress}%` }} />
+                  </div>
                 </div>
               )}
               {p.status === 'error' && (
