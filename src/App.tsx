@@ -81,6 +81,7 @@ import {
   User,
   UserCheck,
   RefreshCw,
+  Pencil,
   Copy,
   Plus,
   LogOut,
@@ -643,6 +644,7 @@ export default function App() {
   const [assignSubject, setAssignSubject] = useState('');
   const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
   const [assignAssignedDate, setAssignAssignedDate] = useState(todayDateStr);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [assignFile, setAssignFile] = useState<File | null>(null);
   const [assignMode, setAssignMode] = useState<'photos' | 'pdf'>('pdf');
   const [assignSessionId, setAssignSessionId] = useState(() => crypto.randomUUID());
@@ -1329,12 +1331,66 @@ export default function App() {
     }
   };
 
+  const handleEditAssignmentClick = (a: any) => {
+    setEditingAssignmentId(a.id);
+    setAssignTitle(a.title || '');
+    setAssignDescription(a.description || '');
+    setAssignSubject(a.subject || '');
+    setAssignTargetClass((a.targetClass || 'All') as any);
+    setAssignAssignedDate(a.assignedDate || todayDateStr);
+    setAssignError(null);
+    setAssignSuccess(null);
+    document.getElementById('assign-homework-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleCancelEditAssignment = () => {
+    setEditingAssignmentId(null);
+    setAssignTitle('');
+    setAssignDescription('');
+    setAssignSubject('');
+    setAssignTargetClass('All');
+    setAssignAssignedDate(todayDateStr);
+    setAssignError(null);
+    setAssignSuccess(null);
+  };
+
   const handleAssignHomework = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !assignTitle.trim()) return;
     setAssignUploading(true);
     setAssignError(null);
     setAssignSuccess(null);
+
+    // Editing only ever touches title/description/subject/targetClass/assignedDate (and always
+    // recomputes the deadline to match) -- the attached file, if any, is left exactly as posted.
+    if (editingAssignmentId) {
+      try {
+        const resp = await fetch('/api/admin/homework/edit-assignment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+          body: JSON.stringify({
+            id: editingAssignmentId,
+            title: assignTitle,
+            description: assignDescription,
+            subject: assignSubject,
+            targetClass: assignTargetClass,
+            assignedDate: assignAssignedDate,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to save the changes.');
+        setAssignSuccess(`"${data.assignment?.title || assignTitle}" was updated -- homework checks and reports will use the corrected details immediately.`);
+        handleCancelEditAssignment();
+        fetchAssignments();
+        fetchMissingReport();
+      } catch (err: any) {
+        setAssignError(err.message);
+      } finally {
+        setAssignUploading(false);
+      }
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append('title', assignTitle);
@@ -5442,13 +5498,16 @@ export default function App() {
               </div>
 
               {/* Post Homework Assignment */}
-              <div>
-                <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div id="assign-homework-form">
+                <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'} ${editingAssignmentId ? 'ring-2 ring-amber-500/50' : ''}`}>
                   <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400">
-                    <Upload className="w-4 h-4 text-amber-400" /> Post Homework Assignment
+                    {editingAssignmentId ? <Pencil className="w-4 h-4 text-amber-400" /> : <Upload className="w-4 h-4 text-amber-400" />}
+                    {editingAssignmentId ? 'Editing Assignment' : 'Post Homework Assignment'}
                   </h3>
                   <p className={`text-[11px] leading-relaxed font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Students see this in their Homework tab and can attach it when they submit completed work.
+                    {editingAssignmentId
+                      ? "Fix the title, subject, target class, or assigned date -- the deadline and reports recalculate immediately. The attached file (if any) can't be changed here; delete and repost for that."
+                      : "Students see this in their Homework tab and can attach it when they submit completed work."}
                   </p>
 
                   {assignError && (
@@ -5501,13 +5560,13 @@ export default function App() {
                       <input
                         type="date"
                         value={assignAssignedDate}
-                        min={todayDateStr}
+                        min={editingAssignmentId ? undefined : todayDateStr}
                         onChange={(e) => setAssignAssignedDate(e.target.value)}
                         required
                         className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                       />
                       <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                        Deadline: 8:00 PM the next day. Past dates can't be selected.
+                        {editingAssignmentId ? 'Deadline recalculates automatically from this date and the target class.' : "Deadline: 8:00 PM the next day. Past dates can't be selected."}
                       </p>
                     </div>
                     <div className="space-y-1">
@@ -5520,38 +5579,55 @@ export default function App() {
                         className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Attach Question Sheet (optional)</label>
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={() => { setAssignMode('pdf'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
-                        <button type="button" onClick={() => { setAssignMode('photos'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    {!editingAssignmentId && (
+                      <div className="space-y-2">
+                        <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Attach Question Sheet (optional)</label>
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={() => { setAssignMode('pdf'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                          <button type="button" onClick={() => { setAssignMode('photos'); setAssignSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${assignMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                        </div>
+                        {assignMode === 'photos' ? (
+                          <PhotoUploader
+                            key={assignSessionId}
+                            token={user!.token}
+                            sessionId={assignSessionId}
+                            isLightMode={isLightMode}
+                            disabled={assignUploading}
+                            accent="amber"
+                            onChange={(paths, uploading) => { setAssignPhotoTempPaths(paths); setAssignPhotosUploading(uploading); }}
+                          />
+                        ) : (
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
+                            className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                          />
+                        )}
                       </div>
-                      {assignMode === 'photos' ? (
-                        <PhotoUploader
-                          key={assignSessionId}
-                          token={user!.token}
-                          sessionId={assignSessionId}
-                          isLightMode={isLightMode}
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={assignUploading || assignPhotosUploading || !assignTitle.trim()}
+                        className="flex-1 py-2 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50"
+                      >
+                        {assignUploading
+                          ? (editingAssignmentId ? 'Saving...' : 'Posting...')
+                          : assignPhotosUploading ? 'Photos still uploading...'
+                          : editingAssignmentId ? 'Save Changes' : 'Post Assignment'}
+                      </button>
+                      {editingAssignmentId && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEditAssignment}
                           disabled={assignUploading}
-                          accent="amber"
-                          onChange={(paths, uploading) => { setAssignPhotoTempPaths(paths); setAssignPhotosUploading(uploading); }}
-                        />
-                      ) : (
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={(e) => setAssignFile(e.target.files?.[0] || null)}
-                          className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
-                        />
+                          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition disabled:opacity-50 ${isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                          Cancel
+                        </button>
                       )}
                     </div>
-                    <button
-                      type="submit"
-                      disabled={assignUploading || assignPhotosUploading || !assignTitle.trim()}
-                      className="w-full py-2 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50"
-                    >
-                      {assignUploading ? 'Posting...' : assignPhotosUploading ? 'Photos still uploading...' : 'Post Assignment'}
-                    </button>
                   </form>
 
                   <div className={`divide-y pt-2 border-t max-h-[220px] overflow-y-auto ${isLightMode ? 'divide-slate-200 border-slate-200' : 'divide-slate-800 border-slate-800'}`}>
@@ -5571,6 +5647,13 @@ export default function App() {
                                 <Eye className="w-3.5 h-3.5" />
                               </a>
                             )}
+                            <button
+                              onClick={() => handleEditAssignmentClick(a)}
+                              className="p-1 rounded hover:bg-amber-500/10 text-slate-500 hover:text-amber-400 cursor-pointer"
+                              title="Edit assignment"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => handleDeleteAssignment(a.id)}
                               className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer"

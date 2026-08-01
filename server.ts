@@ -7473,6 +7473,50 @@ function buildApp(): express.Express {
   });
 
   // Admin deletes a homework assignment
+  // Admin corrects an already-posted assignment's details (most commonly the target class, e.g.
+  // after accidentally posting everything as "All" instead of the intended specific class). The
+  // deadline is always recomputed from the (possibly new) target class + assigned date, so a class
+  // correction immediately fixes which day/time it's actually due -- the file attachment itself is
+  // left untouched; delete and repost if that needs to change.
+  app.post("/api/admin/homework/edit-assignment", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { id, title, description, subject, targetClass, assignedDate } = req.body;
+    if (!id) return res.status(400).json({ error: "Assignment id is required." });
+    if (!title || !String(title).trim()) return res.status(400).json({ error: "Assignment title is required." });
+    if (!assignedDate) return res.status(400).json({ error: "Assigned date is required." });
+
+    const { data: existing } = await supabase.from("homework_assignments").select("id").eq("id", id).maybeSingle();
+    if (!existing) return res.status(404).json({ error: "Assignment not found." });
+
+    const finalTargetClass = targetClass || "All";
+    const { data: updatedRow, error: updateError } = await supabase
+      .from("homework_assignments")
+      .update({
+        title: String(title).trim(),
+        description: description ? String(description).trim() : null,
+        subject: subject ? String(subject).trim() : null,
+        target_class: finalTargetClass,
+        assigned_date: String(assignedDate),
+        deadline: computeDeadline(String(assignedDate), finalTargetClass),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateError || !updatedRow) {
+      console.error("Error editing homework assignment:", updateError?.message);
+      return res.status(500).json({ error: "Failed to save the changes." });
+    }
+
+    let fileUrl: string | null = null;
+    if (updatedRow.file_path) {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(updatedRow.file_path, 3600);
+      fileUrl = signed?.signedUrl || null;
+    }
+
+    return res.json({ success: true, assignment: mapAssignmentRow(updatedRow, fileUrl) });
+  });
+
   app.post("/api/admin/homework/delete-assignment", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
     const { id } = req.body;
