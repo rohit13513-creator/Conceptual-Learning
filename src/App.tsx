@@ -3213,7 +3213,7 @@ export default function App() {
                             <Eye className="w-3.5 h-3.5" />
                           </a>
                         )}
-                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 8 && sub.assignmentId && (
+                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 10 && sub.assignmentId && (
                           <button
                             type="button"
                             onClick={() => handleResubmitClick(sub)}
@@ -4672,10 +4672,10 @@ export default function App() {
 
             <div className={`border rounded-2xl p-6 shadow-lg space-y-2 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <RefreshCw className="w-4 h-4 text-amber-400" /> Got a low score? You can improve it
+                <RefreshCw className="w-4 h-4 text-amber-400" /> Didn't score full marks? You can improve it
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                Our goal is never to mark you down permanently -- it's to help you get it right. If your score is low, an "Improve Score" button appears next to that submission in "Your Submissions". Add photos of just the missing or corrected questions and resubmit -- they'll be checked against what you already turned in to raise your score, without needing to redo everything from scratch.
+                Our goal is never to mark you down permanently -- it's to help you get it right. Anytime you don't score 10/10, an "Improve Score" button appears next to that submission in "Your Submissions". Add photos of just the missing or corrected questions and resubmit -- a question you got wrong the first time will be marked correct and count toward your score if it's right this time, without needing to redo everything from scratch.
               </p>
             </div>
 
@@ -4873,7 +4873,7 @@ export default function App() {
                             <Eye className="w-3.5 h-3.5" />
                           </a>
                         )}
-                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 8 && sub.assignmentId && (
+                        {sub.status === 'checked' && sub.aiScore != null && sub.aiScore < 10 && sub.assignmentId && (
                           <button
                             type="button"
                             onClick={() => handleResubmitClick(sub)}

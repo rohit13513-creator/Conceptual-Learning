@@ -310,10 +310,12 @@ async function checkHomeworkSubmission(submissionId: string) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
 
-  // A student who was told some questions were missing may send just those questions in a
-  // follow-up submission rather than resending everything. Look at their most recent checked
-  // submission for this same assignment so we only ask this file to cover what was actually
-  // still outstanding, instead of re-flagging already-completed questions as missing again.
+  // A student who got some questions wrong or missing may send just those questions in a
+  // follow-up submission (an "Improve Score" resubmission) rather than resending everything.
+  // Look at their most recent checked submission for this same assignment so we only ask this
+  // file to cover what was actually still outstanding -- missing OR incorrect -- instead of
+  // re-flagging already-completed questions, and so a corrected wrong answer actually raises
+  // the score instead of being silently ignored because it was never "missing" to begin with.
   let resubmissionNote = "";
   if (sub.assignment_id) {
     const { data: priorRows } = await supabase
@@ -327,7 +329,8 @@ async function checkHomeworkSubmission(submissionId: string) {
       .limit(1);
     const prior = priorRows?.[0];
     if (prior && Array.isArray(prior.missing_questions) && prior.missing_questions.length > 0) {
-      resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still missing: ${prior.missing_questions.join(", ")}. This new submission is a follow-up meant to complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already done and checked from the earlier submission -- do NOT re-flag any question outside this list as missing just because it doesn't appear in this file. Only evaluate: whether each question in this list (${prior.missing_questions.join(", ")}) now appears and is correct, or is still missing/still a doubt. Base your "missingQuestions" output ONLY on this list, not the full original assigned range.\n`;
+      const outstanding = prior.missing_questions.join(", ");
+      resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
     }
   }
 
@@ -400,7 +403,7 @@ SCORING RULES (CBSE board guidelines -- follow these exactly, the score must nev
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct or complete -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
 - Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
 - Do NOT comment on handwriting, neatness, presentation, or crossed-out/cut corrections at all, even in passing -- these never affect the score and are not worth mentioning. The only exception is a question whose content is so illegible you genuinely cannot tell what was written -- in that case, name the question number and ask for it to be rewritten clearly, without implying any score penalty.
-- DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong.
+- DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong. List every one of these question numbers in "incorrectQuestions" too, so the student can resubmit corrections for exactly those questions later.
 - DO list, by question number, any question that is simply missing -- no answer AND no doubt marker -- and tell the student to complete and resubmit just those questions. Do not explain that there was no doubt marker or otherwise narrate how you decided a question counts as missing -- just list it.
 - DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
 - If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them.
@@ -422,8 +425,9 @@ Call the submit_grade tool with your result.`;
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
+        incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
       },
-      required: ["score", "feedback", "integrityFlag", "missingQuestions"],
+      required: ["score", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions"],
     },
   };
 
@@ -502,12 +506,20 @@ Call the submit_grade tool with your result.`;
       }
     }
 
+    // Stored under the one existing "missing_questions" column (no schema change needed) as the
+    // union of truly-missing and attempted-but-wrong questions -- everything still outstanding
+    // that a resubmission should specifically target. See the resubmission note built above.
+    const outstandingQuestions = Array.from(new Set([
+      ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
+      ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
+    ]));
+
     const { error: updateError } = await supabase.from("homework_submissions").update({
       status: "checked",
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
-      missing_questions: Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : [],
+      missing_questions: outstandingQuestions,
     }).eq("id", submissionId);
     if (updateError) {
       // Falls back to a write without missing_questions if that column hasn't been migrated in
