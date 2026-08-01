@@ -5940,9 +5940,11 @@ export default function App() {
                       </div>
                       <p className={`text-[10px] font-mono mt-0.5 flex items-center gap-1.5 ${r.missing.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                         <span>{r.submittedCount}/{r.rosterCount} submitted</span>
-                        <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-black ${r.deadlinePassed ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                          {r.deadlinePassed ? 'Deadline passed' : 'Still open'}
-                        </span>
+                        {r.deadline && (
+                          <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-black bg-red-500/10 text-red-400 border border-red-500/20`}>
+                            Deadline was {formatDeadline(r.deadline)}
+                          </span>
+                        )}
                       </p>
                       {r.missing.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">

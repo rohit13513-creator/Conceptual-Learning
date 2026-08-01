@@ -7501,6 +7501,7 @@ function buildApp(): express.Express {
     if (!checkAdminAuth(req, res)) return;
 
     const CLASS_TO_TARGET: Record<string, string> = { VIII: "8th", IX: "9th", X: "10th", XII: "12th" };
+    const TARGET_TO_LABEL: Record<string, string> = { "8th": "VIII", "9th": "IX", "10th": "X", "12th": "XII" };
 
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
@@ -7517,26 +7518,35 @@ function buildApp(): express.Express {
       submittedByAssignment.get(s.assignment_id)!.add(s.student_email);
     });
 
-    // Covers every recent assignment, including today's whose deadline hasn't passed yet -- an
-    // admin following up on a still-open assignment needs to see who hasn't submitted in real
-    // time, not only after it's too late to matter. `deadlinePassed` lets the UI distinguish
-    // "hasn't submitted yet, still has time" from "deadline has passed" without hiding either.
-    const report = (assignmentRows || []).map((a: any) => {
-      const roster = students.filter((u: any) => a.target_class === "All" || CLASS_TO_TARGET[u.student_class] === a.target_class);
-      const submitted = submittedByAssignment.get(a.id) || new Set<string>();
-      const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
-      return {
-        id: a.id,
-        title: a.title,
-        targetClass: a.target_class,
-        assignedDate: a.assigned_date,
-        deadline: a.deadline,
-        deadlinePassed: !!a.deadline && new Date(a.deadline).getTime() <= Date.now(),
-        rosterCount: roster.length,
-        submittedCount: submitted.size,
-        missing,
-      };
-    });
+    // An assignment posted to "All" classes doesn't have one shared deadline in practice -- each
+    // class has its own tuition-slot cutoff the next day (VIII 6:45pm, IX 5:45pm, X 4:45pm), same
+    // as the student-facing view already accounts for. Splitting it into one report row per class
+    // (each with that class's own deadline and only that class's own roster) fixes two problems at
+    // once: a class whose own deadline has passed shows up even while another class's hasn't yet,
+    // and a class's row never lists another class's students.
+    const report: any[] = [];
+    for (const a of assignmentRows || []) {
+      const targetKeys = a.target_class === "All" ? Object.keys(DEADLINE_TIME_BY_CLASS) : [a.target_class];
+      for (const key of targetKeys) {
+        const effectiveDeadline = a.target_class === "All" ? computeDeadline(a.assigned_date, key) : a.deadline;
+        const deadlinePassed = !!effectiveDeadline && new Date(effectiveDeadline).getTime() <= Date.now();
+        if (!deadlinePassed) continue; // only report once a class's own deadline has actually passed
+
+        const roster = students.filter((u: any) => CLASS_TO_TARGET[u.student_class] === key);
+        const submitted = submittedByAssignment.get(a.id) || new Set<string>();
+        const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+        report.push({
+          id: a.target_class === "All" ? `${a.id}-${key}` : a.id,
+          title: a.target_class === "All" ? `${a.title} (Class ${TARGET_TO_LABEL[key] || key})` : a.title,
+          targetClass: TARGET_TO_LABEL[key] || key,
+          assignedDate: a.assigned_date,
+          deadline: effectiveDeadline,
+          rosterCount: roster.length,
+          submittedCount: roster.filter((u: any) => submitted.has(u.email)).length,
+          missing,
+        });
+      }
+    }
 
     return res.json({ report });
   });
