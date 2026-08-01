@@ -663,6 +663,8 @@ export default function App() {
   // (e.g. "X"). Empty by default -- every class group starts expanded.
   const [collapsedRosterClasses, setCollapsedRosterClasses] = useState<Set<string>>(new Set());
   const [collapsedHomeworkClasses, setCollapsedHomeworkClasses] = useState<Set<string>>(new Set());
+  // Submission ids whose full AI feedback is expanded in the admin table -- collapsed (score-only) by default.
+  const [expandedFeedbackIds, setExpandedFeedbackIds] = useState<Set<string>>(new Set());
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -5816,7 +5818,26 @@ export default function App() {
                                         {sub.aiFeedback ? (
                                           <>
                                             {sub.aiScore != null && <span className="font-black text-emerald-400 mr-1.5">{sub.aiScore}/10</span>}
-                                            <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                            {expandedFeedbackIds.has(sub.id) ? (
+                                              <>
+                                                <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setExpandedFeedbackIds(prev => { const next = new Set(prev); next.delete(sub.id); return next; })}
+                                                  className="block mt-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                                >
+                                                  Hide Feedback
+                                                </button>
+                                              </>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => setExpandedFeedbackIds(prev => new Set(prev).add(sub.id))}
+                                                className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                              >
+                                                View Feedback
+                                              </button>
+                                            )}
                                           </>
                                         ) : (
                                           <span className="text-slate-500 italic">Not checked yet</span>
