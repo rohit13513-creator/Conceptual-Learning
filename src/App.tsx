@@ -1228,12 +1228,30 @@ export default function App() {
     }
   };
 
+  // An assignment posted to "All" classes stores one generic deadline, but each class actually has
+  // its own tuition-slot cutoff the next day (VIII 6:45pm, IX 5:45pm, X 4:45pm). For a student in a
+  // specific class, compute the deadline that actually applies to them rather than trusting the
+  // generic stored value; admins/exempt accounts (no fixed class) fall back to the stored value.
+  const DEADLINE_TIME_BY_CLASS: Record<string, string> = { '8th': '18:45:00', '9th': '17:45:00', '10th': '16:45:00' };
+  const getEffectiveDeadline = (a: { targetClass: string; assignedDate: string; deadline: string | null }): string | null => {
+    if (!a.deadline) return null;
+    if (a.targetClass === 'All' && (studentTrack === '8th' || studentTrack === '9th' || studentTrack === '10th')) {
+      const time = DEADLINE_TIME_BY_CLASS[studentTrack];
+      const next = new Date(`${a.assignedDate}T00:00:00+05:30`);
+      next.setDate(next.getDate() + 1);
+      const nextDateStr = next.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      return new Date(`${nextDateStr}T${time}+05:30`).toISOString();
+    }
+    return a.deadline;
+  };
+
   const visibleAssignments = useMemo(() => {
     const now = Date.now();
-    return assignments.filter(a =>
-      (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack) &&
-      (!a.deadline || new Date(a.deadline).getTime() > now)
-    );
+    return assignments.filter(a => {
+      if (!(a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)) return false;
+      const effectiveDeadline = getEffectiveDeadline(a);
+      return !effectiveDeadline || new Date(effectiveDeadline).getTime() > now;
+    });
   }, [assignments, isClassExempt, studentTrack]);
 
   // The "which homework is this for" dropdown normally mirrors visibleAssignments (deadline-locked
@@ -2931,7 +2949,7 @@ export default function App() {
                       <div key={a.id} className="py-2.5">
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
-                        {a.deadline && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(a.deadline)}</p>}
+                        {getEffectiveDeadline(a) && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(getEffectiveDeadline(a))}</p>}
                         {a.fileUrl && (
                           <a
                             href={a.fileUrl}
@@ -4543,7 +4561,7 @@ export default function App() {
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
                           {new Date(a.createdAt).toLocaleDateString()} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
                         </p>
-                        {a.deadline && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(a.deadline)}</p>}
+                        {getEffectiveDeadline(a) && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(getEffectiveDeadline(a))}</p>}
                         {a.fileUrl && (
                           <a
                             href={a.fileUrl}

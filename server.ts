@@ -502,7 +502,7 @@ function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-// Deadline for homework assigned on a given IST date: same-day cutoff, timed to each class's
+// Deadline for homework assigned on a given IST date: the FOLLOWING day, timed to each class's
 // tuition slot -- Class VIII 6:45pm, Class IX 5:45pm, Class X 4:45pm. "All"/other target classes
 // fall back to the latest (most generous) cutoff so no class is shortchanged.
 const DEADLINE_TIME_BY_CLASS: Record<string, string> = {
@@ -512,7 +512,10 @@ const DEADLINE_TIME_BY_CLASS: Record<string, string> = {
 };
 function computeDeadline(assignedDate: string, targetClass: string): string {
   const time = DEADLINE_TIME_BY_CLASS[targetClass] || "18:45:00";
-  return new Date(`${assignedDate}T${time}+05:30`).toISOString();
+  const next = new Date(`${assignedDate}T00:00:00+05:30`);
+  next.setDate(next.getDate() + 1);
+  const nextDateStr = next.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return new Date(`${nextDateStr}T${time}+05:30`).toISOString();
 }
 
 function mapAnnouncementRow(row: any): Announcement {
