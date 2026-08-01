@@ -7107,6 +7107,13 @@ function buildApp(): express.Express {
     if (!auth) return;
     const { sessionId, subject, assignmentId } = req.body;
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!assignmentId || !String(assignmentId).trim()) {
+      return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
+    }
+    const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+    if (!targetAssignment) {
+      return res.status(400).json({ error: "That homework assignment no longer exists. Please refresh and choose it again." });
+    }
 
     const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", auth.email).maybeSingle();
     if (!targetUser) return res.status(404).json({ error: "Student account not found." });
@@ -7162,6 +7169,13 @@ function buildApp(): express.Express {
     if (!auth) return;
     const { sessionId, subject, assignmentId } = req.body;
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!assignmentId || !String(assignmentId).trim()) {
+      return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
+    }
+    const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+    if (!targetAssignment) {
+      return res.status(400).json({ error: "That homework assignment no longer exists. Please refresh and choose it again." });
+    }
 
     const { data: targetUser } = await supabase.from("users").select("email, status").eq("email", auth.email).maybeSingle();
     if (!targetUser) return res.status(404).json({ error: "Student account not found." });
@@ -7225,6 +7239,13 @@ function buildApp(): express.Express {
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) {
       return res.status(400).json({ error: "At least one homework file is required." });
+    }
+    if (!assignmentId || !String(assignmentId).trim()) {
+      return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
+    }
+    const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+    if (!targetAssignment) {
+      return res.status(400).json({ error: "That homework assignment no longer exists. Please refresh and choose it again." });
     }
 
     const emailNormalized = auth.email;

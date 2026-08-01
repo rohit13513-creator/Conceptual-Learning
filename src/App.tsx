@@ -3098,9 +3098,9 @@ export default function App() {
               )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
-                {homeworkDropdownAssignments.length > 0 && (
-                  <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                  {homeworkDropdownAssignments.length > 0 ? (
                     <select
                       value={selectedAssignmentId}
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
@@ -3112,8 +3112,12 @@ export default function App() {
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
                     </select>
-                  </div>
-                )}
+                  ) : (
+                    <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                      No homework assignment is currently open for submission. You can't submit until your teacher posts one.
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
@@ -3140,7 +3144,7 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (homeworkDropdownAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
@@ -4726,9 +4730,9 @@ export default function App() {
               )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
-                {homeworkDropdownAssignments.length > 0 && (
-                  <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                  {homeworkDropdownAssignments.length > 0 ? (
                     <select
                       value={selectedAssignmentId}
                       onChange={(e) => setSelectedAssignmentId(e.target.value)}
@@ -4740,8 +4744,12 @@ export default function App() {
                         <option key={a.id} value={a.id}>{a.title}</option>
                       ))}
                     </select>
-                  </div>
-                )}
+                  ) : (
+                    <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                      No homework assignment is currently open for submission. You can't submit until your teacher posts one.
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Subject / Topic (optional)</label>
                   <input
@@ -4785,7 +4793,7 @@ export default function App() {
                 </div>
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || (homeworkDropdownAssignments.length > 0 && !selectedAssignmentId)}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
