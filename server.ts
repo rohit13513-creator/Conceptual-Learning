@@ -115,7 +115,13 @@ const ADMIN_NOTIFICATION_EMAILS = ["conceptuallearningonline@gmail.com"];
 // user -- anyone who knew or guessed an email could act as them. These signed, HMAC-based
 // tokens are issued once at login and verified on every subsequent request; the client cannot
 // forge one without knowing SESSION_SECRET, which never leaves the server.
-const SESSION_SECRET = process.env.SESSION_SECRET || "";
+// Fails loudly at startup instead of silently signing every session with an empty-string key --
+// a missing env var used to mean every token became forgeable (anyone could compute the same
+// HMAC with the same empty key) rather than the server simply refusing to come up.
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET environment variable is required and must not be empty.");
+}
+const SESSION_SECRET = process.env.SESSION_SECRET;
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function base64url(input: Buffer): string {
@@ -766,8 +772,46 @@ function sendSimulatedEmail(to: string, subject: string, body: string, type: 'in
   });
 }
 
+// Content-Security-Policy scoped to the exact external hosts this app actually loads --
+// Google Fonts (stylesheet + font files), Supabase storage (homework/avatar/forum files, all
+// served from signed URLs on the project's own subdomain), and PubChem/RCSB (chemical structure
+// images in KnowYourChemicals). blob: and data: are needed for local file previews (profile
+// photo picker, homework photo uploader) and inline SVG diagrams. style-src needs 'unsafe-inline'
+// because of the many inline style="" props and the <style dangerouslySetInnerHTML> blocks used
+// for light/dark-mode overrides throughout the notes components -- script-src does NOT get
+// 'unsafe-inline' or 'unsafe-eval', which is the directive that actually matters for blocking
+// injected/foreign JavaScript.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://*.supabase.co https://pubchem.ncbi.nlm.nih.gov https://cdn.rcsb.org https://www.rcsb.org",
+  // KnowYourChemicals also calls PubChem's REST API directly from the browser (CID/name lookups,
+  // not just <img> loads) -- confirmed by actually exercising the search in the browser after
+  // the first draft of this policy blocked it silently as a generic "Failed to fetch".
+  "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
 function buildApp(): express.Express {
   const app = express();
+
+  // Security response headers, applied to every response (API and the served frontend alike).
+  app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    // No preload directive -- that's a separate, hard-to-reverse submission to browsers' built-in
+    // preload lists. A moderate max-age still gets the real protection (forces HTTPS for anyone
+    // who's visited before) without that lock-in.
+    res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+    next();
+  });
 
   // JSON and URL-encoded parsers
   app.use(express.json());
