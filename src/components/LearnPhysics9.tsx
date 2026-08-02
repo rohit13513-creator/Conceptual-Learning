@@ -156,7 +156,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Motion Notes</h3>
             </div>
             <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Distance, displacement, speed, velocity, acceleration, graphs, and the equations of motion -- explained simply.
+              Distance, displacement, speed, velocity, acceleration, graphs, and the equations of motion, explained simply.
             </p>
           </div>
         </div>
@@ -214,7 +214,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
                 <Gauge className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h4 className="font-extrabold text-cyan-400 tracking-tight">Class IX: describing motion around us -- notes</h4>
+                <h4 className="font-extrabold text-cyan-400 tracking-tight">Class IX: Describing Motion Around Us, Notes</h4>
               </div>
             </div>
           </div>
@@ -223,19 +223,20 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Describing Position & Motion</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Before we can describe HOW something moves, we first need to agree on WHERE it is.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>To describe how something moves, we first need to agree on where it is.</p>
               </div>
 
               <InfoCard title="Core Definitions" icon={Compass} isLightMode={isLightMode}>
-                <p><b>Reference point (origin):</b> a fixed point we choose to measure everything else against.</p>
-                <p><b>Position:</b> the distance AND direction of an object from the reference point, at a given instant.</p>
-                <p><b>Motion:</b> an object is in motion if its position changes with time relative to the reference point. It is at rest if its position does not change.</p>
+                <p><b>Reference point (origin):</b> A fixed point we pick. We measure everything else from this point.</p>
+                <p><b>Position:</b> The distance and direction of an object from the reference point, at a given instant.</p>
+                <p><b>Motion:</b> An object is in motion if its position changes with time with respect to the reference point. It is at rest if its position stays the same.</p>
               </InfoCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Imagine an athlete running on a straight track. To describe her position at any moment, we first mark her starting point as the origin O, and draw a straight line with distances marked on it. Positions to the right of O are usually taken as positive, and to the left as negative.</p>
-                <p>Just knowing "she is 40 m away" is not enough -- 40 m in which direction? That is why position always needs both a distance AND a direction from the reference point.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Take an athlete running on a straight track. To mark her position at any moment, first fix her starting point as the origin O. Then draw a straight line with distances marked on it.</li>
+                <li>Positions to the right of O are taken as positive. Positions to the left are taken as negative.</li>
+                <li>Saying "she is 40 m away" is not enough on its own. 40 m in which direction? Position always needs a distance and a direction from the reference point.</li>
+              </ul>
 
               <DiagramCard caption="An athlete's positions at different instants, measured from a chosen reference point O" isLightMode={isLightMode}>
                 <svg viewBox="0 0 640 120" className="w-full h-auto">
@@ -263,20 +264,20 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
                 </svg>
               </DiagramCard>
 
-              <SectionHeading>Types of Motion Covered in This Chapter</SectionHeading>
+              <SectionHeading>Types of Motion in This Chapter</SectionHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-cyan-400 font-mono tracking-widest">Linear / Straight-Line Motion</h4>
-                  <p className="text-sm font-semibold">Motion along a single straight line -- the simplest kind. E.g. a train on a straight track, a ball falling vertically.</p>
+                  <p className="text-sm font-semibold">Motion along a single straight line. The simplest kind. Example: a train on a straight track, a ball falling straight down.</p>
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-sky-400 font-mono tracking-widest">Motion in a Plane / Circular Motion</h4>
-                  <p className="text-sm font-semibold">Motion along a curved or circular path, in two dimensions. E.g. a kicked ball's path, a satellite's orbit.</p>
+                  <p className="text-sm font-semibold">Motion along a curved or circular path, in two dimensions. Example: the path of a kicked ball, a satellite's orbit.</p>
                 </div>
               </div>
 
               <RememberBox title="Rest and motion are relative" isLightMode={isLightMode}>
-                Whether something is "at rest" or "in motion" always depends on the reference point you choose. A passenger is at rest relative to their moving train, but in motion relative to a person standing on the ground.
+                Whether something is "at rest" or "in motion" depends on the reference point you pick. A passenger is at rest with respect to their moving train, but in motion with respect to a person standing on the ground.
               </RememberBox>
             </div>
           )}
@@ -285,15 +286,15 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Distance & Displacement</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Two ways to describe "how much an object moved" -- and they are not the same thing.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Two ways to describe "how much an object moved". They are not the same thing.</p>
               </div>
 
               <InfoCard title="Core Definitions" icon={MoveRight} isLightMode={isLightMode}>
-                <p><b>Distance travelled:</b> the total length of the actual path covered by an object, no matter which direction it went. A scalar (magnitude only).</p>
-                <p><b>Displacement:</b> the net change in position between two instants -- specified by both magnitude and direction. A vector.</p>
+                <p><b>Distance travelled:</b> The total length of the actual path covered by an object, no matter which direction it went. A scalar (magnitude only).</p>
+                <p><b>Displacement:</b> The net change in position between two instants. It needs both magnitude and direction to describe it. A vector.</p>
               </InfoCard>
 
-              <DiagramCard caption="An athlete runs O to A (100 m) and back to B (60 m) -- total distance 160 m, but displacement only 40 m" isLightMode={isLightMode}>
+              <DiagramCard caption="An athlete runs O to A (100 m) and back to B (60 m). Total distance is 160 m, but displacement is only 40 m" isLightMode={isLightMode}>
                 <svg viewBox="0 0 640 130" className="w-full h-auto">
                   <line x1="40" y1="70" x2="600" y2="70" stroke={isLightMode ? "#94a3b8" : "#475569"} strokeWidth="2" />
                   {[0, 20, 40, 60, 80, 100].map((v, i) => {
@@ -319,9 +320,10 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
                 </svg>
               </DiagramCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Distance is like the reading on a car's odometer -- it only ever adds up, regardless of direction. Displacement, however, only cares about where you started and where you ended up.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Distance is like the reading on a car's odometer. It only ever adds up, no matter which direction the car went.</li>
+                <li>Displacement only cares about the start point and the end point. It does not care about the path in between.</li>
+              </ul>
 
               <FormulaBox isLightMode={isLightMode}>|displacement| &le; distance travelled</FormulaBox>
 
@@ -329,16 +331,16 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-cyan-400 font-mono tracking-widest">Scalar</h4>
-                  <p className="text-sm font-semibold">Fully described by magnitude alone. E.g. distance, speed, time.</p>
+                  <p className="text-sm font-semibold">Fully described by magnitude alone. Example: distance, speed, time.</p>
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-sky-400 font-mono tracking-widest">Vector</h4>
-                  <p className="text-sm font-semibold">Needs both magnitude and direction. E.g. displacement, velocity, acceleration.</p>
+                  <p className="text-sm font-semibold">Needs both magnitude and direction. Example: displacement, velocity, acceleration.</p>
                 </div>
               </div>
 
-              <RememberBox title="They are equal only in one special case" isLightMode={isLightMode}>
-                Distance travelled equals the magnitude of displacement ONLY when the object moves in a straight line, in one direction, without ever turning back.
+              <RememberBox title="They are equal in only one case" isLightMode={isLightMode}>
+                Distance travelled equals the magnitude of displacement only when the object moves in a straight line, in one direction, without ever turning back.
               </RememberBox>
             </div>
           )}
@@ -347,30 +349,31 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Average Speed & Average Velocity</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>How fast something moves -- and in the case of velocity, which way too.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>How fast something moves. For velocity, we also need to know which way.</p>
               </div>
 
               <InfoCard title="Core Definitions" icon={TrendingUp} isLightMode={isLightMode}>
-                <p><b>Average speed:</b> total distance travelled divided by the time interval. A scalar.</p>
-                <p><b>Average velocity:</b> displacement divided by the time interval. A vector.</p>
+                <p><b>Average speed:</b> Total distance travelled divided by the time interval. A scalar.</p>
+                <p><b>Average velocity:</b> Displacement divided by the time interval. A vector.</p>
               </InfoCard>
 
               <FormulaBox isLightMode={isLightMode}>average speed = total distance travelled / time interval</FormulaBox>
               <FormulaBox isLightMode={isLightMode}>average velocity (v_av) = displacement (s) / time interval (t)</FormulaBox>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Both are measured in the SI unit metre per second (m/s), also commonly written as kilometre per hour (km/h). To convert km/h to m/s, multiply by 5/18; to convert back, multiply by 18/5.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Both are measured in the SI unit metre per second (m/s). They are also commonly written in kilometre per hour (km/h).</li>
+                <li>To convert km/h to m/s, multiply by 5/18. To convert back, multiply by 18/5.</li>
+              </ul>
 
               <SectionHeading>Uniform vs Non-Uniform Motion</SectionHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-cyan-400 font-mono tracking-widest">Uniform Motion</h4>
-                  <p className="text-sm font-semibold">Equal distances covered in every equal time interval -- constant speed throughout.</p>
+                  <p className="text-sm font-semibold">Equal distances covered in every equal time interval. Constant speed throughout.</p>
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-sky-400 font-mono tracking-widest">Non-Uniform Motion</h4>
-                  <p className="text-sm font-semibold">Unequal distances in equal time intervals -- speed keeps changing.</p>
+                  <p className="text-sm font-semibold">Unequal distances in equal time intervals. Speed keeps changing.</p>
                 </div>
               </div>
 
@@ -382,7 +385,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               </div>
 
               <RememberBox title="A rate of change" isLightMode={isLightMode}>
-                Average velocity is the average rate of change of position with respect to time -- exactly the same idea as the "rate of change" concept from mathematics.
+                Average velocity is the average rate of change of position with respect to time. It is the same "rate of change" idea you use in mathematics.
               </RememberBox>
             </div>
           )}
@@ -391,20 +394,21 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Average Acceleration</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Describing how quickly velocity itself is changing.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>How quickly velocity itself is changing.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={Gauge} isLightMode={isLightMode}>
-                <p><b>Average acceleration:</b> the change in velocity of an object divided by the time interval over which that change occurs. A vector, with SI unit m/s^2.</p>
+                <p><b>Average acceleration:</b> The change in velocity of an object, divided by the time interval over which that change happens. A vector, with SI unit m/s^2.</p>
               </InfoCard>
 
               <FormulaBox isLightMode={isLightMode}>a = (v - u) / t</FormulaBox>
               <p className={`text-center text-[13px] font-semibold ${isLightMode ? "text-slate-500" : "text-slate-500"}`}>where u = initial velocity, v = final velocity, t = time taken</p>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>If speed is increasing, acceleration acts in the same direction as velocity. If speed is decreasing (deceleration/retardation), acceleration acts opposite to the direction of velocity.</p>
-                <p>A freely falling object near Earth's surface has a constant acceleration due to gravity, denoted g, approximately equal to 9.8 m/s^2, directed downward.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>If speed is increasing, acceleration acts in the same direction as velocity.</li>
+                <li>If speed is decreasing (this is called deceleration or retardation), acceleration acts opposite to the direction of velocity.</li>
+                <li>A freely falling object near Earth's surface has a constant acceleration due to gravity. This is called g. It is about 9.8 m/s^2, and it points downward.</li>
+              </ul>
 
               <SectionHeading>Worked Example</SectionHeading>
               <div className={`p-4 rounded-xl border space-y-2 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
@@ -413,7 +417,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               </div>
 
               <RememberBox title="Zero acceleration does not mean zero speed" isLightMode={isLightMode}>
-                A bus cruising on a straight highway at a high, unchanging speed has ZERO acceleration -- acceleration depends on how quickly velocity is CHANGING, not on how fast the object is currently moving.
+                A bus cruising on a straight highway at a high, unchanging speed has zero acceleration. Acceleration depends on how fast velocity is changing, not on how fast the object is currently moving.
               </RememberBox>
             </div>
           )}
@@ -422,7 +426,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Position-Time Graphs</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>A visual way to see how an object's position changes with time -- and to read off its velocity.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>A visual way to see how an object's position changes with time, and to read off its velocity.</p>
               </div>
 
               <DiagramCard caption="Straight line = constant velocity (left). Curve = changing (non-uniform) velocity (right)." isLightMode={isLightMode}>
@@ -450,7 +454,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               <FormulaBox isLightMode={isLightMode}>velocity = slope = (s2 - s1) / (t2 - t1)</FormulaBox>
 
               <RememberBox title="A graph is not a route map" isLightMode={isLightMode}>
-                A position-time graph shows how the object's position (measured from the origin) changes with time -- it does NOT show the physical shape of the path the object actually followed.
+                A position-time graph shows how the object's position, measured from the origin, changes with time. It does not show the actual physical shape of the path the object followed.
               </RememberBox>
             </div>
           )}
@@ -459,7 +463,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Velocity-Time Graphs</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>The single most useful graph in this chapter -- its slope gives acceleration, and its area gives displacement.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>The most useful graph in this chapter. Its slope gives acceleration, and its area gives displacement.</p>
               </div>
 
               <DiagramCard caption="Slope of a velocity-time graph = acceleration; the shaded area under the line = displacement" isLightMode={isLightMode}>
@@ -495,7 +499,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               </div>
 
               <RememberBox title="Trapezium = rectangle + triangle" isLightMode={isLightMode}>
-                When the graph starts at some non-zero initial velocity u and rises to v, split the shaded area into a rectangle (height u) plus a triangle on top (height v - u) to calculate the total area easily.
+                When the graph starts at some non-zero initial velocity u and rises to v, split the shaded area into a rectangle (height u) plus a triangle on top (height v - u). This makes the total area easy to work out.
               </RememberBox>
             </div>
           )}
@@ -504,7 +508,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Equations of Motion (Constant Acceleration)</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Three equations that let you predict an object's motion without needing to draw a graph every time.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Three equations that let you work out an object's motion without drawing a graph every time.</p>
               </div>
 
               <InfoCard title="The Three Kinematic Equations" icon={Award} isLightMode={isLightMode}>
@@ -519,23 +523,25 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
 
               <SectionHeading>When to Use Which Equation</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Know u, a, t -- want v" isLightMode={isLightMode}>Use v = u + at.</FactRow>
-                <FactRow label="Know u, a, t -- want s" isLightMode={isLightMode}>Use s = ut + (1/2)at^2.</FactRow>
-                <FactRow label="Know u, a, s -- want v (no t given)" isLightMode={isLightMode}>Use v^2 = u^2 + 2as.</FactRow>
+                <FactRow label="Know u, a, t. Want v" isLightMode={isLightMode}>Use v = u + at.</FactRow>
+                <FactRow label="Know u, a, t. Want s" isLightMode={isLightMode}>Use s = ut + (1/2)at^2.</FactRow>
+                <FactRow label="Know u, a, s. Want v, no t given" isLightMode={isLightMode}>Use v^2 = u^2 + 2as.</FactRow>
               </div>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>These equations are only valid for motion with CONSTANT acceleration. They are derived directly from a velocity-time graph: the first equation comes from the slope, and the second from the area under the graph. The third is obtained algebraically by eliminating t from the first two.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>These equations only work for motion with constant acceleration.</li>
+                <li>They come straight from a velocity-time graph. The first equation comes from the slope. The second comes from the area under the graph.</li>
+                <li>The third equation is found algebraically, by removing t from the first two.</li>
+              </ul>
 
               <SectionHeading>Two More Useful Forms (Journey Beyond)</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="s = vt - (1/2)at^2" isLightMode={isLightMode}>Useful when final velocity v is known instead of u.</FactRow>
-                <FactRow label="s = [(u + v)/2] x t" isLightMode={isLightMode}>The "average velocity x time" form -- very handy for quick calculations.</FactRow>
+                <FactRow label="s = vt - (1/2)at^2" isLightMode={isLightMode}>Useful when you know final velocity v instead of u.</FactRow>
+                <FactRow label="s = [(u + v)/2] x t" isLightMode={isLightMode}>The "average velocity times time" form. Handy for quick calculations.</FactRow>
               </div>
 
               <RememberBox title="Always convert to SI units first" isLightMode={isLightMode}>
-                Convert km/h to m/s (multiply by 5/18) before substituting into any of these equations -- mixing units is the single most common source of wrong answers in numericals.
+                Convert km/h to m/s (multiply by 5/18) before putting numbers into any of these equations. Mixing units is the most common reason for wrong answers in numericals.
               </RememberBox>
             </div>
           )}
@@ -544,14 +550,14 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
                 <h1 className="text-2xl font-black tracking-tight leading-tight">Motion in a Plane: Uniform Circular Motion</h1>
-                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Constant speed, but always accelerating -- one of the most counter-intuitive ideas in this chapter.</p>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Constant speed, but always accelerating. This idea trips up a lot of students at first.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={RefreshCw} isLightMode={isLightMode}>
-                <p><b>Uniform circular motion:</b> motion of an object along a circular path at a constant (unchanging) speed.</p>
+                <p><b>Uniform circular motion:</b> Motion of an object along a circular path at a constant, unchanging speed.</p>
               </InfoCard>
 
-              <DiagramCard caption="Velocity at any point on the circle is directed along the tangent at that point -- and that direction keeps changing" isLightMode={isLightMode}>
+              <DiagramCard caption="Velocity at any point on the circle points along the tangent at that point, and that direction keeps changing" isLightMode={isLightMode}>
                 <svg viewBox="0 0 400 260" className="w-full h-auto">
                   <circle cx="200" cy="130" r="90" fill="none" stroke={isLightMode ? "#94a3b8" : "#475569"} strokeWidth="2" strokeDasharray="5 4" />
                   <circle cx="200" cy="130" r="3" fill={isLightMode ? "#475569" : "#94a3b8"} />
@@ -577,19 +583,18 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
                 </svg>
               </DiagramCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>For an object making one revolution of a circle of radius R in time T:</p>
-              </div>
+              <p className="text-sm font-semibold">For an object making one revolution of a circle of radius R in time T:</p>
               <FormulaBox isLightMode={isLightMode}>average speed = 2 pi R / T (circumference / time period)</FormulaBox>
               <p className={`text-center text-[13px] font-semibold ${isLightMode ? "text-slate-500" : "text-slate-500"}`}>Displacement after one full revolution = 0 (the object returns to its starting point)</p>
 
               <SectionHeading>Why Is It "Accelerated" Motion?</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Speed stays constant in uniform circular motion -- but velocity is a vector, and its DIRECTION keeps changing every instant as the object goes around the curve. Since acceleration is any change in velocity (including just direction), the object is continuously accelerating, even though the speedometer reading never changes.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Speed stays constant in uniform circular motion. But velocity is a vector, and its direction keeps changing every instant as the object goes around the curve.</li>
+                <li>Acceleration is any change in velocity, including a change in direction alone. So the object keeps accelerating, even though the speedometer reading never changes.</li>
+              </ul>
 
               <RememberBox title="Release the marble, and it flies straight" isLightMode={isLightMode}>
-                If a marble spinning inside a ring is suddenly released, it does not keep curving -- it flies off in a straight line, along the tangent direction it had at the exact instant of release. This shows that the circular path only continues as long as something keeps redirecting the object's velocity.
+                If a marble spinning inside a ring is suddenly released, it does not keep curving. It flies off in a straight line, along the tangent direction it had at that exact instant. This shows the circular path only continues as long as something keeps redirecting the object's velocity.
               </RememberBox>
             </div>
           )}
@@ -652,7 +657,7 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               </div>
 
               <RememberBox title="You've completed the Motion chapter!" isLightMode={isLightMode}>
-                Go back to any topic using the sidebar whenever you need to revise, then try the NCERT solved questions, the question bank, and the self-assessment quiz to test what you remember.
+                Go back to any topic using the sidebar whenever you need to revise. Then try the NCERT solved questions, the question bank, and the self-assessment quiz to test what you remember.
               </RememberBox>
             </div>
           )}

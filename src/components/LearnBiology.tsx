@@ -197,7 +197,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Cells Notes</h3>
             </div>
             <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              The basic unit of life -- structure, organelles, and how cells work, explained simply.
+              The basic unit of life: structure, organelles, and how cells work, explained simply.
             </p>
           </div>
         </div>
@@ -255,7 +255,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 <Dna className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h4 className="font-extrabold text-green-400 tracking-tight">Class IX: cells notes</h4>
+                <h4 className="font-extrabold text-green-400 tracking-tight">Class IX: Cells, Notes</h4>
               </div>
             </div>
           </div>
@@ -264,17 +264,18 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">What Is a Cell?</h1>
-                <p className="text-base font-semibold text-slate-400">The smallest unit that is still "alive" -- and the starting point for everything in biology.</p>
+                <p className="text-base font-semibold text-slate-400">The smallest unit that is still "alive". It is the starting point for everything in biology.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={Award}>
-                <p><b className="text-white">Cell:</b> the smallest structural and functional unit of every living thing. Every organism -- from a single bacterium to a giant tree to you -- is built entirely out of cells.</p>
+                <p><b className="text-white">Cell:</b> The smallest structural and functional unit of every living thing. Every organism, from a single bacterium to a giant tree to you, is built entirely out of cells.</p>
               </InfoCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-4">
-                <p>Think of a cell as a tiny, self-contained "room" that can do everything a living thing needs to do: take in food, breathe, get rid of waste, grow, and even make copies of itself. The word "cell" actually comes from a Latin word meaning <b>"a little room"</b>.</p>
-                <p>Every living cell can carry out basic life functions on its own -- respiration (releasing energy), obtaining nutrition, removing waste, and building new material. Some organisms are just one cell doing all of this by itself; others are made of trillions of cells all working as a team.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Think of a cell as a tiny, self-contained "room" that can do everything a living thing needs to do: take in food, breathe, get rid of waste, grow, and even make copies of itself. The word "cell" comes from a Latin word meaning <b>"a little room"</b>.</li>
+                <li>Every living cell can carry out basic life functions on its own. This includes respiration (releasing energy), obtaining nutrition, removing waste, and building new material.</li>
+                <li>Some organisms are just one cell doing all of this by itself. Others are made of trillions of cells all working as a team.</li>
+              </ul>
 
               <SectionHeading>Unicellular vs Multicellular Organisms</SectionHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -291,14 +292,15 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </div>
 
               <RememberBox title="Every big organism started as one cell">
-                Even a multicellular organism like you began life as a single fertilised cell. That one cell divided again and again to eventually form every cell in your body -- so ultimately, <b>all cells come from pre-existing cells</b>.
+                Even a multicellular organism like you began life as a single fertilised cell. That one cell divided again and again to eventually form every cell in your body. So, in the end, <b>all cells come from pre-existing cells</b>.
               </RememberBox>
 
               <SectionHeading>Shape and Size of Cells</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>A cell's shape usually depends on the job it does. Some cells, like Amoeba, keep changing shape as they move and feed. Other cells have a fixed, specialised shape -- for example, nerve cells are long and thread-like so they can carry signals over long distances.</p>
-                <p>Cells also vary hugely in size -- from bacteria just a couple of micrometres across, up to some plant cells you can just about see with the naked eye. You will see exactly how small this is in the next topic.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>A cell's shape usually depends on the job it does. Some cells, like Amoeba, keep changing shape as they move and feed.</li>
+                <li>Other cells have a fixed, specialised shape. For example, nerve cells are long and thread-like so they can carry signals over long distances.</li>
+                <li>Cells also vary hugely in size, from bacteria just a couple of micrometres across, up to some plant cells you can just about see with the naked eye. You will see exactly how small this is in the next topic.</li>
+              </ul>
             </div>
           )}
 
@@ -311,30 +313,26 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
 
               <InfoCard title="Timeline of Discovery" icon={Sparkles}>
                 <div className="space-y-2.5">
-                  <p><b className="text-white">1665 -- Robert Hooke:</b> examined a wafer-thin slice of cork (bark of a tree) under a self-made microscope. He saw tiny box-like compartments, like a honeycomb, and named them <b>"cells."</b> This was the first time anyone had seen that living material is made of separate units.</p>
-                  <p><b className="text-white">1674 -- Antonie van Leeuwenhoek:</b> using an improved microscope, he was the first to observe free-living cells swimming in pond water.</p>
-                  <p><b className="text-white">1831 -- Robert Brown:</b> discovered the nucleus inside the cell.</p>
-                  <p><b className="text-white">1839 -- Jan Evangelista Purkinje:</b> coined the term <b>"protoplasm"</b> for the living fluid substance inside a cell.</p>
+                  <p><b className="text-white">1665, Robert Hooke:</b> Examined a wafer-thin slice of cork (bark of a tree) under a self-made microscope. He saw tiny box-like compartments, like a honeycomb, and named them <b>"cells."</b> This was the first time anyone had seen that living material is made of separate units.</p>
+                  <p><b className="text-white">1674, Antonie van Leeuwenhoek:</b> Used an improved microscope and was the first to observe free-living cells swimming in pond water.</p>
+                  <p><b className="text-white">1831, Robert Brown:</b> Discovered the nucleus inside the cell.</p>
+                  <p><b className="text-white">1839, Jan Evangelista Purkinje:</b> Coined the term <b>"protoplasm"</b> for the living fluid substance inside a cell.</p>
                 </div>
               </InfoCard>
 
               <SectionHeading>The Cell Theory</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Three scientists, working a few years apart, put together the idea that is now called the <b>Cell Theory</b> -- one of the most important unifying ideas in all of biology:</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">Three scientists, working a few years apart, put together the idea now called the <b>Cell Theory</b>. It is one of the most important unifying ideas in all of biology.</p>
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="Matthias Schleiden (1838)">Reported that all plants are made up of cells.</FactRow>
                 <FactRow label="Theodor Schwann (1839)">Found that all animals are also made up of cells. Together with Schleiden, this gave the first two statements of Cell Theory: all living things are made of cells, and the cell is the basic unit of structure and function.</FactRow>
-                <FactRow label="Rudolf Virchow (1855)">Added the third and final statement: all cells arise only from pre-existing cells (a cell cannot form from non-living matter).</FactRow>
+                <FactRow label="Rudolf Virchow (1855)">Added the third and final statement: all cells arise only from pre-existing cells. A cell cannot form from non-living matter.</FactRow>
               </div>
 
               <RememberBox title="The three statements of Cell Theory">
                 1) All living organisms are made up of one or more cells. 2) The cell is the basic unit of structure and function in living things. 3) All cells arise from pre-existing cells.
               </RememberBox>
 
-              <div className="prose prose-sm leading-relaxed font-semibold">
-                <p>Later, in the 1940s, the invention of the <b>electron microscope</b> let scientists see the tiny structures (organelles) inside a cell in much finer detail than ever before -- opening up everything you will learn in this chapter.</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">Later, in the 1940s, the invention of the <b>electron microscope</b> let scientists see the tiny structures (organelles) inside a cell in much finer detail than ever before. This opened up everything you will learn in this chapter.</p>
             </div>
           )}
 
@@ -342,12 +340,10 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">How Do We Study Cells?</h1>
-                <p className="text-base font-semibold text-slate-400">Cells are far too small to see with the naked eye -- so we need help.</p>
+                <p className="text-base font-semibold text-slate-400">Cells are far too small to see with the naked eye, so we need help.</p>
               </div>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>The human eye can only tell two points apart if they are at least about 0.1 mm away from each other -- this is called the eye's <b>limit of resolution</b>. Most cells are much, much smaller than that, so we need instruments that magnify (enlarge) and resolve (show fine detail) far beyond what our eyes can manage.</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">The human eye can only tell two points apart if they are at least about 0.1 mm away from each other. This is called the eye's <b>limit of resolution</b>. Most cells are much, much smaller than that, so we need instruments that magnify (enlarge) and resolve (show fine detail) far beyond what our eyes can manage.</p>
 
               <DiagramCard caption="Roughly how big different things are, from a whole plant down to a single molecule (not to true scale)" isLightMode={isLightMode}>
                 <svg viewBox="0 0 720 220" className="w-full h-auto">
@@ -387,7 +383,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                     <Microscope className="w-4 h-4 text-green-400" />
                     <h4 className="text-[12.5px] font-black uppercase text-green-400 font-mono tracking-widest">Light Microscope</h4>
                   </div>
-                  <p className="text-sm font-semibold">Uses a lens (or combination of lenses) and visible light to magnify an object. Common in school labs -- good enough to see a cell's basic outline, nucleus, and larger organelles.</p>
+                  <p className="text-sm font-semibold">Uses a lens (or combination of lenses) and visible light to magnify an object. Common in school labs. Good enough to see a cell's basic outline, nucleus, and larger organelles.</p>
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <div className="flex items-center gap-1.5">
@@ -399,7 +395,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </div>
 
               <RememberBox title="Magnification vs resolution">
-                <b>Magnification</b> is how much bigger an object appears. <b>Resolution</b> is how much fine detail you can actually make out. A good microscope needs both -- magnifying a blurry image just makes a bigger blur.
+                <b>Magnification</b> is how much bigger an object appears. <b>Resolution</b> is how much fine detail you can actually make out. A good microscope needs both. Magnifying a blurry image just makes a bigger blur.
               </RememberBox>
             </div>
           )}
@@ -412,18 +408,16 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </div>
 
               <InfoCard title="Core Definition" icon={Layers}>
-                <p><b className="text-white">Cell membrane (plasma membrane):</b> a thin, flexible boundary that surrounds every cell, separating its contents from the outside world. It is made mainly of lipids (fats) and proteins.</p>
+                <p><b className="text-white">Cell membrane (plasma membrane):</b> A thin, flexible boundary that surrounds every cell, separating its contents from the outside world. It is made mainly of lipids (fats) and proteins.</p>
               </InfoCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>The cell membrane is only about 7 to 10 nanometres thick -- far too thin to see without an electron microscope. Even so, it does an enormous job: it decides exactly what is allowed to enter or leave the cell.</p>
-                <p>Because it lets some substances through while blocking others, it is called a <b>selectively permeable membrane</b>.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>The cell membrane is only about 7 to 10 nanometres thick. That is far too thin to see without an electron microscope. Even so, it does an enormous job: it decides exactly what is allowed to enter or leave the cell.</li>
+                <li>Because it lets some substances through while blocking others, it is called a <b>selectively permeable membrane</b>.</li>
+              </ul>
 
               <SectionHeading>The Fluid Mosaic Model</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>The membrane is built from a double layer ("bilayer") of special fat molecules called phospholipids, with proteins scattered throughout it -- like tiles arranged in a mosaic pattern. The molecules are not fixed in place; they can slide, rotate, and drift sideways, which is why the whole structure is described as <b>fluid</b>.</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">The membrane is built from a double layer ("bilayer") of special fat molecules called phospholipids, with proteins scattered throughout it, like tiles arranged in a mosaic pattern. The molecules are not fixed in place. They can slide, rotate, and drift sideways, which is why the whole structure is described as <b>fluid</b>.</p>
 
               <DiagramCard caption="The fluid mosaic model: a double layer of phospholipids with proteins floating in it" isLightMode={isLightMode}>
                 <svg viewBox="0 0 680 240" className="w-full h-auto">
@@ -457,13 +451,13 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </DiagramCard>
 
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="The molecules can move">sideways, flip, and rotate within the membrane -- this is why it is described as "fluid."</FactRow>
+                <FactRow label="The molecules can move">sideways, flip, and rotate within the membrane. This is why it is described as "fluid."</FactRow>
                 <FactRow label="Proteins act as gatekeepers">helping specific substances pass through the membrane.</FactRow>
                 <FactRow label="Endocytosis">because the membrane is flexible, some cells can even engulf whole food particles from outside. Amoeba feeds this way.</FactRow>
               </div>
 
               <RememberBox title="Cell wall is an extra layer, not a replacement">
-                Every cell has a cell membrane. Plant, fungal, and bacterial cells additionally have a rigid cell wall outside the membrane -- you will meet that in a later topic.
+                Every cell has a cell membrane. Plant, fungal, and bacterial cells also have a rigid cell wall outside the membrane. You will meet that in a later topic.
               </RememberBox>
             </div>
           )}
@@ -488,9 +482,9 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <DiagramCard caption="What happens to a cell placed in solutions with different water concentrations" isLightMode={isLightMode}>
                 <svg viewBox="0 0 720 250" className="w-full h-auto">
                   {[
-                    { cx: 120, label: "Hypotonic solution", sub: "more water outside -- cell swells", r: 58, arrows: "in", dots: 3 },
-                    { cx: 360, label: "Isotonic solution", sub: "equal water in/out -- no change", r: 46, arrows: "none", dots: 7 },
-                    { cx: 600, label: "Hypertonic solution", sub: "less water outside -- cell shrinks", r: 34, arrows: "out", dots: 13 },
+                    { cx: 120, label: "Hypotonic solution", sub: "more water outside, cell swells", r: 58, arrows: "in", dots: 3 },
+                    { cx: 360, label: "Isotonic solution", sub: "equal water in/out, no change", r: 46, arrows: "none", dots: 7 },
+                    { cx: 600, label: "Hypertonic solution", sub: "less water outside, cell shrinks", r: 34, arrows: "out", dots: 13 },
                   ].map((panel, pi) => (
                     <g key={pi}>
                       <rect x={panel.cx - 100} y="20" width="200" height="160" rx="14" fill={isLightMode ? "#eff6ff" : "#0b1a2e"} stroke={isLightMode ? "#bfdbfe" : "#1e3a5f"} strokeWidth="1.5" />
@@ -535,9 +529,9 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </DiagramCard>
 
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Hypotonic solution">has more water (less solute) than the cell -- water moves in, and the cell swells.</FactRow>
-                <FactRow label="Isotonic solution">has the same water concentration as the cell -- no net movement, the cell stays the same size.</FactRow>
-                <FactRow label="Hypertonic solution">has less water (more solute) than the cell -- water moves out, and the cell shrinks.</FactRow>
+                <FactRow label="Hypotonic solution">has more water (less solute) than the cell. Water moves in, and the cell swells.</FactRow>
+                <FactRow label="Isotonic solution">has the same water concentration as the cell. No net movement, the cell stays the same size.</FactRow>
+                <FactRow label="Hypertonic solution">has less water (more solute) than the cell. Water moves out, and the cell shrinks.</FactRow>
               </div>
 
               <RememberBox title="Everyday examples">
@@ -554,15 +548,15 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </div>
 
               <InfoCard title="Core Definition" icon={Layers}>
-                <p><b className="text-white">Cell wall:</b> a rigid, permeable outer covering found <b className="text-white">outside</b> the cell membrane in plant, fungal, and bacterial cells. It is mostly absent in animal cells.</p>
+                <p><b className="text-white">Cell wall:</b> A rigid, permeable outer covering found <b className="text-white">outside</b> the cell membrane in plant, fungal, and bacterial cells. It is mostly absent in animal cells.</p>
               </InfoCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Plants cannot walk away from wind, rain, or other stresses, so they need a strong structure to stay upright and keep their shape. The cell wall provides exactly that. In plants it is made mainly of <b>cellulose</b>, a tough carbohydrate built from many linked glucose units.</p>
-                <p>Even though it is rigid, the cell wall is freely permeable -- water and dissolved minerals can pass straight through it. This, together with the selective permeability of the membrane underneath, is how plant roots absorb water and nutrients from soil.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Plants cannot walk away from wind, rain, or other stresses, so they need a strong structure to stay upright and keep their shape. The cell wall provides exactly that. In plants it is made mainly of <b>cellulose</b>, a tough carbohydrate built from many linked glucose units.</li>
+                <li>Even though it is rigid, the cell wall is freely permeable. Water and dissolved minerals can pass straight through it. This, together with the selective permeability of the membrane underneath, is how plant roots absorb water and nutrients from soil.</li>
+              </ul>
 
-              <SectionHeading>Plasmolysis -- What Happens When a Plant Cell Loses Water</SectionHeading>
+              <SectionHeading>Plasmolysis: What Happens When a Plant Cell Loses Water</SectionHeading>
               <DiagramCard caption="A plant cell in normal water (left) compared with the same cell in a concentrated solution (right)" isLightMode={isLightMode}>
                 <svg viewBox="0 0 620 220" className="w-full h-auto">
                   <g>
@@ -582,12 +576,10 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 </div>
               </DiagramCard>
 
-              <div className="prose prose-sm leading-relaxed font-semibold">
-                <p>Notice the outer wall stays exactly the same size and shape in both cases -- only the membrane and the contents inside it pull away and shrink. This shrinking-away of the cell contents from the wall is called <b>plasmolysis</b>.</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">Notice the outer wall stays exactly the same size and shape in both cases. Only the membrane and the contents inside it pull away and shrink. This shrinking-away of the cell contents from the wall is called <b>plasmolysis</b>.</p>
 
               <RememberBox title="Why plant cells don't burst or collapse like animal cells">
-                Because the wall is rigid, plant cells can take up a lot of water and swell against the wall without bursting -- the wall pushes back with equal pressure. This is also why animal cells (which have no wall) shrink much more dramatically in a concentrated solution, and can even change shape freely since they have no rigid boundary at all.
+                Because the wall is rigid, plant cells can take up a lot of water and swell against the wall without bursting. The wall pushes back with equal pressure. This is also why animal cells, which have no wall, shrink much more dramatically in a concentrated solution, and can even change shape freely since they have no rigid boundary at all.
               </RememberBox>
             </div>
           )}
@@ -596,7 +588,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">The Nucleus</h1>
-                <p className="text-base font-semibold text-slate-400">The control room of the cell -- where all its genetic instructions are kept.</p>
+                <p className="text-base font-semibold text-slate-400">The control room of the cell, where all its genetic instructions are kept.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={Dna}>
@@ -645,13 +637,14 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               </div>
 
               <SectionHeading>DNA, Genes, and Chromosomes</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Chromosomes are made of <b>DNA (Deoxyribonucleic Acid)</b> combined with specific proteins. DNA carries the coded instructions for building and running a cell, and for passing characteristics from parents to offspring. A working segment of DNA that codes for one particular characteristic is called a <b>gene</b>.</p>
-                <p>The nucleus does not just store this information -- along with signals from the environment, it directs the chemical activities of the cell and plays the central role whenever a cell divides to reproduce itself.</p>
-              </div>
+              <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
+                <li>Chromosomes are made of <b>DNA (Deoxyribonucleic Acid)</b> combined with specific proteins. DNA carries the coded instructions for building and running a cell, and for passing characteristics from parents to offspring.</li>
+                <li>A working segment of DNA that codes for one particular characteristic is called a <b>gene</b>.</li>
+                <li>The nucleus does not just store this information. Along with signals from the environment, it directs the chemical activities of the cell and plays the central role whenever a cell divides to reproduce itself.</li>
+              </ul>
 
               <RememberBox title="Cells without a nucleus">
-                Mature red blood cells in humans lose their nucleus entirely -- this frees up extra space to carry more oxygen-carrying haemoglobin. The trade-off: without a nucleus they cannot repair or divide themselves, so they only survive around 120 days.
+                Mature red blood cells in humans lose their nucleus entirely. This frees up extra space to carry more oxygen-carrying haemoglobin. The trade-off is that without a nucleus they cannot repair or divide themselves, so they only survive around 120 days.
               </RememberBox>
             </div>
           )}
@@ -663,11 +656,9 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 <p className="text-base font-semibold text-slate-400">Every cell on Earth falls into one of exactly two categories, based on its nucleus.</p>
               </div>
 
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>Cells are sorted into two types depending on whether their genetic material is enclosed inside a proper nuclear membrane or not.</p>
-              </div>
+              <p className="text-sm font-semibold leading-relaxed">Cells are sorted into two types depending on whether their genetic material is enclosed inside a proper nuclear membrane or not.</p>
 
-              <DiagramCard caption="A typical bacterial (prokaryotic) cell -- no nuclear membrane, no membrane-bound organelles" isLightMode={isLightMode}>
+              <DiagramCard caption="A typical bacterial (prokaryotic) cell: no nuclear membrane, no membrane-bound organelles" isLightMode={isLightMode}>
                 <svg viewBox="0 0 560 260" className="w-full h-auto">
                   <rect x="80" y="60" width="360" height="130" rx="65" fill={isLightMode ? "#fef9c3" : "#1c1a06"} stroke={isLightMode ? "#a16207" : "#facc15"} strokeWidth="3.5" />
                   <rect x="90" y="70" width="340" height="110" rx="55" fill="none" stroke={isLightMode ? "#a16207" : "#facc15"} strokeWidth="1.2" strokeOpacity="0.6" />
@@ -707,7 +698,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               />
 
               <RememberBox title="Where the words come from">
-                <b>Pro</b> means primitive/before, and <b>karyon</b> means nucleus -- so prokaryotic literally means "before a nucleus." <b>Eu</b> means true, so eukaryotic means "true nucleus."
+                <b>Pro</b> means primitive or before, and <b>karyon</b> means nucleus. So prokaryotic literally means "before a nucleus." <b>Eu</b> means true, so eukaryotic means "true nucleus."
               </RememberBox>
             </div>
           )}
@@ -726,7 +717,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-green-400 font-mono tracking-widest">Rough ER (RER)</h4>
-                  <p className="text-sm font-semibold">Looks "rough" because ribosomes are attached to its surface. Mainly involved in <b>protein synthesis</b> and secretion -- for example in gland cells.</p>
+                  <p className="text-sm font-semibold">Looks "rough" because ribosomes are attached to its surface. Mainly involved in <b>protein synthesis</b> and secretion, for example in gland cells.</p>
                 </div>
                 <div className={`p-4 rounded-xl border space-y-1.5 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
                   <h4 className="text-[12.5px] font-black uppercase text-emerald-400 font-mono tracking-widest">Smooth ER (SER)</h4>
@@ -766,10 +757,8 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 </svg>
               </DiagramCard>
 
-              <SectionHeading>Golgi Apparatus -- The Packaging and Shipping Centre</SectionHeading>
-              <div className="prose prose-sm leading-relaxed font-semibold space-y-3">
-                <p>The Golgi apparatus is a stack of flattened, sac-like membranes. Material made near the ER is sent to the Golgi apparatus, which <b>modifies, sorts, and packages</b> proteins and fats into small vesicles for transport, secretion out of the cell, or for forming lysosomes.</p>
-              </div>
+              <SectionHeading>Golgi Apparatus: The Packaging and Shipping Centre</SectionHeading>
+              <p className="text-sm font-semibold leading-relaxed">The Golgi apparatus is a stack of flattened, sac-like membranes. Material made near the ER is sent to the Golgi apparatus, which <b>modifies, sorts, and packages</b> proteins and fats into small vesicles. These vesicles are used for transport, secretion out of the cell, or for forming lysosomes.</p>
 
               <RememberBox title="Think of it as a production line">
                 Nucleus (instructions) → Rough ER (makes the protein) → Golgi apparatus (packages and labels it) → Vesicle (delivery van) → destination inside or outside the cell.
@@ -813,7 +802,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="Waste disposal">Lysosomes keep the cell clean by digesting unwanted proteins, carbohydrates, fats, foreign material like bacteria, and worn-out organelles.</FactRow>
                 <FactRow label="Recycling">The simple products of this breakdown are released into the cytoplasm and can be reused by the cell.</FactRow>
-                <FactRow label='"Suicide bags"'>if a cell is damaged, lysosomes can burst and digest the entire cell from within -- which is how they earned this nickname.</FactRow>
+                <FactRow label='"Suicide bags"'>if a cell is damaged, lysosomes can burst and digest the entire cell from within. This is how they earned this nickname.</FactRow>
               </div>
             </div>
           )}
@@ -822,11 +811,11 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Mitochondria</h1>
-                <p className="text-base font-semibold text-slate-400">Often called the "powerhouse of the cell" -- and for good reason.</p>
+                <p className="text-base font-semibold text-slate-400">Often called the "powerhouse of the cell", and for good reason.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={Zap}>
-                <p><b className="text-white">Mitochondrion:</b> a double-membrane-bound organelle that releases energy for the cell's activities by breaking down glucose in a process called cellular respiration.</p>
+                <p><b className="text-white">Mitochondrion:</b> A double-membrane-bound organelle that releases energy for the cell's activities by breaking down glucose. This process is called cellular respiration.</p>
               </InfoCard>
 
               <DiagramCard caption="Structure of a mitochondrion" isLightMode={isLightMode}>
@@ -865,7 +854,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="Outer membrane">smooth and porous.</FactRow>
                 <FactRow label="Inner membrane">folded into finger-like projections called cristae, which increase the surface area available for energy-releasing reactions.</FactRow>
-                <FactRow label="ATP">the energy released during cellular respiration is stored in a molecule called Adenosine Triphosphate (ATP) -- the cell's "energy currency," used to power most cellular activities.</FactRow>
+                <FactRow label="ATP">the energy released during cellular respiration is stored in a molecule called Adenosine Triphosphate (ATP). This is the cell's "energy currency," used to power most cellular activities.</FactRow>
                 <FactRow label="Its own DNA">mitochondria carry their own small set of DNA and ribosomes, so they can make some of their own proteins.</FactRow>
               </div>
             </div>
@@ -909,9 +898,9 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
 
               <SectionHeading>Three Types of Plastids</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Chloroplasts (green)">contain the green pigment chlorophyll, which absorbs sunlight for photosynthesis -- the process by which plants make their own food.</FactRow>
+                <FactRow label="Chloroplasts (green)">contain the green pigment chlorophyll, which absorbs sunlight for photosynthesis. This is the process by which plants make their own food.</FactRow>
                 <FactRow label="Chromoplasts (coloured)">contain yellow, orange, or red pigments. They give flowers and fruits their bright colours, which attract pollinators and seed-dispersing animals.</FactRow>
-                <FactRow label="Leucoplasts (colourless)">have no pigment at all. They store food materials such as starch, oils, or proteins -- for example, in potato and taro tubers.</FactRow>
+                <FactRow label="Leucoplasts (colourless)">have no pigment at all. They store food materials such as starch, oils, or proteins, for example in potato and taro tubers.</FactRow>
               </div>
             </div>
           )}
@@ -920,11 +909,11 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Vacuoles</h1>
-                <p className="text-base font-semibold text-slate-400">Storage sacs -- small in animal cells, often enormous in plant cells.</p>
+                <p className="text-base font-semibold text-slate-400">Storage sacs. Small in animal cells, often enormous in plant cells.</p>
               </div>
 
               <InfoCard title="Core Definition" icon={Droplet}>
-                <p><b className="text-white">Vacuole:</b> a fluid-filled sac, surrounded by a single membrane, used for storing water, minerals, sugars, and waste.</p>
+                <p><b className="text-white">Vacuole:</b> A fluid-filled sac, surrounded by a single membrane, used for storing water, minerals, sugars, and waste.</p>
               </InfoCard>
 
               <DiagramCard caption="A mature plant cell (large central vacuole) next to an animal cell (several small vacuoles)" isLightMode={isLightMode}>
@@ -960,7 +949,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 <p className="text-base font-semibold text-slate-400">Putting all the organelles together into two full, labelled cells.</p>
               </div>
 
-              <DiagramCard caption="A typical plant cell -- boxy in shape, with a cell wall and one large central vacuole" isLightMode={isLightMode}>
+              <DiagramCard caption="A typical plant cell: boxy in shape, with a cell wall and one large central vacuole" isLightMode={isLightMode}>
                 <svg viewBox="0 0 900 540" className="w-full h-auto">
                   <rect x="190" y="70" width="480" height="400" rx="28" fill={isLightMode ? "#ecfdf5" : "#08150e"} stroke={isLightMode ? "#15803d" : "#4ade80"} strokeWidth="5" />
                   <rect x="204" y="84" width="452" height="372" rx="22" fill="none" stroke={isLightMode ? "#0891b2" : "#22d3ee"} strokeWidth="2.5" />
@@ -1025,7 +1014,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 </svg>
               </DiagramCard>
 
-              <DiagramCard caption="A typical animal cell -- rounded/irregular shape, no cell wall, no plastids, small vacuoles" isLightMode={isLightMode}>
+              <DiagramCard caption="A typical animal cell: rounded or irregular shape, no cell wall, no plastids, small vacuoles" isLightMode={isLightMode}>
                 <svg viewBox="0 0 900 540" className="w-full h-auto">
                   <path
                     d="M 430 70 C 560 60 660 110 670 210 C 685 300 650 380 560 420 C 470 460 350 455 280 400 C 200 340 190 240 230 160 C 265 95 350 78 430 70 Z"
@@ -1106,7 +1095,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               />
 
               <RememberBox title="One easy way to remember">
-                If it has a rigid rectangular outline, a big central water sac, and green discs inside -- it's a plant cell. If it's rounder, has no wall, and no green discs -- it's an animal cell.
+                If it has a rigid rectangular outline, a big central water sac, and green discs inside, it's a plant cell. If it's rounder, has no wall, and no green discs, it's an animal cell.
               </RememberBox>
             </div>
           )}
@@ -1115,7 +1104,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Cell Division</h1>
-                <p className="text-base font-semibold text-slate-400">How one cell becomes two -- or four.</p>
+                <p className="text-base font-semibold text-slate-400">How one cell becomes two, or four.</p>
               </div>
 
               <InfoCard title="Why Cells Divide" icon={GitBranch}>
@@ -1179,7 +1168,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               />
 
               <RememberBox title="Why meiosis halves the chromosome number">
-                When a sperm cell (half the chromosomes) fuses with an egg cell (half the chromosomes) during reproduction, the resulting new cell gets the full chromosome number back -- exactly as in the parents.
+                When a sperm cell (half the chromosomes) fuses with an egg cell (half the chromosomes) during reproduction, the resulting new cell gets the full chromosome number back, exactly as in the parents.
               </RememberBox>
             </div>
           )}
@@ -1243,7 +1232,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
                 <FactRow label="Nucleoplasm">the jelly-like fluid inside the nucleus, in which the nucleolus and chromatin float.</FactRow>
                 <FactRow label="Nuclear reticulum">the thread-like, tangled network formed by chromatin fibres inside the nucleus.</FactRow>
                 <FactRow label="Macronucleus & micronucleus">two differently-sized nuclei found in some single-celled organisms; the macronucleus controls daily functions, the micronucleus is used in reproduction.</FactRow>
-                <FactRow label="Cis face & trans face">the two ends of the Golgi apparatus -- the cis face receives material from the ER, the trans face releases finished, packaged material.</FactRow>
+                <FactRow label="Cis face & trans face">the two ends of the Golgi apparatus. The cis face receives material from the ER, the trans face releases finished, packaged material.</FactRow>
                 <FactRow label="Dictyosomes">another name used for Golgi bodies, especially in plant cells.</FactRow>
                 <FactRow label="Secretory vesicles">small membrane-bound sacs that carry finished material from the Golgi apparatus to be released outside the cell.</FactRow>
                 <FactRow label="Pinocytic vesicles">tiny vesicles formed when the cell membrane takes in liquid droplets from outside the cell.</FactRow>
