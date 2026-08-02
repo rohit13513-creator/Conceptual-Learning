@@ -1285,23 +1285,15 @@ export default function App() {
     });
   }, [assignments, isClassExempt, studentTrack]);
 
-  // Everything else relevant to this student's class whose deadline has already passed -- a
-  // student can still submit or update these, just not through the "current" list, since a
-  // missed deadline is a very normal thing to want to catch up on rather than a dead end.
-  const previousAssignments = useMemo(() => {
-    const now = Date.now();
+  // The homework picker is just a simple list: the 10 most recent assignments for this student's
+  // class, regardless of whether the deadline has passed (late submission/updates are allowed) --
+  // clicking a row selects it, so there's no separate dropdown or current/previous distinction.
+  const recentAssignmentsForStudent = useMemo(() => {
     return assignments
       .filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)
-      .filter(a => {
-        const effectiveDeadline = getEffectiveDeadline(a);
-        return effectiveDeadline && new Date(effectiveDeadline).getTime() <= now;
-      })
-      .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+      .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime())
+      .slice(0, 10);
   }, [assignments, isClassExempt, studentTrack]);
-
-  // Which of the two lists above the "Which Homework Is This For?" picker is currently showing.
-  const [homeworkTab, setHomeworkTab] = useState<'current' | 'previous'>('current');
-  const homeworkDropdownAssignments = homeworkTab === 'current' ? visibleAssignments : previousAssignments;
 
   const mySubmissionByAssignment = useMemo(() => {
     const map: Record<string, any> = {};
@@ -1316,11 +1308,14 @@ export default function App() {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
-  const homeworkOptionLabel = (a: any) => {
-    const dateStr = formatAssignmentDate(a.assignedDate);
+  // Right-side badge for a homework row: the student's score once checked, "Checking..." while a
+  // just-submitted file is still being graded, or "Pending" if nothing's been submitted at all.
+  const homeworkStatusBadge = (a: any): { text: string; className: string } => {
     const sub = mySubmissionByAssignment[a.id];
-    const statusStr = !sub ? '' : typeof sub.aiScore === 'number' ? ` -- Submitted, Score ${sub.aiScore}` : sub.status === 'pending' ? ' -- Submitted, checking...' : ' -- Submitted';
-    return `${a.title}${dateStr ? ` (${dateStr})` : ''}${statusStr}`;
+    if (!sub) return { text: 'Pending', className: isLightMode ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/10 text-amber-400' };
+    if (sub.status === 'pending') return { text: 'Checking...', className: isLightMode ? 'bg-slate-200 text-slate-600' : 'bg-slate-800 text-slate-400' };
+    if (typeof sub.aiScore === 'number') return { text: `Score: ${sub.aiScore}`, className: isLightMode ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400' };
+    return { text: 'Checked', className: isLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-500/10 text-cyan-400' };
   };
 
   const formatDeadline = (deadline?: string) => {
@@ -1685,7 +1680,6 @@ export default function App() {
   // marked missing, so this naturally raises the score rather than grading everything from scratch.
   const handleResubmitClick = (sub: any) => {
     if (!sub.assignmentId) return;
-    setHomeworkTab(visibleAssignments.some(a => a.id === sub.assignmentId) ? 'current' : 'previous');
     setSelectedAssignmentId(sub.assignmentId);
     setHomeworkSubject(sub.subject || '');
     setHomeworkMode('photos');
@@ -3176,35 +3170,44 @@ export default function App() {
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
-                  <div className="flex gap-1.5">
-                    <button type="button" onClick={() => { setHomeworkTab('current'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'current' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Current Homework</button>
-                    <button type="button" onClick={() => { setHomeworkTab('previous'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'previous' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Previous Homework</button>
-                  </div>
-                  {homeworkDropdownAssignments.length > 0 ? (
-                    <select
-                      value={selectedAssignmentId}
-                      onChange={(e) => setSelectedAssignmentId(e.target.value)}
-                      required
-                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
-                    >
-                      <option value="" disabled>-- Select the assignment this is for --</option>
-                      {homeworkDropdownAssignments.map((a) => (
-                        <option key={a.id} value={a.id}>{homeworkOptionLabel(a)}</option>
-                      ))}
-                    </select>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your Homeworks (Click One To Upload)</label>
+                  {recentAssignmentsForStudent.length > 0 ? (
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-0.5">
+                      {recentAssignmentsForStudent.map((a) => {
+                        const badge = homeworkStatusBadge(a);
+                        const isSelected = selectedAssignmentId === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => setSelectedAssignmentId(a.id)}
+                            className={`w-full text-left px-3 py-2 rounded-lg border cursor-pointer transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200 hover:bg-slate-50' : 'bg-slate-950 border-slate-800 hover:bg-slate-900')}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className={`text-xs font-black truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{a.title}</p>
+                                <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                      {homeworkTab === 'current'
-                        ? 'No current homework is available right now. Switch to "Previous Homework" to submit or update an earlier assignment.'
-                        : "No previous homework found for your class yet."}
+                      No homework assignment has been posted for your class yet.
                     </p>
                   )}
                 </div>
+                {selectedAssignmentId && (
+                <>
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <PhotoUploader
@@ -3240,6 +3243,8 @@ export default function App() {
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
+                </>
+                )}
               </form>
             </div>
 
@@ -4731,7 +4736,30 @@ export default function App() {
                   'Attempt every question that was assigned. If you genuinely don\'t know one, write "doubt" next to its number instead of leaving it blank.',
                   'Show your full working/steps in the proper CBSE format, not just the final answer.',
                   'Submit clear photos of every page (or one combined PDF) -- if a page is completely unreadable, that specific question can\'t be checked.',
-                  'Submit before the deadline for your class -- once it passes, that homework is removed from the list and can no longer be submitted for the first time.',
+                  'Submit before the deadline for your class -- submitting late is still allowed, but it costs a flat 2-mark deduction.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <span className="text-cyan-400 font-black mt-0.5 shrink-0">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                <Upload className="w-4 h-4 text-cyan-400" /> If your upload keeps failing
+              </h2>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Most upload failures happen because a file is too large or the phone's network connection is weak, not because anything is wrong with the app. Each individual photo or PDF must be under 10 MB.
+              </p>
+              <ul className="space-y-2">
+                {[
+                  'Prefer Photos mode over a single giant PDF -- attach one clear photo per page instead of scanning everything into one huge file.',
+                  'If a scanner app (e.g. Google Drive scan, Adobe Scan, CamScanner) is producing a very large PDF, lower its export quality/resolution setting, or switch to Photos mode instead.',
+                  'Avoid taking photos at your camera\'s absolute maximum resolution -- the default/normal camera setting is already far more than sharp enough to be read clearly.',
+                  'Upload on Wi-Fi or a strong mobile signal where possible -- a large file on a weak connection is the most common reason an upload gets stuck or fails partway through.',
+                  'If one photo still won\'t upload, retake it in normal daylight instead of using flash or zoom -- overly detailed/zoomed photos produce much larger files for no benefit.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="text-cyan-400 font-black mt-0.5 shrink-0">•</span>
@@ -4835,31 +4863,40 @@ export default function App() {
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
-                  <div className="flex gap-1.5">
-                    <button type="button" onClick={() => { setHomeworkTab('current'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'current' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Current Homework</button>
-                    <button type="button" onClick={() => { setHomeworkTab('previous'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'previous' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Previous Homework</button>
-                  </div>
-                  {homeworkDropdownAssignments.length > 0 ? (
-                    <select
-                      value={selectedAssignmentId}
-                      onChange={(e) => setSelectedAssignmentId(e.target.value)}
-                      required
-                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
-                    >
-                      <option value="" disabled>-- Select the assignment this is for --</option>
-                      {homeworkDropdownAssignments.map((a) => (
-                        <option key={a.id} value={a.id}>{homeworkOptionLabel(a)}</option>
-                      ))}
-                    </select>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your Homeworks (Click One To Upload)</label>
+                  {recentAssignmentsForStudent.length > 0 ? (
+                    <div className="space-y-1.5 max-h-80 overflow-y-auto pr-0.5">
+                      {recentAssignmentsForStudent.map((a) => {
+                        const badge = homeworkStatusBadge(a);
+                        const isSelected = selectedAssignmentId === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            onClick={() => setSelectedAssignmentId(a.id)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200 hover:bg-slate-50' : 'bg-slate-950 border-slate-800 hover:bg-slate-900')}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className={`text-xs font-black truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{a.title}</p>
+                                <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                      {homeworkTab === 'current'
-                        ? 'No current homework is available right now. Switch to "Previous Homework" to submit or update an earlier assignment.'
-                        : "No previous homework found for your class yet."}
+                      No homework assignment has been posted for your class yet.
                     </p>
                   )}
                 </div>
+                {selectedAssignmentId && (
+                <>
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Subject / Topic (optional)</label>
                   <input
@@ -4871,10 +4908,10 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a Single PDF</label>
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a PDF</label>
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <>
@@ -4916,6 +4953,8 @@ export default function App() {
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
+                </>
+                )}
               </form>
             </div>
 
