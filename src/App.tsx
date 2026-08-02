@@ -3176,12 +3176,11 @@ export default function App() {
                       {recentAssignmentsForStudent.map((a) => {
                         const badge = homeworkStatusBadge(a);
                         const isSelected = selectedAssignmentId === a.id;
+                        const hasSub = !!mySubmissionByAssignment[a.id];
                         return (
-                          <button
+                          <div
                             key={a.id}
-                            type="button"
-                            onClick={() => setSelectedAssignmentId(a.id)}
-                            className={`w-full text-left px-3 py-2 rounded-lg border cursor-pointer transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200 hover:bg-slate-50' : 'bg-slate-950 border-slate-800 hover:bg-slate-900')}`}
+                            className={`w-full px-3 py-2 rounded-lg border transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800')}`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0">
@@ -3190,9 +3189,18 @@ export default function App() {
                                   {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
                                 </p>
                               </div>
-                              <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAssignmentId(a.id)}
+                                  className="text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg bg-cyan-500 text-slate-950 cursor-pointer hover:bg-cyan-400 transition"
+                                >
+                                  {hasSub ? 'Modify' : 'Submit'}
+                                </button>
+                              </div>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -3202,8 +3210,43 @@ export default function App() {
                     </p>
                   )}
                 </div>
-                {selectedAssignmentId && (
+                {selectedAssignmentId && (() => {
+                  const selectedAssignment = recentAssignmentsForStudent.find((a) => a.id === selectedAssignmentId);
+                  const existingSub = mySubmissionByAssignment[selectedAssignmentId];
+                  if (!selectedAssignment) return null;
+                  return (
                 <>
+                <div className={`space-y-2 rounded-xl border p-3 ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className={`text-xs font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{selectedAssignment.title}</p>
+                      <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment))}` : ''}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`text-[10px] font-black uppercase tracking-wide underline cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                      Guidelines
+                    </button>
+                  </div>
+                  {selectedAssignment.fileUrl && (
+                    <a href={selectedAssignment.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-cyan-400 hover:text-cyan-300 cursor-pointer">
+                      <Download className="w-3 h-3" /> View Assigned Homework
+                    </a>
+                  )}
+                  {existingSub && (
+                    <div className={`space-y-1 pt-2 border-t ${isLightMode ? 'border-slate-200' : 'border-slate-800'}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-wide ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your Previous Submission -- Score: {typeof existingSub.aiScore === 'number' ? existingSub.aiScore : '—'}</p>
+                      {existingSub.fileUrl && (
+                        <a href={existingSub.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-cyan-400 hover:text-cyan-300 cursor-pointer">
+                          <Download className="w-3 h-3" /> View What You Uploaded
+                        </a>
+                      )}
+                      {existingSub.aiFeedback && (
+                        <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
@@ -3244,7 +3287,8 @@ export default function App() {
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
                 </>
-                )}
+                  );
+                })()}
               </form>
             </div>
 
@@ -4869,12 +4913,11 @@ export default function App() {
                       {recentAssignmentsForStudent.map((a) => {
                         const badge = homeworkStatusBadge(a);
                         const isSelected = selectedAssignmentId === a.id;
+                        const hasSub = !!mySubmissionByAssignment[a.id];
                         return (
-                          <button
+                          <div
                             key={a.id}
-                            type="button"
-                            onClick={() => setSelectedAssignmentId(a.id)}
-                            className={`w-full text-left px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200 hover:bg-slate-50' : 'bg-slate-950 border-slate-800 hover:bg-slate-900')}`}
+                            className={`w-full px-3 py-2.5 rounded-lg border transition ${isSelected ? 'border-cyan-500 bg-cyan-500/10' : (isLightMode ? 'bg-white border-slate-200' : 'bg-slate-950 border-slate-800')}`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0">
@@ -4883,9 +4926,18 @@ export default function App() {
                                   {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
                                 </p>
                               </div>
-                              <span className={`shrink-0 text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg ${badge.className}`}>{badge.text}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAssignmentId(a.id)}
+                                  className="text-[10px] font-black uppercase tracking-wide px-2 py-1 rounded-lg bg-cyan-500 text-slate-950 cursor-pointer hover:bg-cyan-400 transition"
+                                >
+                                  {hasSub ? 'Modify' : 'Submit'}
+                                </button>
+                              </div>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -4895,8 +4947,43 @@ export default function App() {
                     </p>
                   )}
                 </div>
-                {selectedAssignmentId && (
+                {selectedAssignmentId && (() => {
+                  const selectedAssignment = recentAssignmentsForStudent.find((a) => a.id === selectedAssignmentId);
+                  const existingSub = mySubmissionByAssignment[selectedAssignmentId];
+                  if (!selectedAssignment) return null;
+                  return (
                 <>
+                <div className={`space-y-2 rounded-xl border p-3 ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <p className={`text-xs font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{selectedAssignment.title}</p>
+                      <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment))}` : ''}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`text-[10px] font-black uppercase tracking-wide underline cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
+                      Guidelines
+                    </button>
+                  </div>
+                  {selectedAssignment.fileUrl && (
+                    <a href={selectedAssignment.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-cyan-400 hover:text-cyan-300 cursor-pointer">
+                      <Download className="w-3 h-3" /> View Assigned Homework
+                    </a>
+                  )}
+                  {existingSub && (
+                    <div className={`space-y-1 pt-2 border-t ${isLightMode ? 'border-slate-200' : 'border-slate-800'}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-wide ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your Previous Submission -- Score: {typeof existingSub.aiScore === 'number' ? existingSub.aiScore : '—'}</p>
+                      {existingSub.fileUrl && (
+                        <a href={existingSub.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-cyan-400 hover:text-cyan-300 cursor-pointer">
+                          <Download className="w-3 h-3" /> View What You Uploaded
+                        </a>
+                      )}
+                      {existingSub.aiFeedback && (
+                        <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Subject / Topic (optional)</label>
                   <input
@@ -4954,7 +5041,8 @@ export default function App() {
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
                 </>
-                )}
+                  );
+                })()}
               </form>
             </div>
 
