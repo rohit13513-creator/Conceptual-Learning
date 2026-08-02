@@ -10,6 +10,7 @@ import {
   Compass,
   ChevronLeft,
   ChevronRight,
+  Trophy,
 } from "lucide-react";
 
 type PhysicsTopicId =
@@ -21,7 +22,8 @@ type PhysicsTopicId =
   | "velocity-time-graphs"
   | "kinematic-equations"
   | "circular-motion"
-  | "glossary-mindmap";
+  | "glossary-mindmap"
+  | "olympiad-corner";
 
 interface PhysicsTopic {
   id: PhysicsTopicId;
@@ -39,6 +41,7 @@ const PHYSICS_TOPICS: PhysicsTopic[] = [
   { id: "kinematic-equations", title: "7. Equations of Motion", category: "Kinematics" },
   { id: "circular-motion", title: "8. Motion in a Plane: Uniform Circular Motion", category: "Kinematics" },
   { id: "glossary-mindmap", title: "9. Quick Glossary & Mind Map", category: "Revision" },
+  { id: "olympiad-corner", title: "10. Competitive Corner: Olympiad & NTSE", category: "Beyond NCERT" },
 ];
 
 interface LearnPhysics9Props {
@@ -93,6 +96,16 @@ const DiagramCard: React.FC<{ caption: string; children: React.ReactNode; isLigh
       {children}
     </div>
     <p className={`text-center text-[13px] font-bold ${isLightMode ? "text-slate-500" : "text-slate-500"}`}>{caption}</p>
+  </div>
+);
+
+// A solved competitive-exam-style question, used only in the Olympiad/NTSE topic. The answer
+// is shown directly (not hidden behind a reveal) since this is a notes page for reading and
+// revising, not a quiz.
+const ExampleQ: React.FC<{ number: number; question: string; answer: string; isLightMode?: boolean }> = ({ number, question, answer, isLightMode = false }) => (
+  <div className={`p-4 rounded-xl border space-y-2 ${isLightMode ? "bg-slate-50 border-slate-200" : "bg-slate-900 border-slate-800"}`}>
+    <p className="text-sm font-bold leading-relaxed"><span className="text-cyan-400 font-mono">Q{number}.</span> {question}</p>
+    <p className="text-sm font-semibold leading-relaxed"><span className="text-emerald-400 font-black">Answer: </span>{answer}</p>
   </div>
 );
 
@@ -659,6 +672,89 @@ export function LearnPhysics9({ isLightMode = false, onCompleteNotes, onGoToSelf
               <RememberBox title="You've completed the Motion chapter!" isLightMode={isLightMode}>
                 Go back to any topic using the sidebar whenever you need to revise. Then try the NCERT solved questions, the question bank, and the self-assessment quiz to test what you remember.
               </RememberBox>
+            </div>
+          )}
+
+          {activeTopic === "olympiad-corner" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
+                <h1 className="text-2xl font-black tracking-tight leading-tight">Competitive Corner: Olympiad & NTSE</h1>
+                <p className={`text-base font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>NCERT covers the basics. Exams like NSO, NTSE, and IJSO often go one step further with these same ideas. This topic covers what commonly gets added on top, at a Class IX level.</p>
+              </div>
+
+              <SectionHeading>Ideas That Go a Step Beyond NCERT</SectionHeading>
+
+              <InfoCard title="Relative Velocity (in a Straight Line)" icon={MoveRight} isLightMode={isLightMode}>
+                <p>The velocity of one object as seen from another moving object.</p>
+                <p><b>Moving toward each other:</b> relative velocity = sum of their speeds. This is why two trains approaching each other "close the gap" fast.</p>
+                <p><b>Moving in the same direction:</b> relative velocity = difference of their speeds.</p>
+              </InfoCard>
+
+              <InfoCard title="Two Shortcuts for Average Speed" icon={Gauge} isLightMode={isLightMode}>
+                <p><b>Equal distances</b> covered at speeds v1 and v2: average speed = 2 v1 v2 / (v1 + v2).</p>
+                <p><b>Equal times</b> spent at speeds v1 and v2: average speed = (v1 + v2) / 2.</p>
+                <p>These give different answers for the same v1 and v2. Check whether the question splits the journey by distance or by time before picking one.</p>
+              </InfoCard>
+
+              <InfoCard title="Angular Velocity, Beyond the NCERT Formula" icon={RefreshCw} isLightMode={isLightMode}>
+                <p>For an object going around a circle, angle turned is measured in radians. One full circle = 2 pi radians = 360 degrees.</p>
+                <p><b>Angular velocity (omega):</b> angle turned divided by time, omega = 2 pi / T.</p>
+                <p><b>Linking to ordinary speed:</b> v = omega x r, where r is the radius. This connects the "average speed = 2 pi R / T" formula from the main chapter to angular motion.</p>
+              </InfoCard>
+
+              <InfoCard title="Reading a Curved Velocity-Time Graph" icon={TrendingUp} isLightMode={isLightMode}>
+                <p>NCERT graphs are mostly straight lines. Olympiad papers sometimes give a curved velocity-time graph and ask for the distance covered.</p>
+                <p>Estimate it by breaking the area under the curve into thin rectangles or trapeziums and adding their areas, the same way you would estimate the area of an odd-shaped field.</p>
+              </InfoCard>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                <FactRow label="Meeting-point problems" isLightMode={isLightMode}>set up one equation for each object's position over time, then solve for the time at which both positions are equal.</FactRow>
+                <FactRow label="Zero average velocity" isLightMode={isLightMode}>a body that returns to its starting point has zero average velocity for the trip, even though its average speed was clearly not zero.</FactRow>
+                <FactRow label="Angular velocity stays constant" isLightMode={isLightMode}>in uniform circular motion, even though the linear velocity's direction keeps changing, the angular velocity omega does not change.</FactRow>
+              </div>
+
+              <RememberBox title="One trap to watch for" isLightMode={isLightMode}>
+                Competitive papers love mixing two ideas in one question, for example a relative-velocity setup followed by a kinematic-equation calculation. Read the full question before picking a formula.
+              </RememberBox>
+
+              <SectionHeading>Solved Competitive Questions</SectionHeading>
+
+              <ExampleQ
+                number={1}
+                isLightMode={isLightMode}
+                question="Two trains 120 km apart start moving toward each other on parallel tracks, one at 60 km/h and the other at 40 km/h. After how long will they meet?"
+                answer="They are approaching each other, so relative speed = 60 + 40 = 100 km/h. Time = distance / relative speed = 120 / 100 = 1.2 h, which is 1 hour 12 minutes."
+              />
+              <ExampleQ
+                number={2}
+                isLightMode={isLightMode}
+                question="A cyclist covers the first half of a distance at 15 km/h and the second half at 10 km/h. Find her average speed for the whole journey."
+                answer="Equal distances, so average speed = 2 v1 v2 / (v1 + v2) = (2 x 15 x 10) / (15 + 10) = 300 / 25 = 12 km/h."
+              />
+              <ExampleQ
+                number={3}
+                isLightMode={isLightMode}
+                question="A car travels for the first half of the TIME at 40 km/h and the second half of the time at 60 km/h. Find its average speed."
+                answer="Equal times, so average speed = (v1 + v2) / 2 = (40 + 60) / 2 = 50 km/h. Notice this is a different rule from Q2, since here the split is by time, not distance."
+              />
+              <ExampleQ
+                number={4}
+                isLightMode={isLightMode}
+                question="A point on the rim of a wheel of radius 0.5 m completes one revolution in 2 s. Find its angular velocity and its linear speed."
+                answer="Angular velocity omega = 2 pi / T = 2 pi / 2 = pi rad/s, about 3.14 rad/s. Linear speed v = omega x r = 3.14 x 0.5, about 1.57 m/s."
+              />
+              <ExampleQ
+                number={5}
+                isLightMode={isLightMode}
+                question="Cars A and B move in the same direction at 80 km/h and 60 km/h. Find the velocity of A relative to B."
+                answer="Same direction, so relative velocity = 80 - 60 = 20 km/h. To someone sitting in car B, car A appears to pull away at 20 km/h."
+              />
+              <ExampleQ
+                number={6}
+                isLightMode={isLightMode}
+                question="A body's velocity-time graph is a straight line from (0 s, 20 m/s) to (4 s, 0 m/s). Find the distance covered, and check whether it equals the displacement."
+                answer="The graph forms a triangle with base 4 s and height 20 m/s. Area = (1/2) x 4 x 20 = 40 m, so distance covered = 40 m. Since the velocity stays positive throughout (it only slows down to zero, never reverses), displacement also equals 40 m."
+              />
             </div>
           )}
 

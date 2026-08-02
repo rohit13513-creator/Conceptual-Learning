@@ -17,6 +17,7 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Trophy,
 } from "lucide-react";
 
 type BioTopicId =
@@ -35,7 +36,8 @@ type BioTopicId =
   | "vacuoles"
   | "plant-vs-animal-cell"
   | "cell-division"
-  | "glossary-mindmap";
+  | "glossary-mindmap"
+  | "olympiad-corner";
 
 interface BioTopic {
   id: BioTopicId;
@@ -60,6 +62,7 @@ const BIO_TOPICS: BioTopic[] = [
   { id: "plant-vs-animal-cell", title: "14. Plant Cell vs Animal Cell", category: "Big Picture" },
   { id: "cell-division", title: "15. Cell Division: Mitosis & Meiosis", category: "Big Picture" },
   { id: "glossary-mindmap", title: "16. Quick Glossary & Mind Map", category: "Revision" },
+  { id: "olympiad-corner", title: "17. Competitive Corner: Olympiad & NTSE", category: "Beyond NCERT" },
 ];
 
 interface LearnBiologyProps {
@@ -100,6 +103,16 @@ const SectionHeading: React.FC<{ children: React.ReactNode }> = ({ children }) =
 const FactRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-sm text-slate-300 font-semibold">
     <span className="text-white font-black">{label}:</span> <span>{children}</span>
+  </div>
+);
+
+// A solved competitive-exam-style question, used only in the Olympiad/NTSE topic. The answer
+// is shown directly (not hidden behind a reveal) since this is a notes page for reading and
+// revising, not a quiz.
+const ExampleQ: React.FC<{ number: number; question: string; answer: string }> = ({ number, question, answer }) => (
+  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2">
+    <p className="text-sm font-bold leading-relaxed text-slate-300"><span className="text-green-400 font-mono">Q{number}.</span> {question}</p>
+    <p className="text-sm font-semibold leading-relaxed text-slate-300"><span className="text-emerald-400 font-black">Answer: </span>{answer}</p>
   </div>
 );
 
@@ -1249,6 +1262,83 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <RememberBox title="You've completed the Cells chapter!">
                 Go back to any topic using the sidebar whenever you need to revise, and try the self-assessment questions to test what you remember.
               </RememberBox>
+            </div>
+          )}
+
+          {activeTopic === "olympiad-corner" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="space-y-1.5 border-b border-slate-800 pb-4">
+                <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Competitive Corner: Olympiad & NTSE</h1>
+                <p className="text-base font-semibold text-slate-400">NCERT covers the basics. Exams like NSO, NTSE, and IJSO often go one step further with these same ideas. This topic covers what commonly gets added on top, at a Class IX level.</p>
+              </div>
+
+              <SectionHeading>Ideas That Go a Step Beyond NCERT</SectionHeading>
+
+              <InfoCard title="Why Cells Stay Small: Surface Area to Volume Ratio" icon={Trophy}>
+                <p>As a cell grows bigger, its volume increases faster than its surface area. A cell needs surface area (the membrane) to take in food and oxygen and to push out waste, in proportion to how much volume it has to serve.</p>
+                <p>Past a certain size, the surface area can no longer keep up with the volume's demands. This is the real reason cells divide instead of growing indefinitely large. One of the most frequently tested ideas from this chapter.</p>
+              </InfoCard>
+
+              <InfoCard title="Endosymbiotic Theory" icon={Zap}>
+                <p>Mitochondria and chloroplasts are believed to have started out as free-living bacteria that were engulfed by a larger ancestral cell, long ago, and then stayed on in a permanent partnership.</p>
+                <p>Evidence for this: both have their own DNA, both are bound by a double membrane, both can divide on their own inside the cell, and both contain 70S ribosomes just like bacteria do.</p>
+              </InfoCard>
+
+              <InfoCard title="Ribosome Types: 70S vs 80S" icon={Dna}>
+                <p>Ribosomes come in two sizes, measured by how fast they settle in a centrifuge (their "S" or Svedberg value).</p>
+                <p><b className="text-white">70S ribosomes:</b> found in prokaryotic cells, and also inside mitochondria and chloroplasts.</p>
+                <p><b className="text-white">80S ribosomes:</b> found floating free or on the ER in the cytoplasm of eukaryotic cells.</p>
+              </InfoCard>
+
+              <InfoCard title="Extra Prokaryotic Features" icon={Microscope}>
+                <p><b className="text-white">Mesosomes:</b> folded, finger-like extensions of the cell membrane in bacteria, believed to help with respiration and cell division.</p>
+                <p><b className="text-white">Plasmids:</b> small, circular pieces of extra DNA in bacteria, separate from the main genetic material. They are the reason genetic engineering with bacteria is possible.</p>
+              </InfoCard>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                <FactRow label="Smallest known cell">Mycoplasma, about 0.1 micrometre across.</FactRow>
+                <FactRow label="Mitochondria count varies with energy need">a liver cell may hold 1,000 to 2,000 mitochondria; a mature red blood cell has none at all.</FactRow>
+                <FactRow label="Fungal cell wall material">chitin, not cellulose. Plant cell walls are cellulose; this contrast is a favourite trick question.</FactRow>
+                <FactRow label="Human chromosome number">46, arranged in 23 pairs.</FactRow>
+                <FactRow label="Word origins">"Cell" was coined by Robert Hooke in 1665. "Protoplasm" was coined by Purkinje in 1839.</FactRow>
+              </div>
+
+              <RememberBox title="Cell Theory has exceptions worth knowing">
+                Viruses are not made of cells and fall outside Cell Theory entirely. Mature red blood cells and mature sieve tube cells lose their nucleus. Knowing the exceptions is often what separates a tricky Olympiad question from a straightforward one.
+              </RememberBox>
+
+              <SectionHeading>Solved Competitive Questions</SectionHeading>
+
+              <ExampleQ
+                number={1}
+                question="A cube-shaped cell has sides of 1 unit, giving a surface area of 6 and a volume of 1 (a ratio of 6:1). If the side length doubles to 2 units, find the new surface area, the new volume, and the new ratio. What does this tell you about why cells stay small?"
+                answer="New surface area = 6 x 2 squared = 24. New volume = 2 cubed = 8. New ratio = 24:8, which simplifies to 3:1. The ratio has dropped from 6:1 to 3:1, so surface area is no longer keeping pace with volume. This is exactly why a growing cell divides instead of continuing to expand."
+              />
+              <ExampleQ
+                number={2}
+                question="Which type of ribosome, 70S or 80S, would you expect to find inside a mitochondrion, and why?"
+                answer="70S. According to the endosymbiotic theory, mitochondria descended from free-living prokaryotic bacteria, so they kept the prokaryote-type ribosome even after becoming a permanent part of the eukaryotic cell."
+              />
+              <ExampleQ
+                number={3}
+                question="Name the cell wall material in a mushroom cell, and contrast it with the cell wall material in a plant cell."
+                answer="A mushroom (fungal) cell wall is made of chitin. A plant cell wall is made of cellulose. Both are rigid outer coverings, but the building material is different."
+              />
+              <ExampleQ
+                number={4}
+                question="A muscle cell contains far more mitochondria than a skin cell. Explain why, based on what mitochondria do."
+                answer="Mitochondria release energy (as ATP) through cellular respiration. Muscle cells need a continuous, large energy supply to contract repeatedly, while skin cells have much lower energy demands, so muscle cells pack in many more mitochondria to keep up."
+              />
+              <ExampleQ
+                number={5}
+                question="State one piece of evidence that supports the idea that mitochondria evolved from free-living bacteria."
+                answer="Any one of the following is correct: mitochondria have their own DNA, they are enclosed by a double membrane, they can divide independently of the cell dividing, or they contain 70S ribosomes like bacteria do."
+              />
+              <ExampleQ
+                number={6}
+                question='A student says: "Cell Theory states all cells come from pre-existing cells, so viruses must be cells too, since they multiply inside a host." Is the student correct? Explain.'
+                answer="No. Viruses are not made of cells at all. They have no cell membrane, no cytoplasm, and cannot carry out life processes on their own. They can only multiply by taking over a host cell's machinery, which places them entirely outside Cell Theory."
+              />
             </div>
           )}
 
