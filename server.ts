@@ -678,35 +678,45 @@ function mapInviteRow(row: any): InviteCode {
 
 // OTP storage lives in Supabase (not in-memory) so it survives across serverless invocations.
 
+// Reused across every send instead of creating a fresh SMTP connection (TLS handshake + auth)
+// per email -- that per-call setup cost was extra latency and an extra point of transient
+// failure on every single OTP, and it's unnecessary since the credentials never change between
+// calls within one running function instance.
+let cachedTransporter: nodemailer.Transporter | null = null;
+function getTransporter(): nodemailer.Transporter | null {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+
+  if (!smtpHost || !smtpUser || !smtpPass) return null;
+  if (cachedTransporter) return cachedTransporter;
+
+  cachedTransporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465, // true for port 465, false for 587
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+    tls: {
+      // Do not fail on invalid / self-signed certs which are common in private SMTP servers
+      rejectUnauthorized: false
+    }
+  });
+  return cachedTransporter;
+}
+
 // Helper to send real emails via nodemailer SMTP
 async function sendRealEmail(to: string, subject: string, bodyText: string, bodyHtml?: string) {
   try {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const smtpFrom = process.env.SMTP_FROM || smtpUser || "noreply@rayoptica.com";
-
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      console.warn(`[SMTP Info] Real email to ${to} is pending SMTP credentials. Logged simulated email to DB. Missing check keys: Host=${!!smtpHost}, User=${!!smtpUser}, Pass=${!!smtpPass}`);
+    const smtpFrom = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@rayoptica.com";
+    const transporter = getTransporter();
+    if (!transporter) {
+      console.warn(`[SMTP Info] Real email to ${to} is pending SMTP credentials.`);
       return false;
     }
-
-    console.log(`[SMTP Attempt] Sending email to ${to} via SMTP: Host=${smtpHost}, Port=${smtpPort}, User=${smtpUser}, From=${smtpFrom}`);
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465, // true for port 465, false for 587
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-      tls: {
-        // Do not fail on invalid / self-signed certs which are common in private SMTP servers
-        rejectUnauthorized: false
-      }
-    });
 
     const info = await transporter.sendMail({
       from: smtpFrom,
@@ -724,8 +734,14 @@ async function sendRealEmail(to: string, subject: string, bodyText: string, body
   }
 }
 
-// Helper to log and record simulated email dispatches instantly
-function sendSimulatedEmail(to: string, subject: string, body: string, type: 'incoming' | 'outgoing' | 'otp', htmlBody?: string) {
+// Helper to log and record simulated email dispatches, and actually dispatch the real one.
+// Returns a promise (true = actually delivered) that every call site below awaits before
+// responding to the client -- a serverless function instance can be frozen the moment its HTTP
+// response is sent, which silently kills any not-yet-finished background work. An unawaited
+// SMTP send here was exactly that: it usually finished in time, but under any latency (slow TLS
+// handshake, a loaded SMTP host) the response could go out first and the email would just never
+// arrive, with nothing in the UI or the response ever indicating it failed.
+function sendSimulatedEmail(to: string, subject: string, body: string, type: 'incoming' | 'outgoing' | 'otp', htmlBody?: string): Promise<boolean> {
   const id = "EML-" + Math.random().toString(36).substr(2, 9).toUpperCase();
   supabase
     .from("email_logs")
@@ -734,9 +750,9 @@ function sendSimulatedEmail(to: string, subject: string, body: string, type: 'in
       if (error) console.error("Error logging simulated email:", error.message);
     });
 
-  // Dispatch real email in background
-  sendRealEmail(to, subject, body, htmlBody).catch(err => {
-    console.error("Background real email send failed:", err);
+  return sendRealEmail(to, subject, body, htmlBody).catch(err => {
+    console.error("Real email send failed:", err);
+    return false;
   });
 }
 
@@ -6543,12 +6559,22 @@ function buildApp(): express.Express {
       expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     });
 
-    sendSimulatedEmail(
+    // Awaited (not fire-and-forget): a serverless function instance can be frozen the instant
+    // its HTTP response goes out, which would silently kill the SMTP send mid-flight and leave
+    // the student waiting on a code that never arrives, even though this endpoint claimed success.
+    const delivered = await sendSimulatedEmail(
       emailNormalized,
       "Your Verification Code - Conceptual Learning Online",
       `Your verification code is: ${phoneOtp}. Valid for 10 minutes.\n\nIf you did not request this, you can ignore this email.`,
       'otp'
     );
+
+    if (!delivered) {
+      console.error(`[OTP Send Failed] Could not deliver verification email to ${emailNormalized}`);
+      return res.status(502).json({
+        error: "We couldn't send the verification email right now. Please wait a moment and try again, or contact your teacher if this keeps happening.",
+      });
+    }
 
     console.log(`[OTP Generated] Verification code sent by email for ${emailNormalized}`);
 
@@ -6688,8 +6714,11 @@ function buildApp(): express.Express {
       </div>
     `;
 
+    // Awaited so this can't be frozen mid-send once the response below goes out -- the account
+    // itself is already created either way, so a failure here is only logged, never surfaced to
+    // the student (they still see a normal success message).
     for (const adminEmail of ADMIN_NOTIFICATION_EMAILS) {
-      sendSimulatedEmail(
+      await sendSimulatedEmail(
         adminEmail,
         `📝 Action Required: New Student Registry [${newUser.name}]`,
         textBody,
@@ -6729,8 +6758,8 @@ function buildApp(): express.Express {
     const congradsSubject = "🎉 Account Approved: Welcome to Ray-Optica!";
     const congradsBody = `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`;
 
-    // Notify student as well
-    sendSimulatedEmail(
+    // Notify student as well (awaited so it can't be frozen mid-send once the response goes out)
+    await sendSimulatedEmail(
       targetEmail,
       congradsSubject,
       congradsBody,
@@ -6948,12 +6977,16 @@ function buildApp(): express.Express {
       if (otpError) {
         console.error("Error storing password reset OTP:", otpError.message);
       } else {
-        sendSimulatedEmail(
+        // Awaited so it can't be frozen mid-send once the response below goes out. The response
+        // message stays generic either way (see comment above the route) -- only the server log
+        // distinguishes a real delivery failure from "no account with that email".
+        const delivered = await sendSimulatedEmail(
           emailNormalized,
           "Password Reset Code - Conceptual Learning Online",
           `Your password reset code is: ${otp}. Valid for 10 minutes.\n\nIf you did not request this, you can ignore this email -- your password will not change.`,
           'otp'
         );
+        if (!delivered) console.error(`[Password Reset OTP Send Failed] Could not deliver reset email to ${emailNormalized}`);
       }
     }
 
@@ -7995,8 +8028,8 @@ function buildApp(): express.Express {
 
     await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
 
-    // Send congrats notification email to Student
-    sendSimulatedEmail(
+    // Send congrats notification email to Student (awaited so it can't be frozen mid-send)
+    await sendSimulatedEmail(
       targetEmail,
       "🎉 Account Approved: Welcome to Ray Optica",
       `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`,
@@ -8024,8 +8057,8 @@ function buildApp(): express.Express {
 
     await supabase.from("users").update({ status: "rejected" }).eq("email", targetEmail);
 
-    // Send disapproval notification email to Student
-    sendSimulatedEmail(
+    // Send disapproval notification email to Student (awaited so it can't be frozen mid-send)
+    await sendSimulatedEmail(
       targetEmail,
       "🚫 Account Request Disapproved - Ray Optica",
       `Dear ${targetUser.name},\n\nWe regret to inform you that your registration request for Conceptual Learning Online has been disapproved/suspended. If you believe this is a clerical error, please reach out to your teacher directly.\n\nBest regards,\nConceptual Learning Online Support`,

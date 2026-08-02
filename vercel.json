@@ -6,5 +6,10 @@
   ],
   "crons": [
     { "path": "/api/cron/check-homework", "schedule": "0 15 * * *" }
-  ]
+  ],
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60
+    }
+  }
 }
