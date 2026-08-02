@@ -632,6 +632,8 @@ export default function App() {
   const [newStudentName, setNewStudentName] = useState('');
   const [checkNowLoading, setCheckNowLoading] = useState(false);
   const [checkNowResult, setCheckNowResult] = useState<string | null>(null);
+  // Which admin homework rows currently have a manual reevaluation in flight, keyed by submission id.
+  const [reevaluatingIds, setReevaluatingIds] = useState<Set<string>>(new Set());
 
   // Homework Upload States
   const [homeworkSubject, setHomeworkSubject] = useState('');
@@ -1218,6 +1220,27 @@ export default function App() {
       setAdminError(err.message);
     } finally {
       setAdminLoading(false);
+    }
+  };
+
+  const handleReevaluateSubmission = async (submissionId: string) => {
+    if (!user) return;
+    setReevaluatingIds(prev => new Set(prev).add(submissionId));
+    try {
+      const resp = await fetch('/api/admin/homework/reevaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+        body: JSON.stringify({ submissionId }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        setAdminError(data.error || 'Failed to reevaluate this submission.');
+      }
+      await fetchAdminData();
+    } catch (err: any) {
+      setAdminError(err.message);
+    } finally {
+      setReevaluatingIds(prev => { const next = new Set(prev); next.delete(submissionId); return next; });
     }
   };
 
@@ -6202,7 +6225,7 @@ export default function App() {
                                     <th className="py-2 px-4 font-bold">Submitted</th>
                                     <th className="py-2 px-4 font-bold">Status</th>
                                     <th className="py-2 px-4 font-bold">Remarks</th>
-                                    <th className="py-2 pl-4 text-right font-bold">File</th>
+                                    <th className="py-2 pl-4 text-right font-bold">File / Actions</th>
                                   </tr>
                                 </thead>
                                 <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
@@ -6270,12 +6293,21 @@ export default function App() {
                                           </div>
                                         )}
                                       </td>
-                                      <td className="py-3 pl-4 text-right">
+                                      <td className="py-3 pl-4 text-right space-y-1.5">
                                         {sub.fileUrl && (
-                                          <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase inline-flex items-center gap-1">
+                                          <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase inline-flex items-center gap-1 justify-end">
                                             <Eye className="w-3.5 h-3.5" /> View
                                           </a>
                                         )}
+                                        <button
+                                          type="button"
+                                          disabled={reevaluatingIds.has(sub.id)}
+                                          onClick={() => handleReevaluateSubmission(sub.id)}
+                                          className="block ml-auto text-amber-400 hover:text-amber-300 font-bold text-[10px] uppercase inline-flex items-center gap-1 justify-end cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                          title="Re-run the AI check on this submission from scratch"
+                                        >
+                                          <RefreshCw className={`w-3.5 h-3.5 ${reevaluatingIds.has(sub.id) ? 'animate-spin' : ''}`} /> {reevaluatingIds.has(sub.id) ? 'Reevaluating...' : 'Reevaluate'}
+                                        </button>
                                       </td>
                                     </tr>
                                   ))}

@@ -483,7 +483,7 @@ Students often submit homework as phone photos of each page, one photo per page,
 SCORING RULES (CBSE board guidelines -- follow these exactly, the score must never be reduced for anything outside this list):
 - The score is based ONLY on two things: (1) whether every assigned question was attempted, and (2) whether each attempted question was solved correctly and via the proper CBSE method/steps (not just a bare final answer where working is required).
 - NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
-- NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault.
+- NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault. When the same question number appears worked out twice (a scratched-out/crossed-out/heavily-scribbled-over first attempt followed by a second, cleaner attempt), grade ONLY the second, non-crossed-out attempt -- it supersedes the first one entirely, even if the first attempt's wrong conclusion is easier to read than the correct final one.
 - NEVER treat a question marked "doubt" as a scoring deduction -- it is a self-flagged request for the teacher's help, not a wrong or missing answer, and must not lower the score.
 - NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. A student very often runs out of room mid-derivation, so the concluding line ("Hence Proved", a final boxed answer, "= RHS", the last algebraic step) is frequently the very first line of the NEXT page rather than the last line of the page where the question started, and a proof that looks cut off at the bottom of a page is not evidence it was left unfinished. This is what the required pageByPageNotes field (see the tool schema) exists for: fill it in for every single page first, explicitly noting anything that opens a page as a continuation from the previous one, and only judge a question incomplete, wrong, or unconcluded after that page-by-page pass is done.
 - DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
@@ -524,13 +524,34 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           items: { type: "string" },
           description: "One entry per page of the student's submission, in the order the pages appear, BEFORE deciding anything about completeness. Each entry: which question number(s) appear or continue on that page, and -- critically -- whether the page OPENS with a continuation of a question whose working started on the previous page (e.g. a final algebraic step, 'Hence Proved', a boxed final answer, or '= RHS' as the very first thing on the page). This must be filled in for every page before any question is judged incomplete, wrong, or missing a conclusion."
         },
-        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
-        feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
+        // Also listed before score, for the same property-order reason as pageByPageNotes: a
+        // real submission (Class VIII proportions, ~26 questions with several true/false and
+        // find-x sub-parts) was scored 2/10 with self-contradicting feedback text ("marked false
+        // but should be true... upon re-check this is correctly marked false") -- the model was
+        // catching and fixing its own arithmetic mistakes while WRITING the feedback, but by then
+        // score had already been generated and could never be revised. Forcing the actual
+        // re-derivation of every question's arithmetic into its own required field, ahead of
+        // score, means the number is computed from settled verifications instead of a first
+        // impression that gets silently corrected too late to matter.
+        questionByQuestionCheck: {
+          type: "array",
+          items: { type: "string" },
+          description: "One entry per assigned question (by number, including each lettered/numbered sub-part for questions with multiple parts, e.g. '1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. For anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.) actually redo the calculation yourself digit-by-digit and state the correct result, then compare it to what the student wrote -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
+        },
+        feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
+        // Listed LAST on purpose, for the same reason questionByQuestionCheck was moved ahead of
+        // it: a test run against a real failing submission showed the model could get
+        // questionByQuestionCheck and incorrectQuestions right (7 genuine problems correctly
+        // identified) and STILL output score: 10, because score was still being generated before
+        // incorrectQuestions/missingQuestions were finalized -- the same bug one field-position
+        // earlier. Score must be the final field so the number is a straightforward function of
+        // the already-decided, already-written-down list of what's wrong, not a separate guess.
+        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10. Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
       },
-      required: ["pageByPageNotes", "score", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions"],
+      required: ["pageByPageNotes", "questionByQuestionCheck", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions", "score"],
     },
   };
 
@@ -563,11 +584,12 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
           // so thinking is switched off outright rather than chasing an ever-larger budget.
           thinking: { type: "disabled" },
-          // Raised from 1500 once pageByPageNotes was added to the schema -- that field alone can
-          // run a few hundred words on a long, multi-page submission, and a tight budget risked the
-          // model rushing or truncating the fields that come after it (score/feedback/
+          // Raised from 1500 to 3000 once pageByPageNotes was added, then to 5000 once
+          // questionByQuestionCheck was added too -- a dense assignment with ~26 questions (some
+          // with up to 7 sub-parts) needs a verification entry per sub-part, and a tight budget
+          // risked the model rushing or truncating the fields that come after it (score/feedback/
           // missingQuestions), the same class of bug as the empty-feedback issue found earlier.
-          max_tokens: 3000,
+          max_tokens: 5000,
           tools: [gradeTool],
           tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
@@ -7539,6 +7561,26 @@ function buildApp(): express.Express {
       await checkHomeworkSubmission(row.id);
     }
     return res.json({ checked: (pending || []).length });
+  });
+
+  // Admin manually re-runs the AI check on one specific submission, regardless of its current
+  // status -- unlike check-now above (which only sweeps up still-pending rows), this lets an
+  // admin force a fresh grading pass on a submission that was already checked, e.g. if the score
+  // or feedback looks wrong. Always a full recheck of the whole file as it currently stands, not
+  // scoped to previously-outstanding questions -- the admin's intent here is "grade this properly
+  // from scratch", not "diff against an earlier resubmission".
+  app.post("/api/admin/homework/reevaluate", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const { data: existing } = await supabase.from("homework_submissions").select("id").eq("id", submissionId).maybeSingle();
+    if (!existing) return res.status(404).json({ error: "Submission not found." });
+
+    await checkHomeworkSubmission(String(submissionId));
+    const { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!updated) return res.status(404).json({ error: "Submission not found after recheck." });
+    return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
   // Student views their own homework submission history
