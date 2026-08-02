@@ -416,7 +416,7 @@ Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or de
 - DO list, by question number, any question that is simply missing -- no answer AND no doubt marker -- and tell the student to complete and resubmit just those questions. Do not explain that there was no doubt marker or otherwise narrate how you decided a question counts as missing -- just list it.
 - DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
 - If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them.
-- If everything checked out -- fully attempted, complete, and correct per CBSE method -- the feedback should be short and simply say so, without listing anything.
+- If everything checked out -- fully attempted, complete, and correct per CBSE method -- the feedback field must NOT be an empty string. Write one short sentence saying so instead, e.g. "All assigned questions attempted correctly." An empty feedback field is indistinguishable from a submission that was never checked at all, so there must always be at least one sentence.
 
 Call the submit_grade tool with your result.`;
 
@@ -494,6 +494,16 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       if (!resp.ok || !toolUseBlock || typeof toolUseBlock.input?.score !== "number") {
         lastErrorMessage = data?.error?.message || "Claude did not return a usable result.";
         break;
+      }
+      // A valid score with a missing/empty feedback string usually means the response got cut
+      // off mid-generation (e.g. a long feedback string hit the token limit right as it was
+      // being written) -- retrying almost always gets a complete response back. Worth one more
+      // attempt before accepting an incomplete result, since an empty feedback field used to be
+      // indistinguishable in the UI from "not checked yet" at all.
+      const feedbackMissing = typeof toolUseBlock.input?.feedback !== "string" || !toolUseBlock.input.feedback.trim();
+      if (feedbackMissing && attempt < 2) {
+        lastErrorMessage = "Claude returned a score but no feedback text.";
+        continue;
       }
       succeeded = true;
       break;

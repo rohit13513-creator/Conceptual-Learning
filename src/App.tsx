@@ -6056,28 +6056,36 @@ export default function App() {
                                         </span>
                                       </td>
                                       <td className="py-3 px-4 max-w-[240px]">
-                                        {sub.aiFeedback ? (
+                                        {sub.status === 'checked' ? (
                                           <>
                                             {sub.aiScore != null && <span className="font-black text-emerald-400 mr-1.5">{sub.aiScore}/10</span>}
-                                            {expandedFeedbackIds.has(sub.id) ? (
-                                              <>
-                                                <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                            {sub.aiFeedback ? (
+                                              expandedFeedbackIds.has(sub.id) ? (
+                                                <>
+                                                  <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setExpandedFeedbackIds(prev => { const next = new Set(prev); next.delete(sub.id); return next; })}
+                                                    className="block mt-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                                  >
+                                                    Hide Feedback
+                                                  </button>
+                                                </>
+                                              ) : (
                                                 <button
                                                   type="button"
-                                                  onClick={() => setExpandedFeedbackIds(prev => { const next = new Set(prev); next.delete(sub.id); return next; })}
-                                                  className="block mt-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                                  onClick={() => setExpandedFeedbackIds(prev => new Set(prev).add(sub.id))}
+                                                  className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
                                                 >
-                                                  Hide Feedback
+                                                  View Feedback
                                                 </button>
-                                              </>
+                                              )
                                             ) : (
-                                              <button
-                                                type="button"
-                                                onClick={() => setExpandedFeedbackIds(prev => new Set(prev).add(sub.id))}
-                                                className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
-                                              >
-                                                View Feedback
-                                              </button>
+                                              // A checked submission can legitimately have no feedback text (e.g. a fully
+                                              // correct resubmission with nothing left to flag) -- that must never be
+                                              // confused with "not checked yet", which is what an empty-string check here
+                                              // used to do, since "" is falsy just like a missing feedback field.
+                                              <span className={isLightMode ? 'text-slate-500 italic' : 'text-slate-500 italic'}>No remarks.</span>
                                             )}
                                           </>
                                         ) : (
