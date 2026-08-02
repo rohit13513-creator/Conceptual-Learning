@@ -675,10 +675,12 @@ export default function App() {
   // Active Roster table can get very long with many students -- collapsible so the admin can
   // hide it instead of scrolling past dozens of rows to reach the sections below.
   const [showRoster, setShowRoster] = useState(true);
-  // Which class-group sub-tables inside the roster are collapsed, keyed by studentClass
-  // (e.g. "X"). Empty by default -- every class group starts expanded.
-  const [collapsedRosterClasses, setCollapsedRosterClasses] = useState<Set<string>>(new Set());
-  const [collapsedHomeworkClasses, setCollapsedHomeworkClasses] = useState<Set<string>>(new Set());
+  // Which class-group sub-tables inside the roster/homework tables are expanded, keyed by
+  // studentClass (e.g. "X"). Empty by default -- every class group starts collapsed, since with
+  // three classes' worth of students/submissions loaded at once, an all-expanded view is just a
+  // wall of rows to scroll past before finding the one class you actually want to look at.
+  const [expandedRosterClasses, setExpandedRosterClasses] = useState<Set<string>>(new Set());
+  const [expandedHomeworkClasses, setExpandedHomeworkClasses] = useState<Set<string>>(new Set());
   // Submission ids whose full AI feedback is expanded in the admin table -- collapsed (score-only) by default.
   const [expandedFeedbackIds, setExpandedFeedbackIds] = useState<Set<string>>(new Set());
 
@@ -1283,15 +1285,43 @@ export default function App() {
     });
   }, [assignments, isClassExempt, studentTrack]);
 
-  // The "which homework is this for" dropdown normally mirrors visibleAssignments (deadline-locked
-  // out once expired), but a student improving a low score on an already-submitted assignment must
-  // still be able to select it even after its deadline -- so whatever assignment is currently
-  // selected (e.g. pre-filled by the Resubmit button) stays in the option list regardless.
-  const homeworkDropdownAssignments = useMemo(() => {
-    if (!selectedAssignmentId || visibleAssignments.some(a => a.id === selectedAssignmentId)) return visibleAssignments;
-    const stillSelected = assignments.find(a => a.id === selectedAssignmentId);
-    return stillSelected ? [...visibleAssignments, stillSelected] : visibleAssignments;
-  }, [visibleAssignments, assignments, selectedAssignmentId]);
+  // Everything else relevant to this student's class whose deadline has already passed -- a
+  // student can still submit or update these, just not through the "current" list, since a
+  // missed deadline is a very normal thing to want to catch up on rather than a dead end.
+  const previousAssignments = useMemo(() => {
+    const now = Date.now();
+    return assignments
+      .filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)
+      .filter(a => {
+        const effectiveDeadline = getEffectiveDeadline(a);
+        return effectiveDeadline && new Date(effectiveDeadline).getTime() <= now;
+      })
+      .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+  }, [assignments, isClassExempt, studentTrack]);
+
+  // Which of the two lists above the "Which Homework Is This For?" picker is currently showing.
+  const [homeworkTab, setHomeworkTab] = useState<'current' | 'previous'>('current');
+  const homeworkDropdownAssignments = homeworkTab === 'current' ? visibleAssignments : previousAssignments;
+
+  const mySubmissionByAssignment = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const s of mySubmissions) { if (s.assignmentId) map[s.assignmentId] = s; }
+    return map;
+  }, [mySubmissions]);
+
+  const formatAssignmentDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
+  const homeworkOptionLabel = (a: any) => {
+    const dateStr = formatAssignmentDate(a.assignedDate);
+    const sub = mySubmissionByAssignment[a.id];
+    const statusStr = !sub ? '' : typeof sub.aiScore === 'number' ? ` -- Submitted, Score ${sub.aiScore}` : sub.status === 'pending' ? ' -- Submitted, checking...' : ' -- Submitted';
+    return `${a.title}${dateStr ? ` (${dateStr})` : ''}${statusStr}`;
+  };
 
   const formatDeadline = (deadline?: string) => {
     if (!deadline) return null;
@@ -1655,6 +1685,7 @@ export default function App() {
   // marked missing, so this naturally raises the score rather than grading everything from scratch.
   const handleResubmitClick = (sub: any) => {
     if (!sub.assignmentId) return;
+    setHomeworkTab(visibleAssignments.some(a => a.id === sub.assignmentId) ? 'current' : 'previous');
     setSelectedAssignmentId(sub.assignmentId);
     setHomeworkSubject(sub.subject || '');
     setHomeworkMode('photos');
@@ -3146,6 +3177,10 @@ export default function App() {
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => { setHomeworkTab('current'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'current' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Current Homework</button>
+                    <button type="button" onClick={() => { setHomeworkTab('previous'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'previous' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Previous Homework</button>
+                  </div>
                   {homeworkDropdownAssignments.length > 0 ? (
                     <select
                       value={selectedAssignmentId}
@@ -3155,12 +3190,14 @@ export default function App() {
                     >
                       <option value="" disabled>-- Select the assignment this is for --</option>
                       {homeworkDropdownAssignments.map((a) => (
-                        <option key={a.id} value={a.id}>{a.title}</option>
+                        <option key={a.id} value={a.id}>{homeworkOptionLabel(a)}</option>
                       ))}
                     </select>
                   ) : (
                     <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                      No homework assignment is currently open for submission. You can't submit until your teacher posts one.
+                      {homeworkTab === 'current'
+                        ? 'No current homework is available right now. Switch to "Previous Homework" to submit or update an earlier assignment.'
+                        : "No previous homework found for your class yet."}
                     </p>
                   )}
                 </div>
@@ -4799,6 +4836,10 @@ export default function App() {
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Homework Is This For?</label>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => { setHomeworkTab('current'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'current' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Current Homework</button>
+                    <button type="button" onClick={() => { setHomeworkTab('previous'); setSelectedAssignmentId(''); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkTab === 'previous' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Previous Homework</button>
+                  </div>
                   {homeworkDropdownAssignments.length > 0 ? (
                     <select
                       value={selectedAssignmentId}
@@ -4808,12 +4849,14 @@ export default function App() {
                     >
                       <option value="" disabled>-- Select the assignment this is for --</option>
                       {homeworkDropdownAssignments.map((a) => (
-                        <option key={a.id} value={a.id}>{a.title}</option>
+                        <option key={a.id} value={a.id}>{homeworkOptionLabel(a)}</option>
                       ))}
                     </select>
                   ) : (
                     <p className={`text-xs font-semibold rounded-xl py-2 px-3 border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                      No homework assignment is currently open for submission. You can't submit until your teacher posts one.
+                      {homeworkTab === 'current'
+                        ? 'No current homework is available right now. Switch to "Previous Homework" to submit or update an earlier assignment.'
+                        : "No previous homework found for your class yet."}
                     </p>
                   )}
                 </div>
@@ -5494,7 +5537,7 @@ export default function App() {
                       ...classesPresent.filter(c => !CLASS_ORDER.includes(c)),
                     ];
                     const toggleClassGroup = (cls: string) => {
-                      setCollapsedRosterClasses(prev => {
+                      setExpandedRosterClasses(prev => {
                         const next = new Set(prev);
                         if (next.has(cls)) next.delete(cls); else next.add(cls);
                         return next;
@@ -5505,7 +5548,7 @@ export default function App() {
                     <div className="mt-4 space-y-5">
                       {orderedClasses.map((cls) => {
                         const group = nonAdminUsers.filter(u => (u.studentClass || 'Unspecified') === cls);
-                        const isCollapsed = collapsedRosterClasses.has(cls);
+                        const isCollapsed = !expandedRosterClasses.has(cls);
                         return (
                           <div key={cls}>
                             <button
@@ -5998,7 +6041,7 @@ export default function App() {
                   ...classesPresent.filter(c => !CLASS_ORDER.includes(c)),
                 ];
                 const toggleHomeworkClassGroup = (cls: string) => {
-                  setCollapsedHomeworkClasses(prev => {
+                  setExpandedHomeworkClasses(prev => {
                     const next = new Set(prev);
                     if (next.has(cls)) next.delete(cls); else next.add(cls);
                     return next;
@@ -6009,7 +6052,7 @@ export default function App() {
                   <div className="mt-4 space-y-5">
                     {orderedClasses.map((cls) => {
                       const group = adminHomework.filter((s: any) => (s.studentClass || 'Unspecified') === cls);
-                      const isCollapsed = collapsedHomeworkClasses.has(cls);
+                      const isCollapsed = !expandedHomeworkClasses.has(cls);
                       return (
                         <div key={cls}>
                           <button
