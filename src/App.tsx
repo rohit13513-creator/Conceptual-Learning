@@ -3126,7 +3126,7 @@ export default function App() {
             <div id="homework-upload-form" className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                  <Upload className="w-4 h-4 text-cyan-400" /> Upload Homework
+                  <Upload className="w-4 h-4 text-cyan-400" /> {mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Upload Homework'}
                 </h2>
                 <button
                   onClick={() => changeView('homeworkGuidelines')}
@@ -3201,7 +3201,7 @@ export default function App() {
                   disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
               </form>
             </div>
@@ -4778,10 +4778,12 @@ export default function App() {
 
             <div id="homework-upload-form" className={`border rounded-2xl p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <Upload className="w-5 h-5 text-cyan-400" /> Submit Homework
+                <Upload className="w-5 h-5 text-cyan-400" /> {mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. It will be checked and feedback will be sent here.{' '}
+                {mySubmissions.some((s) => s.assignmentId === selectedAssignmentId)
+                  ? "You've already submitted this homework -- uploading again replaces your existing submission with this new one and rechecks it, rather than creating a separate copy."
+                  : 'Upload photos of every completed page (or a single PDF). Multiple photos are automatically combined into one PDF. It will be checked and feedback will be sent here.'}{' '}
                 <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`underline cursor-pointer font-black ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
                   See how your score is calculated.
                 </button>
@@ -4869,7 +4871,7 @@ export default function App() {
                   disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
               </form>
             </div>

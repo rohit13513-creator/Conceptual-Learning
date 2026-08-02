@@ -313,34 +313,93 @@ async function concatenateSessionChunks(email: string, sessionId: string): Promi
 // submissions after this change to confirm grading quality holds up on messy handwriting.
 const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
+// Finds the student's existing submission for this assignment (if any) and overwrites it in
+// place with the new file, instead of inserting another row -- a student re-submitting the same
+// homework used to create a brand new row every single time, leaving the admin looking at three
+// or more entries for what was really just one piece of homework being refined. Returns the
+// row (new or updated) plus whatever question numbers were still outstanding on it before this
+// overwrite, so checkHomeworkSubmission can keep treating a resubmission as "fix just these"
+// without needing to look up a separate prior row that no longer exists under this model.
+async function upsertHomeworkSubmission(params: {
+  studentEmail: string;
+  assignmentId: string;
+  filePath: string;
+  subject: string | null;
+}): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
+  const { data: existing } = await supabase
+    .from("homework_submissions")
+    .select("id, file_path, status, missing_questions")
+    .eq("student_email", params.studentEmail)
+    .eq("assignment_id", params.assignmentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const priorMissingQuestions = existing.status === "checked" && Array.isArray(existing.missing_questions) && existing.missing_questions.length > 0
+      ? existing.missing_questions
+      : null;
+
+    const { data: updatedRow, error: updateError } = await supabase
+      .from("homework_submissions")
+      .update({
+        file_path: params.filePath,
+        subject: params.subject,
+        submitted_at: new Date().toISOString(),
+        status: "pending",
+        ai_score: null,
+        ai_feedback: null,
+        integrity_flag: null,
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (updateError || !updatedRow) throw new Error(updateError?.message || "Failed to update the existing submission record.");
+
+    // Old file is no longer referenced by anything -- remove it so replaced submissions don't
+    // pile up as orphaned storage. Non-fatal: the record update above already succeeded.
+    if (existing.file_path && existing.file_path !== params.filePath) {
+      const { error: removeError } = await supabase.storage.from(HOMEWORK_BUCKET).remove([existing.file_path]);
+      if (removeError) console.warn("Could not remove superseded homework file:", removeError.message);
+    }
+
+    return { row: updatedRow, priorMissingQuestions };
+  }
+
+  const { data: insertedRow, error: insertError } = await supabase
+    .from("homework_submissions")
+    .insert({
+      student_email: params.studentEmail,
+      file_path: params.filePath,
+      subject: params.subject,
+      assignment_id: params.assignmentId,
+    })
+    .select()
+    .single();
+
+  if (insertError || !insertedRow) throw new Error(insertError?.message || "Failed to save the submission record.");
+  return { row: insertedRow, priorMissingQuestions: null };
+}
+
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
 // Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
-async function checkHomeworkSubmission(submissionId: string) {
+// priorMissingQuestions carries over whatever was still outstanding on this row from its previous
+// check (see upsertHomeworkSubmission) -- undefined/null means this is either a first-time
+// submission or the previous check found nothing outstanding, so no resubmission scoping applies.
+async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
 
   // A student who got some questions wrong or missing may send just those questions in a
   // follow-up submission (an "Improve Score" resubmission) rather than resending everything.
-  // Look at their most recent checked submission for this same assignment so we only ask this
-  // file to cover what was actually still outstanding -- missing OR incorrect -- instead of
-  // re-flagging already-completed questions, and so a corrected wrong answer actually raises
-  // the score instead of being silently ignored because it was never "missing" to begin with.
+  // Scope this check to only what was actually still outstanding -- missing OR incorrect --
+  // instead of re-flagging already-completed questions, and so a corrected wrong answer actually
+  // raises the score instead of being silently ignored because it was never "missing" to begin with.
   let resubmissionNote = "";
-  if (sub.assignment_id) {
-    const { data: priorRows } = await supabase
-      .from("homework_submissions")
-      .select("id, submitted_at, missing_questions")
-      .eq("assignment_id", sub.assignment_id)
-      .eq("student_email", sub.student_email)
-      .eq("status", "checked")
-      .neq("id", submissionId)
-      .order("submitted_at", { ascending: false })
-      .limit(1);
-    const prior = priorRows?.[0];
-    if (prior && Array.isArray(prior.missing_questions) && prior.missing_questions.length > 0) {
-      const outstanding = prior.missing_questions.join(", ");
-      resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
-    }
+  if (priorMissingQuestions && priorMissingQuestions.length > 0) {
+    const outstanding = priorMissingQuestions.join(", ");
+    resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
   }
 
   const { data: fileBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
@@ -7271,26 +7330,23 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to save the reassembled homework PDF. Please try again." });
     }
 
-    const { data: insertedRow, error: insertError } = await supabase
-      .from("homework_submissions")
-      .insert({
-        student_email: auth.email,
-        file_path: filePath,
+    let upserted: { row: any; priorMissingQuestions: string[] | null };
+    try {
+      upserted = await upsertHomeworkSubmission({
+        studentEmail: auth.email,
+        assignmentId: String(assignmentId),
+        filePath,
         subject: subject ? String(subject).trim() : null,
-        assignment_id: assignmentId ? String(assignmentId) : null,
-      })
-      .select()
-      .single();
-
-    if (insertError || !insertedRow) {
-      console.error("Error saving homework submission record:", insertError?.message);
+      });
+    } catch (upsertErr: any) {
+      console.error("Error saving homework submission record:", upsertErr.message);
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
 
-    await checkHomeworkSubmission(insertedRow.id);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
 
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
   });
 
   // Student finishes a photo-based submission: merges every photo already uploaded for this
@@ -7333,29 +7389,26 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to save the combined homework PDF. Please try again." });
     }
 
-    const { data: insertedRow, error: insertError } = await supabase
-      .from("homework_submissions")
-      .insert({
-        student_email: auth.email,
-        file_path: filePath,
+    let upserted: { row: any; priorMissingQuestions: string[] | null };
+    try {
+      upserted = await upsertHomeworkSubmission({
+        studentEmail: auth.email,
+        assignmentId: String(assignmentId),
+        filePath,
         subject: subject ? String(subject).trim() : null,
-        assignment_id: assignmentId ? String(assignmentId) : null,
-      })
-      .select()
-      .single();
-
-    if (insertError || !insertedRow) {
-      console.error("Error saving homework submission record:", insertError?.message);
+      });
+    } catch (upsertErr: any) {
+      console.error("Error saving homework submission record:", upsertErr.message);
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
 
     // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
     // because a serverless function invocation can be frozen the instant its response is sent, which
     // would silently kill a background check before Claude ever replied.
-    await checkHomeworkSubmission(insertedRow.id);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
 
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
   });
 
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
@@ -7424,29 +7477,26 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to upload homework file. Please try again." });
     }
 
-    const { data: insertedRow, error: insertError } = await supabase
-      .from("homework_submissions")
-      .insert({
-        student_email: emailNormalized,
-        file_path: filePath,
+    let upserted: { row: any; priorMissingQuestions: string[] | null };
+    try {
+      upserted = await upsertHomeworkSubmission({
+        studentEmail: emailNormalized,
+        assignmentId: String(assignmentId),
+        filePath,
         subject: subject ? String(subject).trim() : null,
-        assignment_id: assignmentId ? String(assignmentId) : null,
-      })
-      .select()
-      .single();
-
-    if (insertError || !insertedRow) {
-      console.error("Error saving homework submission record:", insertError?.message);
+      });
+    } catch (upsertErr: any) {
+      console.error("Error saving homework submission record:", upsertErr.message);
       return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
     }
 
     // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
     // because a serverless function invocation can be frozen the instant its response is sent, which
     // would silently kill a background check before Claude ever replied.
-    await checkHomeworkSubmission(insertedRow.id);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", insertedRow.id).maybeSingle();
+    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
 
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || insertedRow) });
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
   });
 
   // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still
