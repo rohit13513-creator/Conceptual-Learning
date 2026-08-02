@@ -326,19 +326,33 @@ async function upsertHomeworkSubmission(params: {
   filePath: string;
   subject: string | null;
 }): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
-  const { data: existing } = await supabase
+  // missing_questions isn't a guaranteed column on every deployment of this table (see the
+  // fallback in checkHomeworkSubmission's write path) -- selecting it here when it doesn't exist
+  // would error the whole query and silently make every student look like a first-time submitter,
+  // defeating the entire point of this function. Fetch the guaranteed columns first, and only
+  // best-effort probe for missing_questions afterward.
+  const { data: existing, error: existingError } = await supabase
     .from("homework_submissions")
-    .select("id, file_path, status, missing_questions")
+    .select("id, file_path, status")
     .eq("student_email", params.studentEmail)
     .eq("assignment_id", params.assignmentId)
     .order("submitted_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  if (existingError) throw new Error(existingError.message);
+
   if (existing) {
-    const priorMissingQuestions = existing.status === "checked" && Array.isArray(existing.missing_questions) && existing.missing_questions.length > 0
-      ? existing.missing_questions
-      : null;
+    let priorMissingQuestions: string[] | null = null;
+    if (existing.status === "checked") {
+      const { data: mq } = await supabase
+        .from("homework_submissions")
+        .select("missing_questions")
+        .eq("id", existing.id)
+        .maybeSingle();
+      const list = (mq as any)?.missing_questions;
+      if (Array.isArray(list) && list.length > 0) priorMissingQuestions = list;
+    }
 
     const { data: updatedRow, error: updateError } = await supabase
       .from("homework_submissions")
