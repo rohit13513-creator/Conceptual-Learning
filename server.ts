@@ -412,7 +412,7 @@ SCORING RULES (CBSE board guidelines -- follow these exactly, the score must nev
 - NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
 - NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault.
 - NEVER treat a question marked "doubt" as a scoring deduction -- it is a self-flagged request for the teacher's help, not a wrong or missing answer, and must not lower the score.
-- NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. Read across pages to find the full answer to a question before judging whether it's complete or correct; only flag it if the answer is genuinely missing or wrong after accounting for this.
+- NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. A student very often runs out of room mid-derivation, so the concluding line ("Hence Proved", a final boxed answer, "= RHS", the last algebraic step) is frequently the very first line of the NEXT page rather than the last line of the page where the question started, and a proof that looks cut off at the bottom of a page is not evidence it was left unfinished. This is what the required pageByPageNotes field (see the tool schema) exists for: fill it in for every single page first, explicitly noting anything that opens a page as a continuation from the previous one, and only judge a question incomplete, wrong, or unconcluded after that page-by-page pass is done.
 - DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
 
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct or complete -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
@@ -439,13 +439,25 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     input_schema: {
       type: "object",
       properties: {
+        // Listed FIRST on purpose: tool arguments are generated in property order, so this forces
+        // an actual page-by-page read-through to happen before the model commits to score/feedback
+        // -- a prose instruction alone ("read across pages") was tried first and was not reliable;
+        // a real submission's Q29 conclusion sitting on the next page still got missed. Making the
+        // model write out what's on each page as a required step catches exactly that case, because
+        // it can no longer decide a question looks "incomplete" from one page without having
+        // already looked at, and written down, what opens the next one.
+        pageByPageNotes: {
+          type: "array",
+          items: { type: "string" },
+          description: "One entry per page of the student's submission, in the order the pages appear, BEFORE deciding anything about completeness. Each entry: which question number(s) appear or continue on that page, and -- critically -- whether the page OPENS with a continuation of a question whose working started on the previous page (e.g. a final algebraic step, 'Hence Proved', a boxed final answer, or '= RHS' as the very first thing on the page). This must be filled in for every page before any question is judged incomplete, wrong, or missing a conclusion."
+        },
         score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
       },
-      required: ["score", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions"],
+      required: ["pageByPageNotes", "score", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions"],
     },
   };
 
@@ -478,7 +490,11 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
           // so thinking is switched off outright rather than chasing an ever-larger budget.
           thinking: { type: "disabled" },
-          max_tokens: 1500,
+          // Raised from 1500 once pageByPageNotes was added to the schema -- that field alone can
+          // run a few hundred words on a long, multi-page submission, and a tight budget risked the
+          // model rushing or truncating the fields that come after it (score/feedback/
+          // missingQuestions), the same class of bug as the empty-feedback issue found earlier.
+          max_tokens: 3000,
           tools: [gradeTool],
           tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
