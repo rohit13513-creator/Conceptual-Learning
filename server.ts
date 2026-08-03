@@ -7417,10 +7417,14 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
 
-    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
-
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
+    // The AI check itself is triggered as a separate follow-up request (see
+    // POST /api/homework/check-mine below) rather than awaited right here -- this endpoint already
+    // spends real time reassembling and uploading the file, and grading a dense multi-page
+    // submission can itself take tens of seconds; doing both in one request risked the combined
+    // total crossing Vercel's function time limit, which killed the check silently mid-flight and
+    // left the row stuck at "pending" with no error ever logged. Splitting them gives the check its
+    // own full time budget, uncontended by the upload work that came before it.
+    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // Student finishes a photo-based submission: merges every photo already uploaded for this
@@ -7478,13 +7482,31 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
 
-    // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
-    // because a serverless function invocation can be frozen the instant its response is sent, which
-    // would silently kill a background check before Claude ever replied.
-    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
+    // The AI check itself is triggered as a separate follow-up request (see
+    // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
+    // comment in finalize-pdf-submission above for why.
+    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
+  });
 
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
+  // The follow-up half of a submission: runs the actual AI check, as its own request with its own
+  // full time budget, uncontended by the file merge/upload work the finalize-* endpoints above just
+  // did. Deliberately still awaited rather than fire-and-forget -- a serverless function invocation
+  // can be frozen the instant its response is sent, which would silently kill a background check
+  // before Claude ever replied. Scoped to the caller's own submissions only, unlike the admin
+  // reevaluate endpoint.
+  app.post("/api/homework/check-mine", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { submissionId, priorMissingQuestions } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const { data: existing } = await supabase.from("homework_submissions").select("id, student_email").eq("id", submissionId).maybeSingle();
+    if (!existing || existing.student_email !== auth.email) return res.status(404).json({ error: "Submission not found." });
+
+    await checkHomeworkSubmission(String(submissionId), Array.isArray(priorMissingQuestions) ? priorMissingQuestions : null);
+    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!checkedRow) return res.status(404).json({ error: "Submission not found after check." });
+    return res.json({ success: true, submission: mapHomeworkRow(checkedRow) });
   });
 
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
@@ -7566,13 +7588,10 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
     }
 
-    // Check immediately rather than waiting for the next cron sweep -- awaited (not fire-and-forget)
-    // because a serverless function invocation can be frozen the instant its response is sent, which
-    // would silently kill a background check before Claude ever replied.
-    await checkHomeworkSubmission(upserted.row.id, upserted.priorMissingQuestions);
-    const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", upserted.row.id).maybeSingle();
-
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow || upserted.row) });
+    // The AI check itself is triggered as a separate follow-up request (see
+    // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
+    // comment in finalize-pdf-submission above for why.
+    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still

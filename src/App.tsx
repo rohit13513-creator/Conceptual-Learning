@@ -1677,19 +1677,41 @@ export default function App() {
         });
       }
       if (!result.ok) throw new Error(result.data.error || 'Failed to upload homework.');
-      const checkedStatus = result.data.submission?.status;
-      const checkedScore = result.data.submission?.aiScore;
-      setHomeworkSuccess(
-        checkedStatus === 'checked'
-          ? `Homework submitted and checked!${checkedScore != null ? ` Score: ${checkedScore}/10.` : ''} See the feedback below.`
-          : 'Homework submitted successfully! It is being checked and feedback will appear below shortly.'
-      );
+      const submissionId = result.data.submission?.id;
       setHomeworkPhotoTempPaths([]);
       setHomeworkSessionId(crypto.randomUUID());
       setHomeworkPdfFile(null);
       setHomeworkSubject('');
       setSelectedAssignmentId('');
       fetchMyHomework();
+
+      // The file itself is already safely saved at this point -- the AI check runs as its own
+      // separate request (rather than being part of the finalize call above) so it gets a full,
+      // uncontended time budget instead of sharing one with the upload/merge work that just
+      // finished. If this second request fails or times out, the submission still exists and
+      // stays "pending" -- the daily cron sweep or an admin "Reevaluate" click will pick it up,
+      // so a problem here should never look like the submission itself failed.
+      if (submissionId) {
+        try {
+          const checkResult = await fetchJsonWithRetry({
+            url: '/api/homework/check-mine',
+            token: user.token,
+            body: { submissionId, priorMissingQuestions: result.data.priorMissingQuestions ?? null },
+          });
+          const checkedStatus = checkResult.data?.submission?.status;
+          const checkedScore = checkResult.data?.submission?.aiScore;
+          setHomeworkSuccess(
+            checkResult.ok && checkedStatus === 'checked'
+              ? `Homework submitted and checked!${checkedScore != null ? ` Score: ${checkedScore}/10.` : ''} See the feedback below.`
+              : 'Homework submitted successfully! It is taking a little longer than usual to check -- feedback will appear below shortly.'
+          );
+        } catch {
+          setHomeworkSuccess('Homework submitted successfully! It is taking a little longer than usual to check -- feedback will appear below shortly.');
+        }
+        fetchMyHomework();
+      } else {
+        setHomeworkSuccess('Homework submitted successfully! It is being checked and feedback will appear below shortly.');
+      }
     } catch (err: any) {
       setHomeworkError(err.message);
     } finally {
