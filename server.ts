@@ -562,20 +562,25 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           items: { type: "string" },
           description: "One entry per assigned question (by number -- 'Example N' or 'Exercise QN' if the assignment has more than one numbered list, including each lettered/numbered sub-part for questions with multiple parts, e.g. 'Exercise Q1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. First copy out the exact numbers/values the student actually wrote for that question -- do not recall or assume values from a similar-looking textbook problem. Then, for anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.), redo the calculation yourself digit-by-digit using those copied-out values, and state the correct result, then compare it to what the student concluded -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
         },
-        feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
-        // Listed LAST on purpose, for the same reason questionByQuestionCheck was moved ahead of
-        // it: a test run against a real failing submission showed the model could get
+        // Listed right after missingQuestions/incorrectQuestions (not literally last) on purpose:
+        // a test run against a real failing submission showed the model could get
         // questionByQuestionCheck and incorrectQuestions right (7 genuine problems correctly
         // identified) and STILL output score: 10, because score was still being generated before
-        // incorrectQuestions/missingQuestions were finalized -- the same bug one field-position
-        // earlier. Score must be the final field so the number is a straightforward function of
-        // the already-decided, already-written-down list of what's wrong, not a separate guess.
+        // incorrectQuestions/missingQuestions were finalized -- so score does need to come after
+        // those. But an earlier version of this schema put score as the LITERAL last field, and
+        // on a long/dense submission the response could hit max_tokens before ever reaching it --
+        // since a missing score fails the whole check with no retry (unlike missing feedback,
+        // which already retries), every submission dense enough to run long got permanently stuck
+        // at "pending" instead of graded. feedback is free text and the longest remaining field,
+        // so it goes last instead -- truncating it is already handled by the retry-on-empty-
+        // feedback logic below, whereas truncating score is not recoverable.
         score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10. Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
+        feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
-      required: ["pageByPageNotes", "questionByQuestionCheck", "feedback", "integrityFlag", "missingQuestions", "incorrectQuestions", "score"],
+      required: ["pageByPageNotes", "questionByQuestionCheck", "integrityFlag", "missingQuestions", "incorrectQuestions", "score", "feedback"],
     },
   };
 
@@ -608,12 +613,14 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
           // so thinking is switched off outright rather than chasing an ever-larger budget.
           thinking: { type: "disabled" },
-          // Raised from 1500 to 3000 once pageByPageNotes was added, then to 5000 once
-          // questionByQuestionCheck was added too -- a dense assignment with ~26 questions (some
-          // with up to 7 sub-parts) needs a verification entry per sub-part, and a tight budget
-          // risked the model rushing or truncating the fields that come after it (score/feedback/
-          // missingQuestions), the same class of bug as the empty-feedback issue found earlier.
-          max_tokens: 5000,
+          // Raised from 1500 to 3000 once pageByPageNotes was added, then to 5000 and now 7000
+          // once questionByQuestionCheck was added too -- a dense assignment with ~26 questions
+          // (some with up to 7 sub-parts) needs a verification entry per sub-part on top of the
+          // page-by-page notes, and a tight budget risked the model rushing or truncating the
+          // fields that come after it, the same class of bug as the empty-feedback issue found
+          // earlier -- except when the truncated field was score itself, the whole check failed
+          // outright with no retry, leaving the submission stuck at "pending" forever.
+          max_tokens: 7000,
           tools: [gradeTool],
           tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
@@ -632,19 +639,24 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       }
 
       const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
-      if (!resp.ok || !toolUseBlock || typeof toolUseBlock.input?.score !== "number") {
+      if (!resp.ok || !toolUseBlock) {
         lastErrorMessage = data?.error?.message || "Claude did not return a usable result.";
         break;
       }
-      // A valid score with a missing/empty feedback string usually means the response got cut
-      // off mid-generation (e.g. a long feedback string hit the token limit right as it was
-      // being written) -- retrying almost always gets a complete response back. Worth one more
-      // attempt before accepting an incomplete result, since an empty feedback field used to be
-      // indistinguishable in the UI from "not checked yet" at all.
+      // A missing score (or missing/empty feedback) almost always means the response got cut off
+      // mid-generation on a long/dense submission -- retrying almost always gets a complete
+      // response back. Worth one more attempt before giving up entirely, since either one failing
+      // outright used to leave the submission permanently stuck at "pending" with no automatic
+      // recovery (the empty-feedback case already retried; a missing score did not, until now).
+      const scoreMissing = typeof toolUseBlock.input?.score !== "number";
       const feedbackMissing = typeof toolUseBlock.input?.feedback !== "string" || !toolUseBlock.input.feedback.trim();
-      if (feedbackMissing && attempt < 2) {
-        lastErrorMessage = "Claude returned a score but no feedback text.";
+      if ((scoreMissing || feedbackMissing) && attempt < 2) {
+        lastErrorMessage = scoreMissing ? "Claude did not return a score." : "Claude returned a score but no feedback text.";
         continue;
+      }
+      if (scoreMissing) {
+        lastErrorMessage = "Claude did not return a usable result.";
+        break;
       }
       succeeded = true;
       break;
