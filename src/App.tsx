@@ -6293,21 +6293,23 @@ export default function App() {
                                           </div>
                                         )}
                                       </td>
-                                      <td className="py-3 pl-4 text-right space-y-1.5">
-                                        {sub.fileUrl && (
-                                          <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase inline-flex items-center gap-1 justify-end">
-                                            <Eye className="w-3.5 h-3.5" /> View
-                                          </a>
-                                        )}
-                                        <button
-                                          type="button"
-                                          disabled={reevaluatingIds.has(sub.id)}
-                                          onClick={() => handleReevaluateSubmission(sub.id)}
-                                          className="block ml-auto text-amber-400 hover:text-amber-300 font-bold text-[10px] uppercase inline-flex items-center gap-1 justify-end cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                          title="Re-run the AI check on this submission from scratch"
-                                        >
-                                          <RefreshCw className={`w-3.5 h-3.5 ${reevaluatingIds.has(sub.id) ? 'animate-spin' : ''}`} /> {reevaluatingIds.has(sub.id) ? 'Reevaluating...' : 'Reevaluate'}
-                                        </button>
+                                      <td className="py-3 pl-4 text-right">
+                                        <div className="flex flex-col items-end gap-2.5">
+                                          {sub.fileUrl && (
+                                            <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase">
+                                              <Eye className="w-3.5 h-3.5" /> View
+                                            </a>
+                                          )}
+                                          <button
+                                            type="button"
+                                            disabled={reevaluatingIds.has(sub.id)}
+                                            onClick={() => handleReevaluateSubmission(sub.id)}
+                                            className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold text-[10px] uppercase cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title="Re-run the AI check on this submission from scratch"
+                                          >
+                                            <RefreshCw className={`w-3.5 h-3.5 ${reevaluatingIds.has(sub.id) ? 'animate-spin' : ''}`} /> {reevaluatingIds.has(sub.id) ? 'Reevaluating...' : 'Reevaluate'}
+                                          </button>
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}

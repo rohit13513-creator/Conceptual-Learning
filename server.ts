@@ -308,6 +308,29 @@ async function concatenateSessionChunks(email: string, sessionId: string): Promi
   return combined;
 }
 
+// A finalize request can fully succeed on the server (temp files merged, uploaded, submission row
+// written, temp files cleaned up) and STILL appear to fail to the student, if their connection
+// drops for a moment while the success response is on its way back -- the browser's fetch() throws
+// a network error, the client's automatic retry logic resends the exact same finalize request, and
+// that retry finds nothing left to merge (it was already consumed by the first, silently-successful
+// attempt) and returns a confusing "no photos/file found" error, even though the homework is
+// already submitted. Before surfacing that error, check whether a submission for this exact
+// assignment was in fact just created -- if so, treat this as the success it actually was rather
+// than telling the student their real submission failed.
+async function findJustCreatedSubmission(studentEmail: string, assignmentId: string): Promise<any | null> {
+  const { data } = await supabase
+    .from("homework_submissions")
+    .select("*")
+    .eq("student_email", studentEmail)
+    .eq("assignment_id", assignmentId)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  const ageMs = Date.now() - new Date(data.submitted_at).getTime();
+  return ageMs >= 0 && ageMs < 3 * 60 * 1000 ? data : null;
+}
+
 // Haiku 4.5 -- switched from Sonnet 5 specifically to cut per-check API cost, since this is a
 // bounded, structured grading task rather than open-ended reasoning. Worth spot-checking real
 // submissions after this change to confirm grading quality holds up on messy handwriting.
@@ -475,6 +498,7 @@ Working out which questions were actually assigned:
 - If the student has correctly answered questions in the officially stated range, do not mark the homework incomplete just because those numbers don't match a differently-numbered question sheet.
 - If the student attempted extra questions outside the assigned range (bonus/extra practice), still check and grade those too -- do not ignore them and do not penalize the student for doing extra work.
 - If you genuinely cannot tell which questions were assigned (no range stated anywhere and no other way to infer it), just grade what's shown as usual, without guessing at what might be missing.
+- Many assignments (e.g. "Examples 1-11, Exercise Q1-11") contain TWO separately-numbered lists that both restart at 1 -- a bare "Q9" is genuinely ambiguous between them and risks quoting or checking the wrong problem entirely. Whenever an assignment has more than one numbered list, always write "Example N" or "Exercise QN" (never a bare number) everywhere you refer to a question -- in pageByPageNotes, questionByQuestionCheck, feedback, missingQuestions, and incorrectQuestions alike.
 
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") instead of an answer -- this means the student is stuck and wants the teacher to explain that question in class. Treat this as a self-flagged doubt, NOT a wrong or missing answer, and never mark a doubt as incorrect.
 
@@ -536,7 +560,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         questionByQuestionCheck: {
           type: "array",
           items: { type: "string" },
-          description: "One entry per assigned question (by number, including each lettered/numbered sub-part for questions with multiple parts, e.g. '1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. For anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.) actually redo the calculation yourself digit-by-digit and state the correct result, then compare it to what the student wrote -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
+          description: "One entry per assigned question (by number -- 'Example N' or 'Exercise QN' if the assignment has more than one numbered list, including each lettered/numbered sub-part for questions with multiple parts, e.g. 'Exercise Q1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. First copy out the exact numbers/values the student actually wrote for that question -- do not recall or assume values from a similar-looking textbook problem. Then, for anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.), redo the calculation yourself digit-by-digit using those copied-out values, and state the correct result, then compare it to what the student concluded -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
         },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
@@ -7354,6 +7378,8 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
     }
     if (!combined) {
+      const justCreated = await findJustCreatedSubmission(auth.email, String(assignmentId));
+      if (justCreated) return res.json({ success: true, submission: mapHomeworkRow(justCreated) });
       return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
     }
 
@@ -7413,6 +7439,8 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
     }
     if (!merged) {
+      const justCreated = await findJustCreatedSubmission(auth.email, String(assignmentId));
+      if (justCreated) return res.json({ success: true, submission: mapHomeworkRow(justCreated) });
       return res.status(400).json({ error: "No uploaded photos were found for this submission. Please attach at least one photo and wait for it to finish uploading before submitting." });
     }
 
