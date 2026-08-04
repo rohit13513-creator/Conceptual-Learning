@@ -7509,6 +7509,119 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(checkedRow) });
   });
 
+  // Admin uploads homework on behalf of a student who called in unable to submit it themselves --
+  // mirrors the student finalize-submission flow exactly, except the temp photos were uploaded
+  // under the ADMIN's own auth (via the same /api/homework/upload-photo endpoint the admin's
+  // browser calls with their own token) while the resulting submission is attributed to whichever
+  // student the admin selected. Also returns immediately without checking (see check-mine above
+  // for why); the frontend triggers the actual grading via the existing admin reevaluate endpoint.
+  app.post("/api/admin/homework/finalize-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required." });
+    const { studentEmail, sessionId, subject, assignmentId } = req.body;
+    if (!studentEmail) return res.status(400).json({ error: "Please choose which student this homework is for." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!assignmentId || !String(assignmentId).trim()) {
+      return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
+    }
+    const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+    if (!targetAssignment) return res.status(400).json({ error: "That homework assignment no longer exists." });
+
+    const emailNormalized = String(studentEmail).toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("email, status, role").eq("email", emailNormalized).maybeSingle();
+    if (!targetUser || targetUser.role !== "student") return res.status(404).json({ error: "Student account not found." });
+
+    let merged: Buffer | null;
+    try {
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+    } catch (mergeErr: any) {
+      console.error("Error merging admin-uploaded session photos:", mergeErr.message);
+      return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
+    }
+    if (!merged) {
+      return res.status(400).json({ error: "No uploaded photos were found for this submission. Please attach at least one photo and wait for it to finish uploading before submitting." });
+    }
+
+    const filePath = `${emailNormalized}/${Date.now()}-submission.pdf`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, merged, {
+      contentType: "application/pdf",
+    });
+    if (uploadError) {
+      console.error("Admin homework file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to save the combined homework PDF. Please try again." });
+    }
+
+    let upserted: { row: any; priorMissingQuestions: string[] | null };
+    try {
+      upserted = await upsertHomeworkSubmission({
+        studentEmail: emailNormalized,
+        assignmentId: String(assignmentId),
+        filePath,
+        subject: subject ? String(subject).trim() : null,
+      });
+    } catch (upsertErr: any) {
+      console.error("Error saving admin-uploaded submission record:", upsertErr.message);
+      return res.status(500).json({ error: "PDF created but failed to save the submission record." });
+    }
+
+    return res.json({ success: true, submission: mapHomeworkRow(upserted.row) });
+  });
+
+  // Same as above but for a single-PDF (chunked) upload rather than photos.
+  app.post("/api/admin/homework/finalize-pdf-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required." });
+    const { studentEmail, sessionId, subject, assignmentId } = req.body;
+    if (!studentEmail) return res.status(400).json({ error: "Please choose which student this homework is for." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!assignmentId || !String(assignmentId).trim()) {
+      return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
+    }
+    const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+    if (!targetAssignment) return res.status(400).json({ error: "That homework assignment no longer exists." });
+
+    const emailNormalized = String(studentEmail).toLowerCase().trim();
+    const { data: targetUser } = await supabase.from("users").select("email, status, role").eq("email", emailNormalized).maybeSingle();
+    if (!targetUser || targetUser.role !== "student") return res.status(404).json({ error: "Student account not found." });
+
+    let combined: Buffer | null;
+    try {
+      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+    } catch (concatErr: any) {
+      console.error("Error reassembling admin-uploaded PDF chunks:", concatErr.message);
+      return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
+    }
+    if (!combined) {
+      return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
+    }
+
+    const filePath = `${emailNormalized}/${Date.now()}-submission.pdf`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, combined, {
+      contentType: "application/pdf",
+    });
+    if (uploadError) {
+      console.error("Admin homework file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to save the reassembled homework PDF. Please try again." });
+    }
+
+    let upserted: { row: any; priorMissingQuestions: string[] | null };
+    try {
+      upserted = await upsertHomeworkSubmission({
+        studentEmail: emailNormalized,
+        assignmentId: String(assignmentId),
+        filePath,
+        subject: subject ? String(subject).trim() : null,
+      });
+    } catch (upsertErr: any) {
+      console.error("Error saving admin-uploaded submission record:", upsertErr.message);
+      return res.status(500).json({ error: "PDF created but failed to save the submission record." });
+    }
+
+    return res.json({ success: true, submission: mapHomeworkRow(upserted.row) });
+  });
+
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
   app.post("/api/homework/upload", (req, res, next) => {
     homeworkUpload.array("files", 15)(req, res, (err: any) => {

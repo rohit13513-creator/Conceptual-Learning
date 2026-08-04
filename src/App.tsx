@@ -645,7 +645,12 @@ export default function App() {
   const [homeworkUploading, setHomeworkUploading] = useState(false);
   const [homeworkUploadProgress, setHomeworkUploadProgress] = useState(0);
   const [homeworkError, setHomeworkError] = useState<string | null>(null);
-  const [homeworkSuccess, setHomeworkSuccess] = useState<string | null>(null);
+  // A student-side inline success message is easy to miss (scrolled past, or the page has already
+  // moved on) -- an actual pop-up is unmissable. Shown the moment the file is safely saved, since
+  // that's the confirmation a student actually needs right away; the AI check result itself still
+  // shows up in "Your Submissions" once ready.
+  const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState('');
   const [mySubmissions, setMySubmissions] = useState<any[]>([]);
   const [homeworkLoading, setHomeworkLoading] = useState(false);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
@@ -669,6 +674,21 @@ export default function App() {
   const [assignUploadProgress, setAssignUploadProgress] = useState(0);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
+
+  // Admin uploads a submission on a student's behalf (e.g. the student called in unable to
+  // upload it themselves) -- class, then student, then assignment, mirrors the request order a
+  // teacher would naturally think in.
+  const [adminUploadClass, setAdminUploadClass] = useState('');
+  const [adminUploadStudentEmail, setAdminUploadStudentEmail] = useState('');
+  const [adminUploadAssignmentId, setAdminUploadAssignmentId] = useState('');
+  const [adminUploadMode, setAdminUploadMode] = useState<'photos' | 'pdf'>('photos');
+  const [adminUploadSessionId, setAdminUploadSessionId] = useState(() => crypto.randomUUID());
+  const [adminUploadPhotoTempPaths, setAdminUploadPhotoTempPaths] = useState<string[]>([]);
+  const [adminUploadPhotosUploading, setAdminUploadPhotosUploading] = useState(false);
+  const [adminUploadPdfFile, setAdminUploadPdfFile] = useState<File | null>(null);
+  const [adminUploadUploading, setAdminUploadUploading] = useState(false);
+  const [adminUploadProgress, setAdminUploadProgress] = useState(0);
+  const [adminUploadError, setAdminUploadError] = useState<string | null>(null);
 
   // Feedback banner for Approve/Deny/Reset-Devices actions in the admin panel -- these are
   // fire-and-forget row actions with no other visible confirmation, so without this a
@@ -1525,6 +1545,101 @@ export default function App() {
     }
   };
 
+  // Admin uploads a submission on behalf of a student who called in unable to upload it
+  // themselves -- same two-request pattern as the student's own upload (finalize, then a
+  // separate check), reusing the existing admin reevaluate endpoint for the check step since it
+  // already does exactly "run the AI check on this submission id, admin-authorized".
+  const handleAdminHomeworkUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!adminUploadStudentEmail) { setAdminUploadError('Please choose a student.'); return; }
+    if (!adminUploadAssignmentId) { setAdminUploadError('Please choose a homework.'); return; }
+    if (adminUploadMode === 'photos' && adminUploadPhotoTempPaths.length === 0) return;
+    if (adminUploadMode === 'pdf' && !adminUploadPdfFile) return;
+    setAdminUploadUploading(true);
+    setAdminUploadProgress(0);
+    setAdminUploadError(null);
+    try {
+      let result: { ok: boolean; data: any };
+      if (adminUploadMode === 'photos') {
+        setAdminUploadProgress(100);
+        result = await fetchJsonWithRetry({
+          url: '/api/admin/homework/finalize-submission',
+          token: user.token,
+          body: {
+            studentEmail: adminUploadStudentEmail,
+            sessionId: adminUploadSessionId,
+            assignmentId: adminUploadAssignmentId,
+          },
+        });
+      } else {
+        const CHUNK_SIZE = 3 * 1024 * 1024;
+        const file = adminUploadPdfFile as File;
+        const totalSize = file.size;
+        let uploadedBytes = 0;
+        let order = 0;
+        for (let start = 0; start < file.size; start += CHUNK_SIZE) {
+          const chunk = file.slice(start, start + CHUNK_SIZE);
+          const chunkSize = chunk.size;
+          const chunkForm = new FormData();
+          chunkForm.append('sessionId', adminUploadSessionId);
+          chunkForm.append('order', String(order));
+          chunkForm.append('chunk', chunk, 'chunk.part');
+          const chunkResult = await uploadWithRetry({
+            url: '/api/homework/upload-chunk',
+            token: user.token,
+            formData: chunkForm,
+            onProgress: (fraction) => setAdminUploadProgress(Math.round(((uploadedBytes + fraction * chunkSize) / totalSize) * 100)),
+          });
+          if (!chunkResult.ok) throw new Error(chunkResult.data.error || 'Failed to upload part of the PDF. Please try again.');
+          uploadedBytes += chunkSize;
+          order += 1;
+          setAdminUploadProgress(Math.round((uploadedBytes / totalSize) * 100));
+        }
+        result = await fetchJsonWithRetry({
+          url: '/api/admin/homework/finalize-pdf-submission',
+          token: user.token,
+          body: {
+            studentEmail: adminUploadStudentEmail,
+            sessionId: adminUploadSessionId,
+            assignmentId: adminUploadAssignmentId,
+          },
+        });
+      }
+      if (!result.ok) throw new Error(result.data.error || 'Failed to upload homework.');
+      const submissionId = result.data.submission?.id;
+
+      setAdminUploadStudentEmail('');
+      setAdminUploadAssignmentId('');
+      setAdminUploadPhotoTempPaths([]);
+      setAdminUploadSessionId(crypto.randomUUID());
+      setAdminUploadPdfFile(null);
+      fetchAdminData();
+
+      setUploadSuccessMessage("The student's homework has been uploaded successfully. It's being checked now -- the score will appear in Homework Submissions shortly.");
+      setShowUploadSuccessModal(true);
+
+      if (submissionId) {
+        try {
+          await fetch('/api/admin/homework/reevaluate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+            body: JSON.stringify({ submissionId }),
+          });
+        } catch {
+          // Already told the admin the upload succeeded -- a failure here just means checking
+          // will happen later via the cron sweep or a manual Reevaluate click.
+        }
+        fetchAdminData();
+      }
+    } catch (err: any) {
+      setAdminUploadError(err.message);
+    } finally {
+      setAdminUploadUploading(false);
+      setAdminUploadProgress(0);
+    }
+  };
+
   const handleDeleteAssignment = async (id: string) => {
     if (!user) return;
     setAdminActionMessage(null);
@@ -1619,7 +1734,6 @@ export default function App() {
     setHomeworkUploading(true);
     setHomeworkUploadProgress(0);
     setHomeworkError(null);
-    setHomeworkSuccess(null);
     try {
       let result: { ok: boolean; data: any };
       if (homeworkMode === 'photos') {
@@ -1685,6 +1799,12 @@ export default function App() {
       setSelectedAssignmentId('');
       fetchMyHomework();
 
+      // A pop-up here, right when the file is confirmed saved, is unmissable in a way an inline
+      // line of text was not -- several students reported uploading successfully but not
+      // realizing it, because the confirmation was easy to scroll past or miss.
+      setUploadSuccessMessage("Your homework has been uploaded successfully. It's being checked now -- your score will appear in \"Your Submissions\" shortly.");
+      setShowUploadSuccessModal(true);
+
       // The file itself is already safely saved at this point -- the AI check runs as its own
       // separate request (rather than being part of the finalize call above) so it gets a full,
       // uncontended time budget instead of sharing one with the upload/merge work that just
@@ -1693,24 +1813,16 @@ export default function App() {
       // so a problem here should never look like the submission itself failed.
       if (submissionId) {
         try {
-          const checkResult = await fetchJsonWithRetry({
+          await fetchJsonWithRetry({
             url: '/api/homework/check-mine',
             token: user.token,
             body: { submissionId, priorMissingQuestions: result.data.priorMissingQuestions ?? null },
           });
-          const checkedStatus = checkResult.data?.submission?.status;
-          const checkedScore = checkResult.data?.submission?.aiScore;
-          setHomeworkSuccess(
-            checkResult.ok && checkedStatus === 'checked'
-              ? `Homework submitted and checked!${checkedScore != null ? ` Score: ${checkedScore}/10.` : ''} See the feedback below.`
-              : 'Homework submitted successfully! It is taking a little longer than usual to check -- feedback will appear below shortly.'
-          );
         } catch {
-          setHomeworkSuccess('Homework submitted successfully! It is taking a little longer than usual to check -- feedback will appear below shortly.');
+          // Already told the student their upload succeeded above -- a failure here just means
+          // checking will happen later via the cron sweep or an admin's Reevaluate click.
         }
         fetchMyHomework();
-      } else {
-        setHomeworkSuccess('Homework submitted successfully! It is being checked and feedback will appear below shortly.');
       }
     } catch (err: any) {
       setHomeworkError(err.message);
@@ -1729,7 +1841,6 @@ export default function App() {
     setHomeworkSubject(sub.subject || '');
     setHomeworkMode('photos');
     setHomeworkError(null);
-    setHomeworkSuccess(null);
     document.getElementById('homework-upload-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -3013,6 +3124,27 @@ export default function App() {
         </div>
       )}
 
+      {showUploadSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowUploadSuccessModal(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 text-center ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isLightMode ? 'bg-emerald-100' : 'bg-emerald-500/10'}`}>
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Homework Uploaded!</h3>
+            <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{uploadSuccessMessage}</p>
+            <button
+              onClick={() => setShowUploadSuccessModal(false)}
+              className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
         {/* ── 1. HOME HUB INITIAL VIEW PANEL ── */}
       {activeView === 'hub' && user.studentType === 'online' && (
         <div className={`flex-1 overflow-y-auto px-4 py-10 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
@@ -3208,9 +3340,6 @@ export default function App() {
 
               {homeworkError && (
                 <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{homeworkError}</div>
-              )}
-              {homeworkSuccess && (
-                <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2.5">{homeworkSuccess}</div>
               )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
@@ -4946,9 +5075,6 @@ export default function App() {
               {homeworkError && (
                 <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{homeworkError}</div>
               )}
-              {homeworkSuccess && (
-                <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2.5">{homeworkSuccess}</div>
-              )}
 
               <form onSubmit={handleHomeworkUpload} className="space-y-3">
                 <div className="space-y-1">
@@ -6180,6 +6306,127 @@ export default function App() {
 
               </div>
 
+            </div>
+
+            {/* Upload Homework For A Student */}
+            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400">
+                <Upload className="w-4 h-4 text-amber-400" /> Upload Homework For A Student
+              </h3>
+              <p className={`text-[11px] mt-1 mb-3 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>For when a student calls in unable to upload it themselves -- choose the class, student, and homework, then attach their work exactly as they would.</p>
+
+              {adminUploadError && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5 mb-3">{adminUploadError}</div>
+              )}
+
+              {(() => {
+                const nonAdminUsers = adminUsers.filter((u: any) => u.role !== 'admin' && u.status === 'approved');
+                const classesPresent: string[] = Array.from(new Set(nonAdminUsers.map((u: any) => u.studentClass || 'Unspecified')));
+                const CLASS_ORDER = ['VIII', 'IX', 'X', 'XI', 'XII'];
+                const orderedClasses = [
+                  ...CLASS_ORDER.filter((c) => classesPresent.includes(c)),
+                  ...classesPresent.filter((c) => !CLASS_ORDER.includes(c)),
+                ];
+                const studentsInClass = nonAdminUsers.filter((u: any) => (u.studentClass || 'Unspecified') === adminUploadClass);
+                const targetTrack = CLASS_TRACK_MAP[adminUploadClass];
+                const assignmentsForClass = assignments
+                  .filter((a: any) => a.targetClass === 'All' || a.targetClass === targetTrack)
+                  .slice()
+                  .sort((a: any, b: any) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+
+                return (
+                  <form onSubmit={handleAdminHomeworkUpload} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Class</label>
+                        <select
+                          value={adminUploadClass}
+                          onChange={(e) => { setAdminUploadClass(e.target.value); setAdminUploadStudentEmail(''); setAdminUploadAssignmentId(''); }}
+                          required
+                          className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                        >
+                          <option value="" disabled>-- Select class --</option>
+                          {orderedClasses.map((c) => (
+                            <option key={c} value={c}>{c === 'Unspecified' ? 'Unspecified Class' : `Class ${c}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Student</label>
+                        <select
+                          value={adminUploadStudentEmail}
+                          onChange={(e) => setAdminUploadStudentEmail(e.target.value)}
+                          required
+                          disabled={!adminUploadClass}
+                          className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 disabled:opacity-50 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                        >
+                          <option value="" disabled>{adminUploadClass ? '-- Select student --' : 'Select a class first'}</option>
+                          {studentsInClass.map((s: any) => (
+                            <option key={s.email} value={s.email}>{s.name} ({s.email})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework</label>
+                        <select
+                          value={adminUploadAssignmentId}
+                          onChange={(e) => setAdminUploadAssignmentId(e.target.value)}
+                          required
+                          disabled={!adminUploadClass}
+                          className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 disabled:opacity-50 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                        >
+                          <option value="" disabled>{adminUploadClass ? '-- Select homework --' : 'Select a class first'}</option>
+                          {assignmentsForClass.map((a: any) => (
+                            <option key={a.id} value={a.id}>{a.title} ({formatAssignmentDate(a.assignedDate)})</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex gap-1.5">
+                        <button type="button" onClick={() => { setAdminUploadMode('photos'); setAdminUploadSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${adminUploadMode === 'photos' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                        <button type="button" onClick={() => { setAdminUploadMode('pdf'); setAdminUploadSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${adminUploadMode === 'pdf' ? 'bg-amber-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
+                      </div>
+                      {adminUploadMode === 'photos' ? (
+                        <PhotoUploader
+                          key={adminUploadSessionId}
+                          token={user!.token}
+                          sessionId={adminUploadSessionId}
+                          isLightMode={isLightMode}
+                          disabled={adminUploadUploading}
+                          accent="amber"
+                          onChange={(paths, uploading) => { setAdminUploadPhotoTempPaths(paths); setAdminUploadPhotosUploading(uploading); }}
+                        />
+                      ) : (
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={(e) => setAdminUploadPdfFile(e.target.files?.[0] || null)}
+                          className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
+                        />
+                      )}
+                    </div>
+
+                    {adminUploadUploading && adminUploadMode === 'pdf' && (
+                      <div className="space-y-1">
+                        <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
+                          <div className="h-full bg-amber-400 transition-all duration-200" style={{ width: `${adminUploadProgress}%` }} />
+                        </div>
+                        <p className={`text-[10px] font-bold text-right ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{adminUploadProgress}% uploaded</p>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={adminUploadUploading || adminUploadPhotosUploading || !adminUploadStudentEmail || !adminUploadAssignmentId || (adminUploadMode === 'photos' ? adminUploadPhotoTempPaths.length === 0 : !adminUploadPdfFile)}
+                      className="w-full py-2.5 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {adminUploadUploading ? 'Uploading...' : adminUploadPhotosUploading ? 'Photos still uploading...' : 'Upload & Submit'}
+                    </button>
+                  </form>
+                );
+              })()}
             </div>
 
             {/* Homework Submissions */}
