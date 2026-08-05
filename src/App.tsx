@@ -521,6 +521,15 @@ export default function App() {
     'XI': 'unavailable',
     'XII': '12th',
   };
+  // Must mirror DEADLINE_TIME_BY_CLASS in server.ts exactly -- this is display-only text shown
+  // while posting an assignment, and a stale mismatch here is what caused the admin panel to show
+  // a flat "8:00 PM" for every class regardless of the actual class-specific deadline being saved.
+  const DEADLINE_TIME_LABEL: Record<string, string> = {
+    '8th': '6:45 PM',
+    '9th': '5:45 PM',
+    '10th': '4:45 PM',
+    '12th': '6:45 PM',
+  };
   const studentTrack: '8th' | '9th' | '10th' | '12th' | 'unavailable' | null = isClassExempt
     ? null
     : (CLASS_TRACK_MAP[user?.studentClass || ''] || 'unavailable');
@@ -6012,7 +6021,11 @@ export default function App() {
                         className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
                       />
                       <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {editingAssignmentId ? 'Deadline recalculates automatically from this date and the target class.' : "Deadline: 8:00 PM the next day. Past dates can't be selected."}
+                        {editingAssignmentId
+                          ? 'Deadline recalculates automatically from this date and the target class.'
+                          : assignTargetClass === 'All'
+                            ? "Deadline: the next day at each student's own class time (8th 6:45 PM, 9th 5:45 PM, 10th 4:45 PM, 12th 6:45 PM). Past dates can't be selected."
+                            : `Deadline: ${DEADLINE_TIME_LABEL[assignTargetClass] || '6:45 PM'} the next day. Past dates can't be selected.`}
                       </p>
                     </div>
                     <div className="space-y-1">
