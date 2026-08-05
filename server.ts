@@ -352,14 +352,17 @@ async function upsertHomeworkSubmission(params: {
   filePath: string;
   subject: string | null;
 }): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
-  // missing_questions isn't a guaranteed column on every deployment of this table (see the
-  // fallback in checkHomeworkSubmission's write path) -- selecting it here when it doesn't exist
-  // would error the whole query and silently make every student look like a first-time submitter,
-  // defeating the entire point of this function. Fetch the guaranteed columns first, and only
-  // best-effort probe for missing_questions afterward.
+  // Carries the previously-outstanding question numbers (missing or incorrect) into a
+  // resubmission's grading context (see checkHomeworkSubmission's resubmissionNote) -- without
+  // this, a student who resubmits just their corrected questions gets graded as if the rest of
+  // the assignment was never attempted, since the AI only sees what's in the new file. This was
+  // originally meant to live in a dedicated `missing_questions` column, but that migration was
+  // never actually applied to the live database -- `admin_notes` is a guaranteed-existing column
+  // that nothing else in this app reads or writes, so it's reused here instead (as a JSON-encoded
+  // array of question-number strings) to avoid depending on a schema change that isn't there.
   const { data: existing, error: existingError } = await supabase
     .from("homework_submissions")
-    .select("id, file_path, status")
+    .select("id, file_path, status, admin_notes")
     .eq("student_email", params.studentEmail)
     .eq("assignment_id", params.assignmentId)
     .order("submitted_at", { ascending: false })
@@ -370,14 +373,14 @@ async function upsertHomeworkSubmission(params: {
 
   if (existing) {
     let priorMissingQuestions: string[] | null = null;
-    if (existing.status === "checked") {
-      const { data: mq } = await supabase
-        .from("homework_submissions")
-        .select("missing_questions")
-        .eq("id", existing.id)
-        .maybeSingle();
-      const list = (mq as any)?.missing_questions;
-      if (Array.isArray(list) && list.length > 0) priorMissingQuestions = list;
+    if (existing.status === "checked" && existing.admin_notes) {
+      try {
+        const list = JSON.parse(existing.admin_notes);
+        if (Array.isArray(list) && list.length > 0) priorMissingQuestions = list;
+      } catch {
+        // Not JSON -- e.g. a genuine admin note from before this reuse, or a fully-correct
+        // submission that had nothing outstanding to record. Either way, treat as none.
+      }
     }
 
     const { data: updatedRow, error: updateError } = await supabase
@@ -692,9 +695,11 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       }
     }
 
-    // Stored under the one existing "missing_questions" column (no schema change needed) as the
-    // union of truly-missing and attempted-but-wrong questions -- everything still outstanding
-    // that a resubmission should specifically target. See the resubmission note built above.
+    // Union of truly-missing and attempted-but-wrong questions -- everything still outstanding
+    // that a resubmission should specifically target. Stored in admin_notes (see the comment on
+    // upsertHomeworkSubmission's read side for why) so a later "Improve Score" resubmission knows
+    // to only grade these questions fresh and carry over credit for everything else. Cleared back
+    // to null once nothing is outstanding, rather than persisting a stale empty array.
     const outstandingQuestions = Array.from(new Set([
       ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
       ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
@@ -705,20 +710,9 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
-      missing_questions: outstandingQuestions,
+      admin_notes: outstandingQuestions.length > 0 ? JSON.stringify(outstandingQuestions) : null,
     }).eq("id", submissionId);
-    if (updateError) {
-      // Falls back to a write without missing_questions if that column hasn't been migrated in
-      // yet on this database -- the grading result itself still gets saved either way.
-      console.warn("homework_submissions.missing_questions column unavailable (run the latest schema migration):", updateError.message);
-      const { error: fallbackError } = await supabase.from("homework_submissions").update({
-        status: "checked",
-        ai_score: typeof parsed.score === "number" ? parsed.score : null,
-        ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
-        integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
-      }).eq("id", submissionId);
-      if (fallbackError) throw new Error(fallbackError.message);
-    }
+    if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
     console.error(`Error checking homework submission ${submissionId}:`, err.message);
   }
@@ -738,6 +732,13 @@ function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
     integrityFlag: row.integrity_flag,
     fileUrl: fileUrl ?? null,
   };
+}
+
+// integrityFlag is an admin-only signal, and adminNotes doubles as internal resubmission-scoping
+// bookkeeping (see upsertHomeworkSubmission) -- neither should ever reach a student-facing response.
+function mapHomeworkRowForStudent(row: any, fileUrl?: string | null): Omit<HomeworkSubmission, "integrityFlag" | "adminNotes"> {
+  const { integrityFlag, adminNotes, ...rest } = mapHomeworkRow(row, fileUrl);
+  return rest;
 }
 
 function mapAssignmentRow(row: any, fileUrl?: string | null): HomeworkAssignment {
@@ -7397,7 +7398,7 @@ function buildApp(): express.Express {
     }
     if (!combined) {
       const justCreated = await findJustCreatedSubmission(auth.email, String(assignmentId));
-      if (justCreated) return res.json({ success: true, submission: mapHomeworkRow(justCreated) });
+      if (justCreated) return res.json({ success: true, submission: mapHomeworkRowForStudent(justCreated) });
       return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
     }
 
@@ -7430,7 +7431,7 @@ function buildApp(): express.Express {
     // total crossing Vercel's function time limit, which killed the check silently mid-flight and
     // left the row stuck at "pending" with no error ever logged. Splitting them gives the check its
     // own full time budget, uncontended by the upload work that came before it.
-    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
+    return res.json({ success: true, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // Student finishes a photo-based submission: merges every photo already uploaded for this
@@ -7462,7 +7463,7 @@ function buildApp(): express.Express {
     }
     if (!merged) {
       const justCreated = await findJustCreatedSubmission(auth.email, String(assignmentId));
-      if (justCreated) return res.json({ success: true, submission: mapHomeworkRow(justCreated) });
+      if (justCreated) return res.json({ success: true, submission: mapHomeworkRowForStudent(justCreated) });
       return res.status(400).json({ error: "No uploaded photos were found for this submission. Please attach at least one photo and wait for it to finish uploading before submitting." });
     }
 
@@ -7491,7 +7492,7 @@ function buildApp(): express.Express {
     // The AI check itself is triggered as a separate follow-up request (see
     // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
     // comment in finalize-pdf-submission above for why.
-    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
+    return res.json({ success: true, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // The follow-up half of a submission: runs the actual AI check, as its own request with its own
@@ -7512,7 +7513,7 @@ function buildApp(): express.Express {
     await checkHomeworkSubmission(String(submissionId), Array.isArray(priorMissingQuestions) ? priorMissingQuestions : null);
     const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!checkedRow) return res.status(404).json({ error: "Submission not found after check." });
-    return res.json({ success: true, submission: mapHomeworkRow(checkedRow) });
+    return res.json({ success: true, submission: mapHomeworkRowForStudent(checkedRow) });
   });
 
   // Admin uploads homework on behalf of a student who called in unable to submit it themselves --
@@ -7710,7 +7711,7 @@ function buildApp(): express.Express {
     // The AI check itself is triggered as a separate follow-up request (see
     // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
     // comment in finalize-pdf-submission above for why.
-    return res.json({ success: true, submission: mapHomeworkRow(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
+    return res.json({ success: true, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still
@@ -7783,6 +7784,11 @@ function buildApp(): express.Express {
         status: "checked",
         ai_score: scoreNum,
         ai_feedback: feedback && String(feedback).trim() ? String(feedback).trim() : null,
+        // A manual grade is the teacher's final word on the whole assignment -- clear any
+        // outstanding-questions tracking left over from a previous AI check (see admin_notes'
+        // reuse in upsertHomeworkSubmission/checkHomeworkSubmission) so a future resubmission
+        // doesn't get scoped against stale AI-era state the manual grade already superseded.
+        admin_notes: null,
       })
       .eq("id", submissionId)
       .select()
@@ -7808,8 +7814,10 @@ function buildApp(): express.Express {
 
     const submissions = await Promise.all((rows || []).map(async (r) => {
       const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
-      // integrityFlag is an admin-only signal -- never expose it to the student's own view.
-      const { integrityFlag, ...rest } = mapHomeworkRow(r, signed?.signedUrl);
+      // integrityFlag is an admin-only signal, and adminNotes now doubles as internal
+      // resubmission-scoping bookkeeping (see upsertHomeworkSubmission) -- neither should ever
+      // reach the student's own view.
+      const { integrityFlag, adminNotes, ...rest } = mapHomeworkRow(r, signed?.signedUrl);
       return rest;
     }));
 
