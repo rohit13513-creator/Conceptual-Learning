@@ -331,10 +331,13 @@ async function findJustCreatedSubmission(studentEmail: string, assignmentId: str
   return ageMs >= 0 && ageMs < 3 * 60 * 1000 ? data : null;
 }
 
-// Haiku 4.5 -- switched from Sonnet 5 specifically to cut per-check API cost, since this is a
-// bounded, structured grading task rather than open-ended reasoning. Worth spot-checking real
-// submissions after this change to confirm grading quality holds up on messy handwriting.
-const CLAUDE_MODEL = "claude-haiku-4-5-20251001";
+// Sonnet 5 -- reverted from a Haiku 4.5 cost-cutting change that turned out to produce unreliable
+// arithmetic verification. Real submissions showed the same fixed MCQ (a Heron's-formula area
+// calculation) "corrected" to four different wrong values across different students' checks --
+// Haiku was getting its own digit-by-digit re-derivation wrong, which is exactly the field this
+// grading tool relies on to decide correct vs incorrect. Grading real students' work needs the
+// stronger model; cost savings aren't worth marking correct answers wrong.
+const CLAUDE_MODEL = "claude-sonnet-5";
 
 // Finds the student's existing submission for this assignment (if any) and overwrites it in
 // place with the new file, instead of inserting another row -- a student re-submitting the same
@@ -607,20 +610,21 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           // reads it back at a fraction of the normal input-token cost instead of paying full
           // price for the same ~500-word instructions on every single submission.
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-          // Extended thinking can run away on this task -- with a question-sheet attachment
-          // (a second, denser document) it was consuming the entire token budget on internal
-          // reasoning and leaving nothing for the actual answer, even at max_tokens 8192.
-          // Grading doesn't need exposed step-by-step reasoning, just a reliable final judgment,
-          // so thinking is switched off outright rather than chasing an ever-larger budget.
-          thinking: { type: "disabled" },
-          // Raised from 1500 to 3000 once pageByPageNotes was added, then to 5000 and now 7000
-          // once questionByQuestionCheck was added too -- a dense assignment with ~26 questions
-          // (some with up to 7 sub-parts) needs a verification entry per sub-part on top of the
-          // page-by-page notes, and a tight budget risked the model rushing or truncating the
-          // fields that come after it, the same class of bug as the empty-feedback issue found
-          // earlier -- except when the truncated field was score itself, the whole check failed
-          // outright with no retry, leaving the submission stuck at "pending" forever.
-          max_tokens: 7000,
+          // Thinking was previously disabled to avoid it consuming the whole token budget on a
+          // dense question-sheet attachment. That trade-off turned out to cost more than it
+          // saved: without real scratch space, the model's own digit-by-digit arithmetic
+          // (required by questionByQuestionCheck to verify a student's answer) was landing wrong
+          // -- the same fixed MCQ came back "corrected" to four different values across
+          // different students' submissions. Adaptive thinking at a moderate effort level gives
+          // it room to actually work through the calculation instead of committing to a number
+          // in one pass, at the cost of somewhat higher latency per check.
+          thinking: { type: "adaptive" },
+          output_config: { effort: "medium" },
+          // Raised to 12000 to give thinking real room on top of the existing structured-output
+          // budget (pageByPageNotes + questionByQuestionCheck for a dense ~26-question
+          // assignment) -- a tight budget here risks the same truncation failure mode described
+          // below, now with thinking tokens competing for the same ceiling.
+          max_tokens: 12000,
           tools: [gradeTool],
           tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
