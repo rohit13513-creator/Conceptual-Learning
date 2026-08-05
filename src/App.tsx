@@ -643,6 +643,14 @@ export default function App() {
   const [checkNowResult, setCheckNowResult] = useState<string | null>(null);
   // Which admin homework rows currently have a manual reevaluation in flight, keyed by submission id.
   const [reevaluatingIds, setReevaluatingIds] = useState<Set<string>>(new Set());
+  // Manual grading -- lets the admin set a submission's score/feedback directly instead of
+  // relying on the AI check at all, for whenever the automated grading (or a lack of it) got it
+  // wrong and the teacher wants full control.
+  const [manualGradeSub, setManualGradeSub] = useState<any | null>(null);
+  const [manualGradeScore, setManualGradeScore] = useState('');
+  const [manualGradeFeedback, setManualGradeFeedback] = useState('');
+  const [manualGradeSaving, setManualGradeSaving] = useState(false);
+  const [manualGradeError, setManualGradeError] = useState<string | null>(null);
 
   // Homework Upload States
   const [homeworkSubject, setHomeworkSubject] = useState('');
@@ -1249,6 +1257,35 @@ export default function App() {
       setAdminError(err.message);
     } finally {
       setAdminLoading(false);
+    }
+  };
+
+  const openManualGrade = (sub: any) => {
+    setManualGradeSub(sub);
+    setManualGradeScore(sub.aiScore != null ? String(sub.aiScore) : '');
+    setManualGradeFeedback(sub.aiFeedback || '');
+    setManualGradeError(null);
+  };
+
+  const handleSaveManualGrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !manualGradeSub) return;
+    setManualGradeError(null);
+    setManualGradeSaving(true);
+    try {
+      const resp = await fetch('/api/admin/homework/manual-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+        body: JSON.stringify({ submissionId: manualGradeSub.id, score: manualGradeScore, feedback: manualGradeFeedback }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || 'Failed to save the manual grade.');
+      setManualGradeSub(null);
+      await fetchAdminData();
+    } catch (err: any) {
+      setManualGradeError(err.message);
+    } finally {
+      setManualGradeSaving(false);
     }
   };
 
@@ -3150,6 +3187,65 @@ export default function App() {
             >
               OK
             </button>
+          </div>
+        </div>
+      )}
+
+      {manualGradeSub && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !manualGradeSaving && setManualGradeSub(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div>
+              <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Manual Grade</h3>
+              <p className={`text-xs font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{manualGradeSub.studentName} -- {manualGradeSub.assignmentTitle || manualGradeSub.subject || 'Homework'}</p>
+            </div>
+            {manualGradeError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{manualGradeError}</div>
+            )}
+            <form onSubmit={handleSaveManualGrade} className="space-y-3">
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Score (out of 10)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={manualGradeScore}
+                  onChange={(e) => setManualGradeScore(e.target.value)}
+                  required
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Feedback (optional)</label>
+                <textarea
+                  value={manualGradeFeedback}
+                  onChange={(e) => setManualGradeFeedback(e.target.value)}
+                  rows={4}
+                  placeholder="Remarks for the student..."
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setManualGradeSub(null)}
+                  disabled={manualGradeSaving}
+                  className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={manualGradeSaving}
+                  className="flex-1 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {manualGradeSaving ? 'Saving...' : 'Save Grade'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -6590,6 +6686,14 @@ export default function App() {
                                             title="Re-run the AI check on this submission from scratch"
                                           >
                                             <RefreshCw className={`w-3.5 h-3.5 ${reevaluatingIds.has(sub.id) ? 'animate-spin' : ''}`} /> {reevaluatingIds.has(sub.id) ? 'Reevaluating...' : 'Reevaluate'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => openManualGrade(sub)}
+                                            className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                            title="Set this submission's score and feedback yourself, bypassing the AI"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" /> Manual Grade
                                           </button>
                                         </div>
                                       </td>

@@ -7761,6 +7761,39 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
+  // Lets the admin set a submission's score and feedback directly, bypassing the AI entirely --
+  // for when the automated grading (or a lack of it, e.g. no API credit) got it wrong and the
+  // teacher wants full manual control rather than just re-running the same AI check again.
+  app.post("/api/admin/homework/manual-grade", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId, score, feedback } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const scoreNum = Number(score);
+    if (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > 10) {
+      return res.status(400).json({ error: "Score must be a whole number from 0 to 10." });
+    }
+
+    const { data: existing } = await supabase.from("homework_submissions").select("id").eq("id", submissionId).maybeSingle();
+    if (!existing) return res.status(404).json({ error: "Submission not found." });
+
+    const { data: updated, error } = await supabase
+      .from("homework_submissions")
+      .update({
+        status: "checked",
+        ai_score: scoreNum,
+        ai_feedback: feedback && String(feedback).trim() ? String(feedback).trim() : null,
+      })
+      .eq("id", submissionId)
+      .select()
+      .single();
+    if (error || !updated) {
+      console.error("Manual grade save error:", error?.message);
+      return res.status(500).json({ error: "Failed to save the manual grade. Please try again." });
+    }
+    return res.json({ success: true, submission: mapHomeworkRow(updated) });
+  });
+
   // Student views their own homework submission history
   app.get("/api/homework/mine", async (req, res) => {
     const auth = requireAuth(req, res);
