@@ -8052,16 +8052,20 @@ function buildApp(): express.Express {
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
       supabase.from("users").select("email, name, student_class, role, status, student_type"),
-      supabase.from("homework_submissions").select("student_email, assignment_id"),
+      supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at"),
     ]);
 
     // Online (self-study) students are never assigned homework, so they're excluded from the roster.
     const students = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved" && u.student_type !== "online");
-    const submittedByAssignment = new Map<string, Set<string>>();
+    // Keyed by assignment id -> student email -> that student's submitted_at. The upsert-per-
+    // assignment model means there's only ever one row per (student, assignment) pair, so this
+    // timestamp is always their latest (i.e. current) submission for it -- exactly what "late"
+    // should be judged against.
+    const submittedByAssignment = new Map<string, Map<string, string>>();
     (submissionRows || []).forEach((s: any) => {
       if (!s.assignment_id) return;
-      if (!submittedByAssignment.has(s.assignment_id)) submittedByAssignment.set(s.assignment_id, new Set());
-      submittedByAssignment.get(s.assignment_id)!.add(s.student_email);
+      if (!submittedByAssignment.has(s.assignment_id)) submittedByAssignment.set(s.assignment_id, new Map());
+      submittedByAssignment.get(s.assignment_id)!.set(s.student_email, s.submitted_at);
     });
 
     // An assignment posted to "All" classes doesn't have one shared deadline in practice -- each
@@ -8079,8 +8083,14 @@ function buildApp(): express.Express {
         if (!deadlinePassed) continue; // only report once a class's own deadline has actually passed
 
         const roster = students.filter((u: any) => CLASS_TO_TARGET[u.student_class] === key);
-        const submitted = submittedByAssignment.get(a.id) || new Set<string>();
+        const submitted = submittedByAssignment.get(a.id) || new Map<string, string>();
         const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+        const late = roster
+          .filter((u: any) => {
+            const submittedAt = submitted.get(u.email);
+            return !!submittedAt && !!effectiveDeadline && new Date(submittedAt).getTime() > new Date(effectiveDeadline).getTime();
+          })
+          .map((u: any) => ({ email: u.email, name: u.name }));
         report.push({
           id: a.target_class === "All" ? `${a.id}-${key}` : a.id,
           title: a.target_class === "All" ? `${a.title} (Class ${TARGET_TO_LABEL[key] || key})` : a.title,
@@ -8090,11 +8100,94 @@ function buildApp(): express.Express {
           rosterCount: roster.length,
           submittedCount: roster.filter((u: any) => submitted.has(u.email)).length,
           missing,
+          late,
         });
       }
     }
 
     return res.json({ report });
+  });
+
+  // Class performance / ranking report over a date range -- every student in the chosen class,
+  // ranked by total score across every assignment that falls in range, with a per-assignment
+  // breakdown (score + on-time/late) so the admin can see both the day-by-day picture and the
+  // total at once.
+  app.get("/api/admin/homework/report", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { fromDate, toDate, targetClass } = req.query as { fromDate?: string; toDate?: string; targetClass?: string };
+    if (!fromDate || !toDate) return res.status(400).json({ error: "Please choose both a from date and a to date." });
+    if (!targetClass || (!(targetClass in DEADLINE_TIME_BY_CLASS) && targetClass !== "12th")) {
+      return res.status(400).json({ error: "Please choose a class." });
+    }
+    if (new Date(`${fromDate}T00:00:00Z`).getTime() > new Date(`${toDate}T00:00:00Z`).getTime()) {
+      return res.status(400).json({ error: "The from date must be on or before the to date." });
+    }
+
+    // A day's homework is due (deadline) the NEXT day -- so homework assigned the day before
+    // fromDate is the homework students are actually turning in/being scored on as of fromDate,
+    // and belongs in the report even though its own assigned_date falls just outside the picked
+    // range. Extending the query's lower bound back by one day captures exactly that one extra
+    // day, without needing to touch the upper bound (toDate's own assignment is still included
+    // by plain range membership, regardless of whether its next-day deadline has passed yet).
+    const queryFromDate = new Date(`${fromDate}T12:00:00Z`);
+    queryFromDate.setUTCDate(queryFromDate.getUTCDate() - 1);
+    const queryFromDateStr = queryFromDate.toISOString().slice(0, 10);
+
+    const { data: assignmentRows } = await supabase
+      .from("homework_assignments")
+      .select("id, title, subject, assigned_date, deadline, target_class")
+      .in("target_class", [targetClass, "All"])
+      .gte("assigned_date", queryFromDateStr)
+      .lte("assigned_date", toDate)
+      .order("assigned_date", { ascending: true });
+
+    const assignments = (assignmentRows || []).map((a: any) => ({
+      id: a.id,
+      title: a.title,
+      subject: a.subject,
+      assignedDate: a.assigned_date,
+      deadline: a.target_class === "All" ? computeDeadline(a.assigned_date, targetClass) : a.deadline,
+    }));
+
+    const { data: userRows } = await supabase
+      .from("users")
+      .select("email, name, student_class, role, status, student_type");
+    const roster = (userRows || []).filter(
+      (u: any) => u.role === "student" && u.status === "approved" && u.student_type !== "online" && CLASS_TO_TARGET[u.student_class] === targetClass
+    );
+
+    let submissionRows: any[] = [];
+    if (assignments.length > 0) {
+      const { data } = await supabase
+        .from("homework_submissions")
+        .select("student_email, assignment_id, status, ai_score, submitted_at")
+        .in("assignment_id", assignments.map((a) => a.id));
+      submissionRows = data || [];
+    }
+    // Keyed by "assignmentId|studentEmail" -- the upsert-per-assignment model means at most one
+    // row can exist per pair, so no ordering/dedup concerns here.
+    const submissionByKey = new Map<string, any>();
+    submissionRows.forEach((s) => submissionByKey.set(`${s.assignment_id}|${s.student_email}`, s));
+
+    const studentsReport = roster.map((u: any) => {
+      let total = 0;
+      const perAssignment = assignments.map((a) => {
+        const sub = submissionByKey.get(`${a.id}|${u.email}`);
+        if (!sub) return { assignmentId: a.id, state: "missing" as const, score: 0, isLate: false };
+        const isLate = !!a.deadline && new Date(sub.submitted_at).getTime() > new Date(a.deadline).getTime();
+        if (sub.status !== "checked" || typeof sub.ai_score !== "number") {
+          return { assignmentId: a.id, state: "pending" as const, score: 0, isLate };
+        }
+        total += sub.ai_score;
+        return { assignmentId: a.id, state: "checked" as const, score: sub.ai_score, isLate };
+      });
+      return { email: u.email, name: u.name, total, maxPossible: assignments.length * 10, perAssignment };
+    });
+
+    studentsReport.sort((a, b) => b.total - a.total);
+    const ranked = studentsReport.map((s, idx) => ({ rank: idx + 1, ...s }));
+
+    return res.json({ assignments, students: ranked });
   });
 
   // Everyone (students + admin) can view the list of posted announcements/updates
