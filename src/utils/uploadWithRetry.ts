@@ -24,8 +24,20 @@ interface JsonWithRetryOptions {
 function waitForOnline(): Promise<void> {
   if (typeof navigator === 'undefined' || navigator.onLine) return Promise.resolve();
   return new Promise((resolve) => {
-    const handler = () => { window.removeEventListener('online', handler); resolve(); };
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('online', handler);
+      clearInterval(poll);
+      resolve();
+    };
+    const handler = () => finish();
     window.addEventListener('online', handler);
+    // navigator.onLine can get stuck reporting false on some mobile browsers even once the
+    // connection is actually back, and the 'online' event doesn't reliably fire to correct it --
+    // poll as a fallback so a real reconnect is never missed and this can't wait forever.
+    const poll = setInterval(() => { if (navigator.onLine) finish(); }, 2000);
   });
 }
 
@@ -33,14 +45,17 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Shared retry loop: waits for the browser to be back online, then tries `attempt`. A genuine
-// network-level failure (thrown by `attempt`) is retried with exponential backoff; a real server
-// response is returned as-is on the first try and never retried, so a validation error still
-// surfaces immediately instead of being silently retried 6 times.
+// Shared retry loop: tries `attempt` immediately, then waits for the browser to be back online
+// before each retry. The online check is deliberately NOT applied before the very first attempt --
+// navigator.onLine is unreliable on mobile browsers and can misreport `false` for an instant even
+// while genuinely connected; gating the first attempt on it caused later photos in a multi-photo
+// upload to hang forever waiting for an 'online' event that was never going to fire, with no error
+// shown at all. A genuine network-level failure (thrown by `attempt`) is retried with exponential
+// backoff; a real server response is returned as-is on the first try and never retried, so a
+// validation error still surfaces immediately instead of being silently retried 6 times.
 async function withNetworkRetry<T>(attempt: () => Promise<T>, onRetry: () => void, maxRetries: number): Promise<T> {
   let count = 0;
   for (;;) {
-    await waitForOnline();
     try {
       return await attempt();
     } catch {
@@ -49,6 +64,7 @@ async function withNetworkRetry<T>(attempt: () => Promise<T>, onRetry: () => voi
         throw new Error('Upload failed -- your network connection was interrupted. Please check your connection and try again.');
       }
       onRetry();
+      await waitForOnline();
       await delay(Math.min(1000 * 2 ** (count - 1), 15000));
     }
   }
