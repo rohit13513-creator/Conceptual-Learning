@@ -660,6 +660,12 @@ export default function App() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<{ assignments: any[]; students: any[] } | null>(null);
+  // Late-status toggle -- which rows currently have a late/not-late flip in flight.
+  const [togglingLateIds, setTogglingLateIds] = useState<Set<string>>(new Set());
+  // Delete-submission confirmation -- holds the submission pending deletion (null = no dialog open).
+  const [deleteConfirmSub, setDeleteConfirmSub] = useState<any | null>(null);
+  const [deletingSubmission, setDeletingSubmission] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Homework Upload States
   const [homeworkSubject, setHomeworkSubject] = useState('');
@@ -715,6 +721,10 @@ export default function App() {
   const [adminUploadUploading, setAdminUploadUploading] = useState(false);
   const [adminUploadProgress, setAdminUploadProgress] = useState(0);
   const [adminUploadError, setAdminUploadError] = useState<string | null>(null);
+  // Lets the admin protect a student from the automatic late penalty when uploading on their
+  // behalf -- e.g. the student genuinely tried to submit on time but couldn't (a bug, a device
+  // issue), so the admin uploading it now shouldn't count against them.
+  const [adminUploadDoNotMarkLate, setAdminUploadDoNotMarkLate] = useState(false);
 
   // Feedback banner for Approve/Deny/Reset-Devices actions in the admin panel -- these are
   // fire-and-forget row actions with no other visible confirmation, so without this a
@@ -1329,6 +1339,48 @@ export default function App() {
     }
   };
 
+  const handleToggleLateStatus = async (sub: any) => {
+    if (!user) return;
+    setTogglingLateIds(prev => new Set(prev).add(sub.id));
+    try {
+      const resp = await fetch('/api/admin/homework/set-late-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ submissionId: sub.id, late: !sub.isLate }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setAdminError(data.error || 'Failed to update the late status.');
+      }
+      await fetchAdminData();
+    } catch (err: any) {
+      setAdminError(err.message);
+    } finally {
+      setTogglingLateIds(prev => { const next = new Set(prev); next.delete(sub.id); return next; });
+    }
+  };
+
+  const handleDeleteSubmission = async () => {
+    if (!user || !deleteConfirmSub) return;
+    setDeletingSubmission(true);
+    setDeleteError(null);
+    try {
+      const resp = await fetch('/api/admin/homework/delete-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ submissionId: deleteConfirmSub.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to delete this submission.');
+      setDeleteConfirmSub(null);
+      await fetchAdminData();
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeletingSubmission(false);
+    }
+  };
+
   const handleReevaluateSubmission = async (submissionId: string) => {
     if (!user) return;
     setReevaluatingIds(prev => new Set(prev).add(submissionId));
@@ -1656,6 +1708,7 @@ export default function App() {
             studentEmail: adminUploadStudentEmail,
             sessionId: adminUploadSessionId,
             assignmentId: adminUploadAssignmentId,
+            doNotMarkLate: adminUploadDoNotMarkLate,
           },
         });
       } else {
@@ -1689,6 +1742,7 @@ export default function App() {
             studentEmail: adminUploadStudentEmail,
             sessionId: adminUploadSessionId,
             assignmentId: adminUploadAssignmentId,
+            doNotMarkLate: adminUploadDoNotMarkLate,
           },
         });
       }
@@ -1700,6 +1754,7 @@ export default function App() {
       setAdminUploadPhotoTempPaths([]);
       setAdminUploadSessionId(crypto.randomUUID());
       setAdminUploadPdfFile(null);
+      setAdminUploadDoNotMarkLate(false);
       fetchAdminData();
 
       setUploadSuccessMessage("The student's homework has been uploaded successfully. It's being checked now -- the score will appear in Homework Submissions shortly.");
@@ -3286,6 +3341,44 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmSub && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !deletingSubmission && setDeleteConfirmSub(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 text-center ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isLightMode ? 'bg-red-100' : 'bg-red-500/10'}`}>
+              <Trash2 className="w-8 h-8 text-red-400" />
+            </div>
+            <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Delete this submission?</h3>
+            <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+              {deleteConfirmSub.studentName} -- {deleteConfirmSub.assignmentTitle || deleteConfirmSub.subject || 'Homework'}. This permanently deletes the record and the uploaded file. This cannot be undone.
+            </p>
+            {deleteError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-left">{deleteError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmSub(null)}
+                disabled={deletingSubmission}
+                className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSubmission}
+                disabled={deletingSubmission}
+                className="flex-1 py-2.5 bg-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl hover:bg-red-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletingSubmission ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -6713,6 +6806,16 @@ export default function App() {
                       </div>
                     )}
 
+                    <label className={`flex items-center gap-2 text-xs font-semibold cursor-pointer ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                      <input
+                        type="checkbox"
+                        checked={adminUploadDoNotMarkLate}
+                        onChange={(e) => setAdminUploadDoNotMarkLate(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
+                      />
+                      Do not mark as late (by default it's judged by submission time, as normal)
+                    </label>
+
                     <button
                       type="submit"
                       disabled={adminUploadUploading || adminUploadPhotosUploading || !adminUploadStudentEmail || !adminUploadAssignmentId || (adminUploadMode === 'photos' ? adminUploadPhotoTempPaths.length === 0 : !adminUploadPdfFile)}
@@ -6881,6 +6984,23 @@ export default function App() {
                                             title="Set this submission's score and feedback yourself, bypassing the AI"
                                           >
                                             <Pencil className="w-3.5 h-3.5" /> Manual Grade
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={togglingLateIds.has(sub.id)}
+                                            onClick={() => handleToggleLateStatus(sub)}
+                                            className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold text-[10px] uppercase cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title={sub.isLate ? "Mark this submission as not late (adds back the 2-mark late penalty)" : "Mark this submission as late (applies the 2-mark late penalty)"}
+                                          >
+                                            <AlertTriangle className="w-3.5 h-3.5" /> {togglingLateIds.has(sub.id) ? 'Updating...' : sub.isLate ? 'Mark Not Late' : 'Mark Late'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => { setDeleteConfirmSub(sub); setDeleteError(null); }}
+                                            className="flex items-center gap-1 text-red-400 hover:text-red-300 font-bold text-[10px] uppercase cursor-pointer"
+                                            title="Delete this submission entirely"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" /> Delete
                                           </button>
                                         </div>
                                       </td>

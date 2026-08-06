@@ -346,20 +346,45 @@ const CLAUDE_MODEL = "claude-sonnet-5";
 // row (new or updated) plus whatever question numbers were still outstanding on it before this
 // overwrite, so checkHomeworkSubmission can keep treating a resubmission as "fix just these"
 // without needing to look up a separate prior row that no longer exists under this model.
+// admin_notes is a guaranteed-existing column that nothing else in this app reads or writes, so
+// it's reused as a small JSON-encoded object to carry two independent pieces of internal
+// bookkeeping that would otherwise each need their own dedicated column (missing_questions and a
+// late-status-override column, neither of which was ever actually migrated onto the live
+// database): outstandingQuestions (see checkHomeworkSubmission's resubmissionNote -- which
+// question numbers a resubmission should be scoped to) and lateOverride (an admin's explicit
+// late/not-late call that should win over the automatic deadline-timestamp comparison). Also
+// tolerates the older bare-array shape (`["3","7"]`) written before lateOverride existed.
+interface SubmissionNotes {
+  outstandingQuestions?: string[];
+  lateOverride?: "late" | "not_late";
+}
+function parseAdminNotes(raw: string | null | undefined): SubmissionNotes {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return { outstandingQuestions: parsed };
+    if (parsed && typeof parsed === "object") return parsed as SubmissionNotes;
+  } catch {
+    // Not JSON -- e.g. a genuine hand-typed admin note from before this reuse. Treat as empty.
+  }
+  return {};
+}
+function serializeAdminNotes(notes: SubmissionNotes): string | null {
+  const cleaned: SubmissionNotes = {};
+  if (Array.isArray(notes.outstandingQuestions) && notes.outstandingQuestions.length > 0) cleaned.outstandingQuestions = notes.outstandingQuestions;
+  if (notes.lateOverride) cleaned.lateOverride = notes.lateOverride;
+  return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
+}
+
 async function upsertHomeworkSubmission(params: {
   studentEmail: string;
   assignmentId: string;
   filePath: string;
   subject: string | null;
+  // Only set by the admin's "Upload Homework For A Student" form when the "do not mark as late"
+  // box is checked -- undefined means don't touch/set an override either way.
+  lateOverride?: "late" | "not_late";
 }): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
-  // Carries the previously-outstanding question numbers (missing or incorrect) into a
-  // resubmission's grading context (see checkHomeworkSubmission's resubmissionNote) -- without
-  // this, a student who resubmits just their corrected questions gets graded as if the rest of
-  // the assignment was never attempted, since the AI only sees what's in the new file. This was
-  // originally meant to live in a dedicated `missing_questions` column, but that migration was
-  // never actually applied to the live database -- `admin_notes` is a guaranteed-existing column
-  // that nothing else in this app reads or writes, so it's reused here instead (as a JSON-encoded
-  // array of question-number strings) to avoid depending on a schema change that isn't there.
   const { data: existing, error: existingError } = await supabase
     .from("homework_submissions")
     .select("id, file_path, status, admin_notes")
@@ -372,16 +397,19 @@ async function upsertHomeworkSubmission(params: {
   if (existingError) throw new Error(existingError.message);
 
   if (existing) {
+    const existingNotes = parseAdminNotes(existing.admin_notes);
     let priorMissingQuestions: string[] | null = null;
-    if (existing.status === "checked" && existing.admin_notes) {
-      try {
-        const list = JSON.parse(existing.admin_notes);
-        if (Array.isArray(list) && list.length > 0) priorMissingQuestions = list;
-      } catch {
-        // Not JSON -- e.g. a genuine admin note from before this reuse, or a fully-correct
-        // submission that had nothing outstanding to record. Either way, treat as none.
-      }
+    if (existing.status === "checked" && Array.isArray(existingNotes.outstandingQuestions) && existingNotes.outstandingQuestions.length > 0) {
+      priorMissingQuestions = existingNotes.outstandingQuestions;
     }
+
+    // A resubmission's outstanding-questions tracking is stale the moment a new file replaces the
+    // old one (a fresh check will regenerate it), but an explicit lateOverride passed in for THIS
+    // submission should take effect; otherwise fall back to whatever override the row already had
+    // (e.g. an admin's earlier "not late" call surviving a routine resubmission).
+    const notesForUpdate: SubmissionNotes = {};
+    const nextLateOverride = params.lateOverride ?? existingNotes.lateOverride;
+    if (nextLateOverride) notesForUpdate.lateOverride = nextLateOverride;
 
     const { data: updatedRow, error: updateError } = await supabase
       .from("homework_submissions")
@@ -393,6 +421,7 @@ async function upsertHomeworkSubmission(params: {
         ai_score: null,
         ai_feedback: null,
         integrity_flag: null,
+        admin_notes: serializeAdminNotes(notesForUpdate),
       })
       .eq("id", existing.id)
       .select()
@@ -417,6 +446,7 @@ async function upsertHomeworkSubmission(params: {
       file_path: params.filePath,
       subject: params.subject,
       assignment_id: params.assignmentId,
+      admin_notes: params.lateOverride ? serializeAdminNotes({ lateOverride: params.lateOverride }) : null,
     })
     .select()
     .single();
@@ -702,18 +732,30 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
 
     // Deterministic 2-mark late-submission penalty -- applied after Claude's judgment-based
     // score, on top of it, never as part of the AI's own reasoning (so it can't be talked out
-    // of it or vary submission to submission). A submission is late if it landed after the
-    // student's own class-effective deadline (each class has its own cutoff time).
-    if (assignmentForDeadline && typeof parsed.score === "number") {
-      let effectiveDeadline: string | null = assignmentForDeadline.deadline;
-      if (assignmentForDeadline.target_class === "All") {
-        const { data: studentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
-        const mappedTarget = studentRow?.student_class ? CLASS_TO_TARGET[studentRow.student_class] : null;
-        if (mappedTarget && assignmentForDeadline.assigned_date) {
-          effectiveDeadline = computeDeadline(assignmentForDeadline.assigned_date, mappedTarget);
+    // of it or vary submission to submission). Normally a submission is late if it landed after
+    // the student's own class-effective deadline (each class has its own cutoff time) -- but an
+    // admin's explicit lateOverride (set via the "Upload Homework For A Student" form's "do not
+    // mark as late" box, or via the late-status toggle on an already-checked submission) always
+    // wins over that automatic timestamp comparison.
+    const existingNotes = parseAdminNotes(sub.admin_notes);
+    if (typeof parsed.score === "number") {
+      let isLate: boolean;
+      if (existingNotes.lateOverride === "not_late") {
+        isLate = false;
+      } else if (existingNotes.lateOverride === "late") {
+        isLate = true;
+      } else {
+        let effectiveDeadline: string | null = assignmentForDeadline?.deadline ?? null;
+        if (assignmentForDeadline?.target_class === "All") {
+          const { data: studentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
+          const mappedTarget = studentRow?.student_class ? CLASS_TO_TARGET[studentRow.student_class] : null;
+          if (mappedTarget && assignmentForDeadline?.assigned_date) {
+            effectiveDeadline = computeDeadline(assignmentForDeadline.assigned_date, mappedTarget);
+          }
         }
+        isLate = !!effectiveDeadline && !!sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime();
       }
-      if (effectiveDeadline && sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime()) {
+      if (isLate) {
         parsed.score = Math.max(0, parsed.score - 2);
         const lateNote = "Submitted after the homework deadline -- 2 marks deducted as per the late-submission rule.";
         parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
@@ -724,7 +766,9 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // that a resubmission should specifically target. Stored in admin_notes (see the comment on
     // upsertHomeworkSubmission's read side for why) so a later "Improve Score" resubmission knows
     // to only grade these questions fresh and carry over credit for everything else. Cleared back
-    // to null once nothing is outstanding, rather than persisting a stale empty array.
+    // to null once nothing is outstanding, rather than persisting a stale empty array. Any
+    // existing lateOverride is carried forward unchanged -- a Reevaluate shouldn't silently
+    // discard an admin's earlier late/not-late call.
     const outstandingQuestions = Array.from(new Set([
       ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
       ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
@@ -735,7 +779,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
-      admin_notes: outstandingQuestions.length > 0 ? JSON.stringify(outstandingQuestions) : null,
+      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: existingNotes.lateOverride }),
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
@@ -7551,7 +7595,7 @@ function buildApp(): express.Express {
     const auth = requireAuth(req, res);
     if (!auth) return;
     if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required." });
-    const { studentEmail, sessionId, subject, assignmentId } = req.body;
+    const { studentEmail, sessionId, subject, assignmentId, doNotMarkLate } = req.body;
     if (!studentEmail) return res.status(400).json({ error: "Please choose which student this homework is for." });
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
     if (!assignmentId || !String(assignmentId).trim()) {
@@ -7591,6 +7635,7 @@ function buildApp(): express.Express {
         assignmentId: String(assignmentId),
         filePath,
         subject: subject ? String(subject).trim() : null,
+        lateOverride: doNotMarkLate ? "not_late" : undefined,
       });
     } catch (upsertErr: any) {
       console.error("Error saving admin-uploaded submission record:", upsertErr.message);
@@ -7605,7 +7650,7 @@ function buildApp(): express.Express {
     const auth = requireAuth(req, res);
     if (!auth) return;
     if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required." });
-    const { studentEmail, sessionId, subject, assignmentId } = req.body;
+    const { studentEmail, sessionId, subject, assignmentId, doNotMarkLate } = req.body;
     if (!studentEmail) return res.status(400).json({ error: "Please choose which student this homework is for." });
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
     if (!assignmentId || !String(assignmentId).trim()) {
@@ -7645,6 +7690,7 @@ function buildApp(): express.Express {
         assignmentId: String(assignmentId),
         filePath,
         subject: subject ? String(subject).trim() : null,
+        lateOverride: doNotMarkLate ? "not_late" : undefined,
       });
     } catch (upsertErr: any) {
       console.error("Error saving admin-uploaded submission record:", upsertErr.message);
@@ -7825,6 +7871,99 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
+  // Lets the admin flip a submission's late status either direction (late -> not late, or the
+  // reverse), correcting the score by exactly the flat 2-mark late penalty if the state actually
+  // changes, and remembering the override so it survives a future Reevaluate.
+  app.post("/api/admin/homework/set-late-status", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId, late } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+    if (typeof late !== "boolean") return res.status(400).json({ error: "Missing or invalid 'late' flag." });
+
+    const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!sub) return res.status(404).json({ error: "Submission not found." });
+
+    const notes = parseAdminNotes(sub.admin_notes);
+    let currentlyLate: boolean;
+    if (notes.lateOverride === "not_late") {
+      currentlyLate = false;
+    } else if (notes.lateOverride === "late") {
+      currentlyLate = true;
+    } else {
+      // No override yet -- fall back to the same automatic timestamp comparison
+      // checkHomeworkSubmission would have used.
+      let effectiveDeadline: string | null = null;
+      if (sub.assignment_id) {
+        const { data: a } = await supabase.from("homework_assignments").select("target_class, assigned_date, deadline").eq("id", sub.assignment_id).maybeSingle();
+        if (a) {
+          effectiveDeadline = a.deadline;
+          if (a.target_class === "All") {
+            const { data: studentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
+            const mappedTarget = studentRow?.student_class ? CLASS_TO_TARGET[studentRow.student_class] : null;
+            if (mappedTarget && a.assigned_date) effectiveDeadline = computeDeadline(a.assigned_date, mappedTarget);
+          }
+        }
+      }
+      currentlyLate = !!effectiveDeadline && !!sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime();
+    }
+
+    const LATE_NOTE = "Submitted after the homework deadline -- 2 marks deducted as per the late-submission rule.";
+    let newScore = sub.ai_score;
+    let newFeedback: string | null = sub.ai_feedback;
+
+    if (currentlyLate !== late && typeof sub.ai_score === "number") {
+      if (late) {
+        newScore = Math.max(0, sub.ai_score - 2);
+        newFeedback = newFeedback && newFeedback.trim() ? `${newFeedback}\n\n${LATE_NOTE}` : LATE_NOTE;
+      } else {
+        newScore = Math.min(10, sub.ai_score + 2);
+        if (newFeedback) {
+          newFeedback = newFeedback.split(`\n\n${LATE_NOTE}`).join("").split(LATE_NOTE).join("").trim();
+          if (!newFeedback) newFeedback = null;
+        }
+      }
+    }
+
+    const { data: updated, error } = await supabase
+      .from("homework_submissions")
+      .update({
+        ai_score: newScore,
+        ai_feedback: newFeedback,
+        admin_notes: serializeAdminNotes({ ...notes, lateOverride: late ? "late" : "not_late" }),
+      })
+      .eq("id", submissionId)
+      .select()
+      .single();
+    if (error || !updated) {
+      console.error("Set late-status save error:", error?.message);
+      return res.status(500).json({ error: "Failed to update the late status. Please try again." });
+    }
+    return res.json({ success: true, submission: mapHomeworkRow(updated) });
+  });
+
+  // Deletes a homework submission entirely -- the record and its stored file. Used when a
+  // submission was uploaded in error (wrong student, wrong assignment, duplicate, etc.) and
+  // simply shouldn't exist rather than just being re-graded.
+  app.post("/api/admin/homework/delete-submission", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const { data: sub } = await supabase.from("homework_submissions").select("file_path").eq("id", submissionId).maybeSingle();
+    if (!sub) return res.status(404).json({ error: "Submission not found." });
+
+    const { error: deleteError } = await supabase.from("homework_submissions").delete().eq("id", submissionId);
+    if (deleteError) {
+      console.error("Delete submission error:", deleteError.message);
+      return res.status(500).json({ error: "Failed to delete the submission. Please try again." });
+    }
+    if (sub.file_path) {
+      const { error: removeError } = await supabase.storage.from(HOMEWORK_BUCKET).remove([sub.file_path]);
+      if (removeError) console.warn("Could not remove deleted submission's file:", removeError.message);
+    }
+    return res.json({ success: true });
+  });
+
   // Student views their own homework submission history
   app.get("/api/homework/mine", async (req, res) => {
     const auth = requireAuth(req, res);
@@ -7867,12 +8006,17 @@ function buildApp(): express.Express {
     const submissions = await Promise.all((rows || []).map(async (r) => {
       const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
       const deadline = r.assignment_id ? (deadlineById.get(r.assignment_id) || null) : null;
+      const notes = parseAdminNotes(r.admin_notes);
+      const isLate = notes.lateOverride === "not_late" ? false
+        : notes.lateOverride === "late" ? true
+        : !!deadline && new Date(r.submitted_at).getTime() > new Date(deadline).getTime();
       return {
         ...mapHomeworkRow(r, signed?.signedUrl),
         studentName: nameByEmail.get(r.student_email) || r.student_email,
         studentClass: classByEmail.get(r.student_email) || null,
         assignmentTitle: r.assignment_id ? (titleById.get(r.assignment_id) || null) : null,
-        isLate: deadline ? new Date(r.submitted_at).getTime() > new Date(deadline).getTime() : false,
+        isLate,
+        lateOverride: notes.lateOverride || null,
       };
     }));
 
@@ -8077,20 +8221,20 @@ function buildApp(): express.Express {
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
       supabase.from("users").select("email, name, student_class, role, status, student_type"),
-      supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at"),
+      supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at, admin_notes"),
     ]);
 
     // Online (self-study) students are never assigned homework, so they're excluded from the roster.
     const students = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved" && u.student_type !== "online");
-    // Keyed by assignment id -> student email -> that student's submitted_at. The upsert-per-
-    // assignment model means there's only ever one row per (student, assignment) pair, so this
-    // timestamp is always their latest (i.e. current) submission for it -- exactly what "late"
-    // should be judged against.
-    const submittedByAssignment = new Map<string, Map<string, string>>();
+    // Keyed by assignment id -> student email -> that student's submitted_at + admin_notes. The
+    // upsert-per-assignment model means there's only ever one row per (student, assignment) pair,
+    // so this is always their latest (i.e. current) submission -- exactly what "late" should be
+    // judged against.
+    const submittedByAssignment = new Map<string, Map<string, { submittedAt: string; adminNotes: string | null }>>();
     (submissionRows || []).forEach((s: any) => {
       if (!s.assignment_id) return;
       if (!submittedByAssignment.has(s.assignment_id)) submittedByAssignment.set(s.assignment_id, new Map());
-      submittedByAssignment.get(s.assignment_id)!.set(s.student_email, s.submitted_at);
+      submittedByAssignment.get(s.assignment_id)!.set(s.student_email, { submittedAt: s.submitted_at, adminNotes: s.admin_notes });
     });
 
     // An assignment posted to "All" classes doesn't have one shared deadline in practice -- each
@@ -8108,12 +8252,16 @@ function buildApp(): express.Express {
         if (!deadlinePassed) continue; // only report once a class's own deadline has actually passed
 
         const roster = students.filter((u: any) => CLASS_TO_TARGET[u.student_class] === key);
-        const submitted = submittedByAssignment.get(a.id) || new Map<string, string>();
+        const submitted = submittedByAssignment.get(a.id) || new Map<string, { submittedAt: string; adminNotes: string | null }>();
         const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
         const late = roster
           .filter((u: any) => {
-            const submittedAt = submitted.get(u.email);
-            return !!submittedAt && !!effectiveDeadline && new Date(submittedAt).getTime() > new Date(effectiveDeadline).getTime();
+            const entry = submitted.get(u.email);
+            if (!entry) return false;
+            const notes = parseAdminNotes(entry.adminNotes);
+            if (notes.lateOverride === "not_late") return false;
+            if (notes.lateOverride === "late") return true;
+            return !!effectiveDeadline && new Date(entry.submittedAt).getTime() > new Date(effectiveDeadline).getTime();
           })
           .map((u: any) => ({ email: u.email, name: u.name }));
         report.push({
@@ -8185,7 +8333,7 @@ function buildApp(): express.Express {
     if (assignments.length > 0) {
       const { data } = await supabase
         .from("homework_submissions")
-        .select("student_email, assignment_id, status, ai_score, submitted_at")
+        .select("student_email, assignment_id, status, ai_score, submitted_at, admin_notes")
         .in("assignment_id", assignments.map((a) => a.id));
       submissionRows = data || [];
     }
@@ -8199,7 +8347,10 @@ function buildApp(): express.Express {
       const perAssignment = assignments.map((a) => {
         const sub = submissionByKey.get(`${a.id}|${u.email}`);
         if (!sub) return { assignmentId: a.id, state: "missing" as const, score: 0, isLate: false };
-        const isLate = !!a.deadline && new Date(sub.submitted_at).getTime() > new Date(a.deadline).getTime();
+        const notes = parseAdminNotes(sub.admin_notes);
+        const isLate = notes.lateOverride === "not_late" ? false
+          : notes.lateOverride === "late" ? true
+          : !!a.deadline && new Date(sub.submitted_at).getTime() > new Date(a.deadline).getTime();
         if (sub.status !== "checked" || typeof sub.ai_score !== "number") {
           return { assignmentId: a.id, state: "pending" as const, score: 0, isLate };
         }
