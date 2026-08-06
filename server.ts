@@ -508,7 +508,7 @@ Working out which questions were actually assigned:
 
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") -- this means the student is stuck and wants the teacher to explain that question in class. This applies whether the doubt marker stands alone with no attempt at all, OR the student made a partial/incorrect attempt first and then wrote "doubt" (e.g. gave up partway through and flagged it, rather than leaving it fully blank) -- either way, treat the WHOLE question as a self-flagged doubt, not a wrong or missing answer. Do not grade the partial attempt as incorrect just because one exists alongside the doubt marker, and never mark a doubt as incorrect.
 
-A doubt-marked question is fully accounted for and resolved from a grading standpoint -- it is neither missing nor something still "to be attempted." It must never appear in missingQuestions or incorrectQuestions, must never be cited as a reason the submission is INCOMPLETE, and must never be described in feedback as something the student still needs to attempt or complete (e.g. never write phrasing like "cannot be graded complete until the doubt-marked questions are attempted" -- that is exactly backwards). If literally every assigned question is either correct or marked doubt, with nothing missing and nothing incorrect, the submission is COMPLETE and should score 10/10.
+A doubt-marked question is fully accounted for and resolved from a grading standpoint -- it is neither missing nor something still "to be attempted." It must never appear in missingQuestions or incorrectQuestions, must never be cited as a reason the submission is INCOMPLETE, and must never be described in feedback as something the student still needs to attempt or complete (e.g. never write phrasing like "cannot be graded complete until the doubt-marked questions are attempted" -- that is exactly backwards). If literally every assigned question is either correct or marked doubt, with nothing missing and nothing incorrect, the submission is COMPLETE, and your own score for it should be 10/10 -- score purely on the merits of the non-doubt questions, as if the doubt-marked ones simply weren't part of the assignment. Separately, list every doubt-marked question number in doubtQuestions (matching the same per-sub-part granularity as questionByQuestionCheck). Do NOT factor how many questions were marked doubt into your own score in any way, however many there are -- a deterministic step outside your scoring already applies a defined deduction based on that proportion, and if you also reduce your own score for it, the submission gets penalized twice for the same thing.
 
 Students often submit homework as phone photos of each page, one photo per page, which get combined into one file in the order they were uploaded. That order does not always match question order (e.g. a student may photograph pages out of sequence) -- this is normal and not a mistake. Never comment on question numbering being "inconsistent with page order/numbering" or similar; just work out which questions are present regardless of what order they appear in.
 
@@ -516,7 +516,7 @@ SCORING RULES (CBSE board guidelines -- follow these exactly, the score must nev
 - The score is based ONLY on two things: (1) whether every assigned question was attempted, and (2) whether each attempted question was solved correctly and via the proper CBSE method/steps (not just a bare final answer where working is required).
 - NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
 - NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault. When the same question number appears worked out twice (a scratched-out/crossed-out/heavily-scribbled-over first attempt followed by a second, cleaner attempt), grade ONLY the second, non-crossed-out attempt -- it supersedes the first one entirely, even if the first attempt's wrong conclusion is easier to read than the correct final one.
-- NEVER treat a question marked "doubt" as a scoring deduction -- it is a self-flagged request for the teacher's help, not a wrong or missing answer, and must not lower the score.
+- NEVER treat a question marked "doubt" as a scoring deduction, individually or in aggregate -- it is a self-flagged request for the teacher's help, not a wrong or missing answer. This includes not reducing your score based on how MANY questions were marked doubt; a fixed, deterministic deduction for that is applied separately outside your own scoring (see the doubtQuestions field), so your own score must never account for doubt volume at all.
 - NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. A student very often runs out of room mid-derivation, so the concluding line ("Hence Proved", a final boxed answer, "= RHS", the last algebraic step) is frequently the very first line of the NEXT page rather than the last line of the page where the question started, and a proof that looks cut off at the bottom of a page is not evidence it was left unfinished. This is what the required pageByPageNotes field (see the tool schema) exists for: fill it in for every single page first, explicitly noting anything that opens a page as a continuation from the previous one, and only judge a question incomplete, wrong, or unconcluded after that page-by-page pass is done.
 - DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
 
@@ -525,7 +525,7 @@ Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or de
 - Do NOT comment on handwriting, neatness, presentation, or crossed-out/cut corrections at all, even in passing -- these never affect the score and are not worth mentioning. The only exception is a question whose content is so illegible you genuinely cannot tell what was written -- in that case, name the question number and ask for it to be rewritten clearly, without implying any score penalty.
 - DO flag, by question number, any question that is wrong, incomplete, or not solved in the proper CBSE board format/method (e.g. missing required steps, skipping the working, wrong formula, not showing the final answer clearly) -- briefly say what's wrong. List every one of these question numbers in "incorrectQuestions" too, so the student can resubmit corrections for exactly those questions later.
 - DO list, by question number, any question that is simply missing -- no answer AND no doubt marker -- and tell the student to complete and resubmit just those questions. Do not explain that there was no doubt marker or otherwise narrate how you decided a question counts as missing -- just list it.
-- DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it.
+- DO list, by question number, any question marked "doubt" -- just note it will be covered in class; do not evaluate it. List every one of these in "doubtQuestions" too.
 - If any questions are missing without a doubt marker, state plainly that the homework is INCOMPLETE and ask the student to complete those question numbers and resend them. Doubt-marked questions never trigger this -- a submission where the only "gaps" are doubt markers is COMPLETE, not incomplete.
 - If everything checked out -- fully attempted, complete, and correct per CBSE method -- the feedback field must NOT be an empty string. Write one short sentence saying so instead, e.g. "All assigned questions attempted correctly." An empty feedback field is indistinguishable from a submission that was never checked at all, so there must always be at least one sentence.
 
@@ -573,6 +573,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
+        doubtQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) marked as a self-flagged doubt -- whether left blank or attempted-but-unresolved. Does NOT include missing or incorrect questions. Used only to apply a fixed deduction based on what proportion of the assignment this is -- do not let it influence your own score. Empty array if none." },
         // Listed right after missingQuestions/incorrectQuestions (not literally last) on purpose:
         // a test run against a real failing submission showed the model could get
         // questionByQuestionCheck and incorrectQuestions right (7 genuine problems correctly
@@ -585,10 +586,10 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         // at "pending" instead of graded. feedback is free text and the longest remaining field,
         // so it goes last instead -- truncating it is already handled by the retry-on-empty-
         // feedback logic below, whereas truncating score is not recoverable.
-        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method). Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10. Never reduced for handwriting, neatness, cut/crossed-out corrections, or doubt-marked questions." },
+        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely -- never reduced for how many questions were marked doubt (a separate deterministic step handles that), nor for handwriting, neatness, or cut/crossed-out corrections. Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
-      required: ["pageByPageNotes", "questionByQuestionCheck", "integrityFlag", "missingQuestions", "incorrectQuestions", "score", "feedback"],
+      required: ["pageByPageNotes", "questionByQuestionCheck", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
     },
   };
 
@@ -674,6 +675,30 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
 
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
     const parsed = toolUseBlock.input;
+
+    // Deterministic doubt-volume penalty -- applied on top of Claude's judgment-based score
+    // (which is scored as if doubt-marked questions weren't part of the assignment at all),
+    // never left to the AI's own arithmetic, for the same reason as the late penalty below: a
+    // fixed rule that can't vary submission to submission. Tiers, by percentage of assigned
+    // questions marked doubt: 0-30% -> no deduction, >30-50% -> 3 marks off, >50% -> score 0.
+    if (typeof parsed.score === "number") {
+      const totalQuestions = Array.isArray(parsed.questionByQuestionCheck) ? parsed.questionByQuestionCheck.length : 0;
+      const doubtCount = Array.isArray(parsed.doubtQuestions) ? parsed.doubtQuestions.length : 0;
+      if (totalQuestions > 0 && doubtCount > 0) {
+        const doubtPercent = (doubtCount / totalQuestions) * 100;
+        let doubtNote: string | null = null;
+        if (doubtPercent > 50) {
+          parsed.score = 0;
+          doubtNote = `More than half the assigned questions (${doubtCount} of ${totalQuestions}) were marked doubt -- no marks are given for this submission, as per the doubt-marking policy.`;
+        } else if (doubtPercent > 30) {
+          parsed.score = Math.max(0, parsed.score - 3);
+          doubtNote = `${doubtCount} of ${totalQuestions} assigned questions (over 30%) were marked doubt -- 3 marks deducted as per the doubt-marking policy.`;
+        }
+        if (doubtNote) {
+          parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${doubtNote}` : doubtNote;
+        }
+      }
+    }
 
     // Deterministic 2-mark late-submission penalty -- applied after Claude's judgment-based
     // score, on top of it, never as part of the AI's own reasoning (so it can't be talked out
