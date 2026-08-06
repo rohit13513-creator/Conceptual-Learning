@@ -12,6 +12,7 @@ import LearnChemistry from './components/LearnChemistry';
 import { LearnBiology } from './components/LearnBiology';
 import { LearnPhysics9 } from './components/LearnPhysics9';
 import { PhotoUploader } from './components/PhotoUploader';
+import html2pdf from 'html2pdf.js';
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
 import { CompetitiveOptics } from './components/CompetitiveOptics';
 import { AboutUs } from './components/AboutUs';
@@ -123,7 +124,8 @@ import {
   Megaphone,
   Construction,
   MessageSquare,
-  Image as ImageIcon
+  Image as ImageIcon,
+  UserX
 } from 'lucide-react';
 
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
@@ -660,6 +662,14 @@ export default function App() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<{ assignments: any[]; students: any[] } | null>(null);
+  // Once a report is generated, the admin can narrow it down to one student, or exclude a few
+  // (e.g. someone who left mid-range) from the ranked list -- both act on the already-fetched
+  // data client-side, no re-fetch needed. Reset whenever a fresh report is generated.
+  const [reportViewStudentEmail, setReportViewStudentEmail] = useState('');
+  const [reportExcludedEmails, setReportExcludedEmails] = useState<Set<string>>(new Set());
+  const [reportPdfDownloading, setReportPdfDownloading] = useState(false);
+  const [reportPdfError, setReportPdfError] = useState<string | null>(null);
+  const reportPrintRef = useRef<HTMLDivElement>(null);
   // Late-status toggle -- which rows currently have a late/not-late flip in flight.
   const [togglingLateIds, setTogglingLateIds] = useState<Set<string>>(new Set());
   // Delete-submission confirmation -- holds the submission pending deletion (null = no dialog open).
@@ -1325,6 +1335,9 @@ export default function App() {
     setShowPerformanceReport(true);
     setReportError(null);
     setReportData(null);
+    setReportViewStudentEmail('');
+    setReportExcludedEmails(new Set());
+    setReportPdfError(null);
   };
 
   const handleGenerateReport = async (e: React.FormEvent) => {
@@ -1336,6 +1349,11 @@ export default function App() {
     }
     setReportLoading(true);
     setReportError(null);
+    // A fresh report starts unfiltered -- carrying over exclusions/a single-student view from a
+    // previous class or date range would silently hide students the admin never meant to hide.
+    setReportViewStudentEmail('');
+    setReportExcludedEmails(new Set());
+    setReportPdfError(null);
     try {
       const params = new URLSearchParams({ fromDate: reportFromDate, toDate: reportToDate, targetClass: reportClass });
       const resp = await fetch(`/api/admin/homework/report?${params.toString()}`, {
@@ -1350,6 +1368,60 @@ export default function App() {
     } finally {
       setReportLoading(false);
     }
+  };
+
+  // The ranked list actually shown/downloaded -- a single-student view keeps their real class
+  // rank (more meaningful than "1 of 1"); excluding students re-computes contiguous ranks over
+  // whoever's left, since removing someone from the list should close the ranking gap they left.
+  const getFilteredReportStudents = () => {
+    if (!reportData) return [];
+    if (reportViewStudentEmail) {
+      return reportData.students.filter((s: any) => s.email === reportViewStudentEmail);
+    }
+    if (reportExcludedEmails.size === 0) return reportData.students;
+    const remaining = reportData.students.filter((s: any) => !reportExcludedEmails.has(s.email));
+    return remaining
+      .slice()
+      .sort((a: any, b: any) => b.total - a.total)
+      .map((s: any, idx: number) => ({ ...s, rank: idx + 1 }));
+  };
+
+  const handleDownloadReportPdf = () => {
+    if (reportPdfDownloading || !reportData) return;
+    const element = reportPrintRef.current;
+    if (!element) return;
+    setReportPdfDownloading(true);
+    setReportPdfError(null);
+
+    const filteredStudents = getFilteredReportStudents();
+    const namePart = reportViewStudentEmail
+      ? (filteredStudents[0]?.name || 'Student').replace(/\s+/g, '_')
+      : `Class_${reportClass}`;
+    const filename = `${namePart}_Performance_Report_${reportFromDate}_to_${reportToDate}.pdf`;
+
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2.0, useCORS: true, logging: false, windowWidth: 1500 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    };
+
+    const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
+    if (!html2pdfFunc) {
+      setReportPdfError('Could not initialize the PDF compiler engine.');
+      setReportPdfDownloading(false);
+      return;
+    }
+
+    html2pdfFunc().set(opt).from(element).save()
+      .then(() => setReportPdfDownloading(false))
+      .catch((err: any) => {
+        console.error('Report PDF generation failed:', err);
+        setReportPdfError(err.message || 'PDF generation failed.');
+        setReportPdfDownloading(false);
+      });
   };
 
   const openEditSubmission = (sub: any) => {
@@ -3570,51 +3642,147 @@ export default function App() {
                 <p className="text-center py-6 text-xs font-semibold text-slate-500">No homework assignments found for this class in this date range.</p>
               ) : reportData.students.length === 0 ? (
                 <p className="text-center py-6 text-xs font-semibold text-slate-500">No students found in this class.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
-                    <thead>
-                      <tr className={`uppercase tracking-wider font-mono text-[9px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                        <th className="py-2 pr-3 font-bold">Rank</th>
-                        <th className="py-2 px-3 font-bold">Student</th>
-                        {reportData.assignments.map((a: any) => (
-                          <th key={a.id} className="py-2 px-3 font-bold whitespace-nowrap">
-                            {formatAssignmentDate(a.assignedDate)}
-                            <div className={`normal-case font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{a.title}</div>
-                          </th>
-                        ))}
-                        <th className="py-2 pl-3 font-bold whitespace-nowrap">Total (/{reportData.assignments.length * 10})</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
-                      {reportData.students.map((s: any) => (
-                        <tr key={s.email} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
-                          <td className="py-2.5 pr-3 font-black">{s.rank}</td>
-                          <td className="py-2.5 px-3">
-                            <p className="font-bold">{s.name}</p>
-                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{s.email}</p>
-                          </td>
-                          {s.perAssignment.map((pa: any, i: number) => (
-                            <td key={i} className="py-2.5 px-3 whitespace-nowrap">
-                              {pa.state === 'missing' ? (
-                                <span className="text-red-400 font-semibold">Not submitted</span>
-                              ) : pa.state === 'pending' ? (
-                                <span className="text-slate-500 font-semibold">Pending</span>
-                              ) : (
-                                <span>
-                                  <span className="font-black">{pa.score}/10</span>
-                                  {pa.isLate && <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] uppercase tracking-wide font-black">Late</span>}
-                                </span>
-                              )}
-                            </td>
+              ) : (() => {
+                const filteredStudents = getFilteredReportStudents();
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={reportViewStudentEmail}
+                          onChange={(e) => setReportViewStudentEmail(e.target.value)}
+                          className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                        >
+                          <option value="">All Students</option>
+                          {reportData.students.map((s: any) => (
+                            <option key={s.email} value={s.email}>{s.name}</option>
                           ))}
-                          <td className="py-2.5 pl-3 font-black text-emerald-400 whitespace-nowrap">{s.total}/{s.maxPossible}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
+                        </select>
+                        {reportExcludedEmails.size > 0 && !reportViewStudentEmail && (
+                          <span className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {reportExcludedEmails.size} excluded --{' '}
+                            <button type="button" onClick={() => setReportExcludedEmails(new Set())} className="text-cyan-400 hover:text-cyan-300 font-bold underline cursor-pointer">
+                              Show All
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={reportPdfDownloading}
+                        onClick={handleDownloadReportPdf}
+                        className="flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" /> {reportPdfDownloading ? 'Preparing PDF...' : 'Download PDF'}
+                      </button>
+                    </div>
+                    {reportPdfError && (
+                      <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{reportPdfError}</div>
+                    )}
+
+                    <div className="overflow-x-auto">
+                      <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
+                        <thead>
+                          <tr className={`uppercase tracking-wider font-mono text-[9px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            <th className="py-2 pr-3 font-bold">Rank</th>
+                            <th className="py-2 px-3 font-bold">Student</th>
+                            {reportData.assignments.map((a: any) => (
+                              <th key={a.id} className="py-2 px-3 font-bold whitespace-nowrap">
+                                {formatAssignmentDate(a.assignedDate)}
+                                <div className={`normal-case font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{a.title}</div>
+                              </th>
+                            ))}
+                            <th className="py-2 px-3 font-bold whitespace-nowrap">Total (/{reportData.assignments.length * 10})</th>
+                            {!reportViewStudentEmail && <th className="py-2 pl-3 text-right font-bold">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
+                          {filteredStudents.map((s: any) => (
+                            <tr key={s.email} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
+                              <td className="py-2.5 pr-3 font-black">{s.rank}</td>
+                              <td className="py-2.5 px-3">
+                                <p className="font-bold">{s.name}</p>
+                                <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{s.email}</p>
+                              </td>
+                              {s.perAssignment.map((pa: any, i: number) => (
+                                <td key={i} className="py-2.5 px-3 whitespace-nowrap">
+                                  {pa.state === 'missing' ? (
+                                    <span className="text-red-400 font-semibold">Not submitted</span>
+                                  ) : pa.state === 'pending' ? (
+                                    <span className="text-slate-500 font-semibold">Pending</span>
+                                  ) : (
+                                    <span>
+                                      <span className="font-black">{pa.score}/10</span>
+                                      {pa.isLate && <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] uppercase tracking-wide font-black">Late</span>}
+                                    </span>
+                                  )}
+                                </td>
+                              ))}
+                              <td className="py-2.5 px-3 font-black text-emerald-400 whitespace-nowrap">{s.total}/{s.maxPossible}</td>
+                              {!reportViewStudentEmail && (
+                                <td className="py-2.5 pl-3 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setReportExcludedEmails(prev => new Set(prev).add(s.email))}
+                                    className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 font-bold text-[10px] uppercase cursor-pointer"
+                                    title="Exclude this student from the report"
+                                  >
+                                    <UserX className="w-3.5 h-3.5" /> Exclude
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Off-screen, plain-styled copy of the table above used only for PDF export --
+                        kept free of Tailwind utility classes (which resolve to oklch() colors in
+                        this app's theme) so html2canvas can render it without any color-space
+                        workarounds. Positioned off-screen rather than display:none since
+                        html2canvas cannot capture a display:none element. */}
+                    <div style={{ position: 'fixed', top: 0, left: '-9999px', width: '1500px' }}>
+                      <div ref={reportPrintRef} style={{ fontFamily: 'Arial, Helvetica, sans-serif', background: '#ffffff', color: '#0f172a', padding: '16px' }}>
+                        <h2 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 2px 0' }}>
+                          {reportViewStudentEmail ? `${filteredStudents[0]?.name || ''} -- Performance Report` : `Class ${reportClass} Performance Report`}
+                        </h2>
+                        <p style={{ fontSize: '10px', color: '#475569', margin: '0 0 12px 0' }}>
+                          {formatAssignmentDate(reportFromDate)} to {formatAssignmentDate(reportToDate)} -- generated {new Date().toLocaleDateString()}
+                        </p>
+                        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '9px' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ border: '1px solid #cbd5e1', padding: '4px 6px', background: '#f1f5f9', textAlign: 'left' }}>Rank</th>
+                              <th style={{ border: '1px solid #cbd5e1', padding: '4px 6px', background: '#f1f5f9', textAlign: 'left' }}>Student</th>
+                              {reportData.assignments.map((a: any) => (
+                                <th key={a.id} style={{ border: '1px solid #cbd5e1', padding: '4px 6px', background: '#f1f5f9', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                                  {formatAssignmentDate(a.assignedDate)}
+                                </th>
+                              ))}
+                              <th style={{ border: '1px solid #cbd5e1', padding: '4px 6px', background: '#f1f5f9', textAlign: 'left', whiteSpace: 'nowrap' }}>Total (/{reportData.assignments.length * 10})</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredStudents.map((s: any) => (
+                              <tr key={s.email}>
+                                <td style={{ border: '1px solid #e2e8f0', padding: '4px 6px', fontWeight: 700 }}>{s.rank}</td>
+                                <td style={{ border: '1px solid #e2e8f0', padding: '4px 6px' }}>{s.name}</td>
+                                {s.perAssignment.map((pa: any, i: number) => (
+                                  <td key={i} style={{ border: '1px solid #e2e8f0', padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                                    {pa.state === 'missing' ? 'Not submitted' : pa.state === 'pending' ? 'Pending' : `${pa.score}/10${pa.isLate ? ' (Late)' : ''}`}
+                                  </td>
+                                ))}
+                                <td style={{ border: '1px solid #e2e8f0', padding: '4px 6px', fontWeight: 700 }}>{s.total}/{s.maxPossible}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             )}
 
             <button
