@@ -87,10 +87,27 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
   };
 
   const addFiles = async (files: File[]) => {
+    // When several photos are picked together in one go (as opposed to one at a time), some
+    // mobile browsers -- notably Chrome on Android using the OS "Photo Picker" -- only grant
+    // transient read access to the selected files, scoped to this input's change event. The
+    // upload loop below deliberately processes photos one at a time (see below), so by the time
+    // it reaches photo #2 or #3 that grant can already be gone and the read silently fails,
+    // which is exactly the "only the first photo uploads" symptom reported by multiple students.
+    // Reading every file's bytes into memory immediately, before doing anything slow, means the
+    // rest of the pipeline never has to race that revocation.
+    const materialized = await Promise.all(files.map(async (file) => {
+      try {
+        const buffer = await file.arrayBuffer();
+        return new File([buffer], file.name, { type: file.type });
+      } catch {
+        return file;
+      }
+    }));
+
     // Uploaded strictly one at a time, in the order picked -- matches how the pages will read in
     // the final PDF, and means the very first photo finishes (and shows as done) before the next
     // one starts, rather than racing several uploads against each other.
-    for (const file of files) {
+    for (const file of materialized) {
       const order = nextOrderRef.current++;
       const item: PhotoItem = {
         id: `${Date.now()}-${order}-${Math.random().toString(36).slice(2)}`,
