@@ -342,10 +342,12 @@ const CLAUDE_MODEL = "claude-sonnet-5";
 // Finds the student's existing submission for this assignment (if any) and overwrites it in
 // place with the new file, instead of inserting another row -- a student re-submitting the same
 // homework used to create a brand new row every single time, leaving the admin looking at three
-// or more entries for what was really just one piece of homework being refined. Returns the
-// row (new or updated) plus whatever question numbers were still outstanding on it before this
-// overwrite, so checkHomeworkSubmission can keep treating a resubmission as "fix just these"
-// without needing to look up a separate prior row that no longer exists under this model.
+// or more entries for what was really just one piece of homework being refined. Returns the row
+// (new or updated) plus whatever question numbers were still outstanding on it before this
+// overwrite -- and also persists that same value onto the row's own admin_notes (see below), so
+// checkHomeworkSubmission can keep treating a resubmission as "fix just these" whether it's
+// checked immediately via the returned value or picked up later by the cron sweep, which has no
+// access to this function's return value and can only see what's on the row itself.
 // admin_notes is a guaranteed-existing column that nothing else in this app reads or writes, so
 // it's reused as a small JSON-encoded object to carry two independent pieces of internal
 // bookkeeping that would otherwise each need their own dedicated column (missing_questions and a
@@ -403,13 +405,25 @@ async function upsertHomeworkSubmission(params: {
       priorMissingQuestions = existingNotes.outstandingQuestions;
     }
 
-    // A resubmission's outstanding-questions tracking is stale the moment a new file replaces the
-    // old one (a fresh check will regenerate it), but an explicit lateOverride passed in for THIS
-    // submission should take effect; otherwise fall back to whatever override the row already had
-    // (e.g. an admin's earlier "not late" call surviving a routine resubmission).
+    // An explicit lateOverride passed in for THIS submission should take effect; otherwise fall
+    // back to whatever override the row already had (e.g. an admin's earlier "not late" call
+    // surviving a routine resubmission).
     const notesForUpdate: SubmissionNotes = {};
     const nextLateOverride = params.lateOverride ?? existingNotes.lateOverride;
     if (nextLateOverride) notesForUpdate.lateOverride = nextLateOverride;
+    // Also carry priorMissingQuestions forward onto the row itself (reusing the same
+    // outstandingQuestions field, since it's naturally overwritten with fresh values once this
+    // submission is actually checked) -- not just returned to the caller below. Previously this
+    // lived ONLY in the HTTP response, for the frontend to thread through to a separate
+    // check-mine call right after upload. If that follow-up call never completed (a dropped
+    // mobile connection, a closed tab -- exactly the kind of flakiness this app already works
+    // around elsewhere), the submission sat "pending" with no record of what was still
+    // outstanding, and whichever check eventually ran it (the cron sweep, "Check Pending Now")
+    // had no way to recover that context and graded it as a brand new submission from scratch --
+    // silently discarding credit for everything the student had already gotten right. Persisting
+    // it here means any later check can still find it on the row itself. See
+    // checkHomeworkSubmission's fallback logic for the read side.
+    if (priorMissingQuestions) notesForUpdate.outstandingQuestions = priorMissingQuestions;
 
     const { data: updatedRow, error: updateError } = await supabase
       .from("homework_submissions")
@@ -457,12 +471,32 @@ async function upsertHomeworkSubmission(params: {
 
 // Sends one homework submission to Claude for grading, and writes the result back to the row.
 // Never throws -- a failed check just leaves the submission "pending" so a later run can retry it.
-// priorMissingQuestions carries over whatever was still outstanding on this row from its previous
-// check (see upsertHomeworkSubmission) -- undefined/null means this is either a first-time
-// submission or the previous check found nothing outstanding, so no resubmission scoping applies.
+// priorMissingQuestions ties directly to caller intent:
+//  - an array -> use it as-is (the caller, e.g. check-mine right after a resubmission, already
+//    knows exactly what was outstanding before this upload).
+//  - explicit null -> the caller deliberately wants a full recheck with NO resubmission scoping
+//    at all (admin Reevaluate: "grade this properly from scratch", ignoring any prior history).
+//  - omitted (undefined) -> the caller has no opinion -- the cron sweep and "Check Pending Now"
+//    just sweep up whatever's pending, with no context about why. Fall back to whatever this
+//    row's own admin_notes carries forward from upsertHomeworkSubmission. This is what actually
+//    closes a real scoring bug: a resubmission's "what's still outstanding" used to live ONLY in
+//    the HTTP response returned to the browser, for the frontend to thread through to a separate
+//    check-mine call right after upload. If that immediate follow-up never completed (a dropped
+//    mobile connection, a closed tab) and the submission was instead picked up later by the cron
+//    sweep, the scoping was silently lost and the AI graded the resubmission as a brand new
+//    submission from scratch -- discarding credit for everything the student had already gotten
+//    right, and tanking their score on what was really just a small correction.
 async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
+
+  let effectivePriorMissingQuestions = priorMissingQuestions;
+  if (effectivePriorMissingQuestions === undefined) {
+    const rowNotes = parseAdminNotes(sub.admin_notes);
+    effectivePriorMissingQuestions = Array.isArray(rowNotes.outstandingQuestions) && rowNotes.outstandingQuestions.length > 0
+      ? rowNotes.outstandingQuestions
+      : null;
+  }
 
   // A student who got some questions wrong or missing may send just those questions in a
   // follow-up submission (an "Improve Score" resubmission) rather than resending everything.
@@ -470,8 +504,8 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
   // instead of re-flagging already-completed questions, and so a corrected wrong answer actually
   // raises the score instead of being silently ignored because it was never "missing" to begin with.
   let resubmissionNote = "";
-  if (priorMissingQuestions && priorMissingQuestions.length > 0) {
-    const outstanding = priorMissingQuestions.join(", ");
+  if (effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0) {
+    const outstanding = effectivePriorMissingQuestions.join(", ");
     resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
   }
 
@@ -7912,7 +7946,10 @@ function buildApp(): express.Express {
   // admin force a fresh grading pass on a submission that was already checked, e.g. if the score
   // or feedback looks wrong. Always a full recheck of the whole file as it currently stands, not
   // scoped to previously-outstanding questions -- the admin's intent here is "grade this properly
-  // from scratch", not "diff against an earlier resubmission".
+  // from scratch", not "diff against an earlier resubmission". Passes null explicitly (rather than
+  // omitting the argument) so checkHomeworkSubmission doesn't fall back to whatever the row's own
+  // admin_notes carries forward -- that fallback exists for the cron sweep and "Check Pending Now",
+  // which have no opinion either way, not for this endpoint's deliberate "ignore prior history" intent.
   app.post("/api/admin/homework/reevaluate", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
     const { submissionId } = req.body;
@@ -7921,7 +7958,7 @@ function buildApp(): express.Express {
     const { data: existing } = await supabase.from("homework_submissions").select("id").eq("id", submissionId).maybeSingle();
     if (!existing) return res.status(404).json({ error: "Submission not found." });
 
-    await checkHomeworkSubmission(String(submissionId));
+    await checkHomeworkSubmission(String(submissionId), null);
     const { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!updated) return res.status(404).json({ error: "Submission not found after recheck." });
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
