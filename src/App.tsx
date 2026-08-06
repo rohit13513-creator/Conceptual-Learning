@@ -666,6 +666,15 @@ export default function App() {
   const [deleteConfirmSub, setDeleteConfirmSub] = useState<any | null>(null);
   const [deletingSubmission, setDeletingSubmission] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Edit an existing submission -- reassign it to a different homework and/or add more photos
+  // onto the end of the existing file.
+  const [editSub, setEditSub] = useState<any | null>(null);
+  const [editAssignmentId, setEditAssignmentId] = useState('');
+  const [editSessionId, setEditSessionId] = useState(() => crypto.randomUUID());
+  const [editPhotoTempPaths, setEditPhotoTempPaths] = useState<string[]>([]);
+  const [editPhotosUploading, setEditPhotosUploading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Homework Upload States
   const [homeworkSubject, setHomeworkSubject] = useState('');
@@ -741,6 +750,10 @@ export default function App() {
   const [expandedHomeworkClasses, setExpandedHomeworkClasses] = useState<Set<string>>(new Set());
   // Submission ids whose full AI feedback is expanded in the admin table -- collapsed (score-only) by default.
   const [expandedFeedbackIds, setExpandedFeedbackIds] = useState<Set<string>>(new Set());
+  // Homework Submissions table: per-class page index (25/page, "All Students" mode only) and
+  // per-class selected-student filter (empty string = "All Students"). Keyed by studentClass.
+  const [homeworkPageByClass, setHomeworkPageByClass] = useState<Record<string, number>>({});
+  const [homeworkStudentFilterByClass, setHomeworkStudentFilterByClass] = useState<Record<string, string>>({});
 
   // Missing-submissions report (admin only)
   const [missingReport, setMissingReport] = useState<any[]>([]);
@@ -1336,6 +1349,46 @@ export default function App() {
       setReportData(null);
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const openEditSubmission = (sub: any) => {
+    setEditSub(sub);
+    setEditAssignmentId(sub.assignmentId || '');
+    setEditSessionId(crypto.randomUUID());
+    setEditPhotoTempPaths([]);
+    setEditPhotosUploading(false);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !editSub) return;
+    const assignmentChanged = editAssignmentId && editAssignmentId !== (editSub.assignmentId || '');
+    if (!assignmentChanged && editPhotoTempPaths.length === 0) {
+      setEditError('Choose a different homework, or add at least one photo, before saving.');
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const resp = await fetch('/api/admin/homework/edit-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({
+          submissionId: editSub.id,
+          assignmentId: assignmentChanged ? editAssignmentId : undefined,
+          sessionId: editPhotoTempPaths.length > 0 ? editSessionId : undefined,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to save the changes.');
+      setEditSub(null);
+      await fetchAdminData();
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -3379,6 +3432,75 @@ export default function App() {
                 {deletingSubmission ? 'Deleting...' : 'Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {editSub && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !editSaving && setEditSub(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div>
+              <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Edit Submission</h3>
+              <p className={`text-xs font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{editSub.studentName} -- {editSub.assignmentTitle || editSub.subject || 'Homework'}</p>
+            </div>
+            {editError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{editError}</div>
+            )}
+            {(() => {
+              const targetTrack = CLASS_TRACK_MAP[editSub.studentClass || ''];
+              const assignmentsForStudent = assignments
+                .filter((a: any) => a.targetClass === 'All' || a.targetClass === targetTrack)
+                .slice()
+                .sort((a: any, b: any) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
+              return (
+                <form onSubmit={handleSaveEdit} className="space-y-3">
+                  <div className="space-y-1">
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework</label>
+                    <select
+                      value={editAssignmentId}
+                      onChange={(e) => setEditAssignmentId(e.target.value)}
+                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                    >
+                      {assignmentsForStudent.map((a: any) => (
+                        <option key={a.id} value={a.id}>{a.title} ({formatAssignmentDate(a.assignedDate)})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Add More Photos (appended to the end of the existing PDF)</label>
+                    <PhotoUploader
+                      key={editSessionId}
+                      token={user!.token}
+                      sessionId={editSessionId}
+                      isLightMode={isLightMode}
+                      disabled={editSaving}
+                      accent="cyan"
+                      onChange={(paths, uploading) => { setEditPhotoTempPaths(paths); setEditPhotosUploading(uploading); }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditSub(null)}
+                      disabled={editSaving}
+                      className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editSaving || editPhotosUploading}
+                      className="flex-1 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {editSaving ? 'Saving...' : editPhotosUploading ? 'Photos still uploading...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -6871,6 +6993,21 @@ export default function App() {
                     {orderedClasses.map((cls) => {
                       const group = adminHomework.filter((s: any) => (s.studentClass || 'Unspecified') === cls);
                       const isCollapsed = !expandedHomeworkClasses.has(cls);
+
+                      const HOMEWORK_PAGE_SIZE = 25;
+                      const selectedStudentEmail = homeworkStudentFilterByClass[cls] || '';
+                      const studentsInGroup: [string, string][] = Array.from(
+                        new Map<string, string>(group.map((s: any) => [s.studentEmail, s.studentName])).entries()
+                      ).sort((a, b) => a[1].localeCompare(b[1]));
+                      const filteredGroup = selectedStudentEmail
+                        ? group.filter((s: any) => s.studentEmail === selectedStudentEmail)
+                        : group;
+                      const currentPage = selectedStudentEmail ? 0 : (homeworkPageByClass[cls] || 0);
+                      const totalPages = Math.max(1, Math.ceil(filteredGroup.length / HOMEWORK_PAGE_SIZE));
+                      const pagedGroup = selectedStudentEmail
+                        ? filteredGroup
+                        : filteredGroup.slice(currentPage * HOMEWORK_PAGE_SIZE, (currentPage + 1) * HOMEWORK_PAGE_SIZE);
+
                       return (
                         <div key={cls}>
                           <button
@@ -6884,7 +7021,31 @@ export default function App() {
                           </button>
 
                           {!isCollapsed && (
-                            <div className="mt-2 overflow-x-auto">
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between gap-2 flex-wrap mb-2 px-0.5">
+                                <select
+                                  value={selectedStudentEmail}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setHomeworkStudentFilterByClass(prev => ({ ...prev, [cls]: val }));
+                                    setHomeworkPageByClass(prev => ({ ...prev, [cls]: 0 }));
+                                  }}
+                                  className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                                >
+                                  <option value="">All Students ({group.length})</option>
+                                  {studentsInGroup.map(([email, name]) => (
+                                    <option key={email} value={email}>{name}</option>
+                                  ))}
+                                </select>
+                                {!selectedStudentEmail && (
+                                  <span className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    Showing {filteredGroup.length === 0 ? 0 : currentPage * HOMEWORK_PAGE_SIZE + 1}
+                                    -{Math.min((currentPage + 1) * HOMEWORK_PAGE_SIZE, filteredGroup.length)} of {filteredGroup.length}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="overflow-x-auto">
                               <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
                                 <thead>
                                   <tr className={`uppercase tracking-wider font-mono text-[10px] pb-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -6897,7 +7058,7 @@ export default function App() {
                                   </tr>
                                 </thead>
                                 <tbody className={`divide-y font-sans ${isLightMode ? 'divide-slate-200 text-slate-900' : 'divide-slate-800/60 text-slate-100'}`}>
-                                  {group.map((sub: any) => (
+                                  {pagedGroup.map((sub: any) => (
                                     <tr key={sub.id} className={`transition-colors ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-slate-950/20'}`}>
                                       <td className="py-3 pr-4">
                                         <p className="font-bold">{sub.studentName}</p>
@@ -6996,6 +7157,14 @@ export default function App() {
                                           </button>
                                           <button
                                             type="button"
+                                            onClick={() => openEditSubmission(sub)}
+                                            className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 font-bold text-[10px] uppercase cursor-pointer"
+                                            title="Reassign this submission to a different homework, or add more photos to it"
+                                          >
+                                            <Layers className="w-3.5 h-3.5" /> Edit
+                                          </button>
+                                          <button
+                                            type="button"
                                             onClick={() => { setDeleteConfirmSub(sub); setDeleteError(null); }}
                                             className="flex items-center gap-1 text-red-400 hover:text-red-300 font-bold text-[10px] uppercase cursor-pointer"
                                             title="Delete this submission entirely"
@@ -7008,6 +7177,30 @@ export default function App() {
                                   ))}
                                 </tbody>
                               </table>
+                              </div>
+                              {!selectedStudentEmail && totalPages > 1 && (
+                                <div className="flex items-center justify-center gap-3 mt-3">
+                                  <button
+                                    type="button"
+                                    disabled={currentPage === 0}
+                                    onClick={() => setHomeworkPageByClass(prev => ({ ...prev, [cls]: Math.max(0, currentPage - 1) }))}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-950/60 border-slate-800 text-slate-200 hover:bg-slate-900'}`}
+                                  >
+                                    Previous
+                                  </button>
+                                  <span className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    Page {currentPage + 1} of {totalPages}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={currentPage >= totalPages - 1}
+                                    onClick={() => setHomeworkPageByClass(prev => ({ ...prev, [cls]: Math.min(totalPages - 1, currentPage + 1) }))}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-950/60 border-slate-800 text-slate-200 hover:bg-slate-900'}`}
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

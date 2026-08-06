@@ -7700,6 +7700,100 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(upserted.row) });
   });
 
+  // Lets the admin edit an existing submission after the fact: reassign it to a different
+  // homework assignment (e.g. it was filed under the wrong one), and/or add more photos onto the
+  // END of the existing PDF (e.g. the student missed a page and it's easier to add it than to
+  // have them redo the whole submission). Either change can be made alone or together. If the
+  // file content changes, the submission goes back to "pending" -- the old AI grade no longer
+  // reflects what's actually in the file, so it needs a fresh check (Reevaluate) same as any
+  // other resubmission.
+  app.post("/api/admin/homework/edit-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required." });
+    const { submissionId, assignmentId, sessionId } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!sub) return res.status(404).json({ error: "Submission not found." });
+
+    const updates: Record<string, any> = {};
+
+    if (assignmentId && String(assignmentId).trim() && String(assignmentId).trim() !== sub.assignment_id) {
+      const { data: targetAssignment } = await supabase.from("homework_assignments").select("id").eq("id", String(assignmentId).trim()).maybeSingle();
+      if (!targetAssignment) return res.status(400).json({ error: "That homework assignment no longer exists." });
+      updates.assignment_id = String(assignmentId).trim();
+    }
+
+    let fileChanged = false;
+    if (sessionId && String(sessionId).trim()) {
+      let newPagesBuffer: Buffer | null;
+      try {
+        newPagesBuffer = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+      } catch (mergeErr: any) {
+        console.error("Error merging new photos for submission edit:", mergeErr.message);
+        return res.status(500).json({ error: "Failed to process the new photos." });
+      }
+      if (newPagesBuffer) {
+        if (!sub.file_path || !sub.file_path.toLowerCase().endsWith(".pdf")) {
+          return res.status(400).json({ error: "Can only add photos to a PDF submission." });
+        }
+        const { data: existingBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
+        if (downloadError || !existingBlob) {
+          console.error("Error downloading existing submission file:", downloadError?.message);
+          return res.status(500).json({ error: "Failed to load the existing submission file." });
+        }
+        let combinedBuffer: Buffer;
+        try {
+          const existingBuffer = Buffer.from(await existingBlob.arrayBuffer());
+          const baseDoc = await PDFDocument.load(existingBuffer);
+          const appendDoc = await PDFDocument.load(newPagesBuffer);
+          const copiedPages = await baseDoc.copyPages(appendDoc, appendDoc.getPageIndices());
+          copiedPages.forEach((page) => baseDoc.addPage(page));
+          combinedBuffer = Buffer.from(await baseDoc.save());
+        } catch (combineErr: any) {
+          console.error("Error combining PDFs for submission edit:", combineErr.message);
+          return res.status(500).json({ error: "Failed to add the new pages to the existing PDF." });
+        }
+
+        const newFilePath = `${sub.student_email}/${Date.now()}-submission.pdf`;
+        const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(newFilePath, combinedBuffer, { contentType: "application/pdf" });
+        if (uploadError) {
+          console.error("Error uploading edited submission file:", uploadError.message);
+          return res.status(500).json({ error: "Failed to save the updated submission file." });
+        }
+        // Old file is no longer referenced by anything now that the combined one is safely saved.
+        await supabase.storage.from(HOMEWORK_BUCKET).remove([sub.file_path]).catch(() => {});
+        updates.file_path = newFilePath;
+        fileChanged = true;
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "Nothing to update -- choose a different assignment or add at least one photo." });
+    }
+
+    if (fileChanged) {
+      updates.status = "pending";
+      updates.ai_score = null;
+      updates.ai_feedback = null;
+      updates.integrity_flag = null;
+      updates.admin_notes = null;
+    }
+
+    const { data: updated, error } = await supabase
+      .from("homework_submissions")
+      .update(updates)
+      .eq("id", submissionId)
+      .select()
+      .single();
+    if (error || !updated) {
+      console.error("Edit submission save error:", error?.message);
+      return res.status(500).json({ error: "Failed to save the changes. Please try again." });
+    }
+    return res.json({ success: true, submission: mapHomeworkRow(updated) });
+  });
+
   // Student submits homework: one or more images (merged into a single PDF) or one PDF
   app.post("/api/homework/upload", (req, res, next) => {
     homeworkUpload.array("files", 15)(req, res, (err: any) => {
@@ -7993,7 +8087,7 @@ function buildApp(): express.Express {
     if (!checkAdminAuth(req, res)) return;
 
     const [{ data: rows }, { data: userRows }, { data: assignmentRows }] = await Promise.all([
-      supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(300),
+      supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(2000),
       supabase.from("users").select("email, name, student_class"),
       supabase.from("homework_assignments").select("id, title, deadline"),
     ]);
