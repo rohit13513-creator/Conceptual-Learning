@@ -11,9 +11,12 @@ interface QuizProps {
   isLightMode?: boolean;
   subjectTitle?: string;
   subjectSubtitle?: string;
+  // Overrides the grade-based default timer below for this specific set of custom questions --
+  // e.g. a chapter with more questions than usual needs more time than its grade's default.
+  durationSeconds?: number;
 }
 
-export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLightMode = false, subjectTitle, subjectSubtitle }) => {
+export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLightMode = false, subjectTitle, subjectSubtitle, durationSeconds }) => {
   const [selectedGrade, setSelectedGrade] = useState<QuizGrade>(initialGrade || "10th");
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
@@ -34,7 +37,9 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
     
     if (customQuestions) {
       // If we are passing custom questions (like CLASSVIII_SELF_ASSESSMENT or COMPETITION_SELF_ASSESSMENT)
-      if (initialGrade === "8th") {
+      if (durationSeconds) {
+        duration = durationSeconds;
+      } else if (initialGrade === "8th") {
         duration = 1200; // 20 mins for Class VIII
       } else if (initialGrade === "9th") {
         duration = 1800; // 30 mins for Class IX Biology
@@ -63,7 +68,7 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
     setIsSubmitted(false);
     setUserSelections({});
     setHasStarted(false);
-  }, [selectedGrade, initialGrade, customQuestions]);
+  }, [selectedGrade, initialGrade, customQuestions, durationSeconds]);
 
   // Handle countdown interval
   useEffect(() => {
