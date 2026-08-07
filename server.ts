@@ -359,6 +359,14 @@ const CLAUDE_MODEL = "claude-sonnet-5";
 interface SubmissionNotes {
   outstandingQuestions?: string[];
   lateOverride?: "late" | "not_late";
+  // How many questions the FULL assignment actually has, from the last non-scoped check.
+  // Needed because a resubmission's AI check is deliberately scoped to only the few outstanding
+  // questions (see resubmissionNote below) -- its own questionByQuestionCheck array only has
+  // entries for that small subset, not the whole assignment. Using that subset's length as the
+  // denominator for the doubt-percentage rule is wrong or (e.g. 1 doubt out of 3 scoped
+  // questions = 33%, when the real assignment has 20 questions and the true rate is 5%) --
+  // carrying this forward lets every resubmission check use the real total instead.
+  totalQuestionCount?: number;
 }
 function parseAdminNotes(raw: string | null | undefined): SubmissionNotes {
   if (!raw) return {};
@@ -375,6 +383,7 @@ function serializeAdminNotes(notes: SubmissionNotes): string | null {
   const cleaned: SubmissionNotes = {};
   if (Array.isArray(notes.outstandingQuestions) && notes.outstandingQuestions.length > 0) cleaned.outstandingQuestions = notes.outstandingQuestions;
   if (notes.lateOverride) cleaned.lateOverride = notes.lateOverride;
+  if (typeof notes.totalQuestionCount === "number" && notes.totalQuestionCount > 0) cleaned.totalQuestionCount = notes.totalQuestionCount;
   return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
 }
 
@@ -424,6 +433,14 @@ async function upsertHomeworkSubmission(params: {
     // it here means any later check can still find it on the row itself. See
     // checkHomeworkSubmission's fallback logic for the read side.
     if (priorMissingQuestions) notesForUpdate.outstandingQuestions = priorMissingQuestions;
+    // Same reasoning applies to totalQuestionCount: it must survive this "pending" window too, or
+    // the scoped check that eventually runs has no real denominator to fall back on and ends up
+    // computing the doubt-percentage rule against just the few resubmitted questions instead of
+    // the whole assignment (a real incident: 1 doubt out of a 3-question resubmission read as
+    // 33%, when the actual assignment had 20 questions and the true rate was 5%).
+    if (typeof existingNotes.totalQuestionCount === "number" && existingNotes.totalQuestionCount > 0) {
+      notesForUpdate.totalQuestionCount = existingNotes.totalQuestionCount;
+    }
 
     const { data: updatedRow, error: updateError } = await supabase
       .from("homework_submissions")
@@ -490,13 +507,15 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
 
+  const notesFromRow = parseAdminNotes(sub.admin_notes);
+
   let effectivePriorMissingQuestions = priorMissingQuestions;
   if (effectivePriorMissingQuestions === undefined) {
-    const rowNotes = parseAdminNotes(sub.admin_notes);
-    effectivePriorMissingQuestions = Array.isArray(rowNotes.outstandingQuestions) && rowNotes.outstandingQuestions.length > 0
-      ? rowNotes.outstandingQuestions
+    effectivePriorMissingQuestions = Array.isArray(notesFromRow.outstandingQuestions) && notesFromRow.outstandingQuestions.length > 0
+      ? notesFromRow.outstandingQuestions
       : null;
   }
+  const isScopedResubmission = !!(effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0);
 
   // A student who got some questions wrong or missing may send just those questions in a
   // follow-up submission (an "Improve Score" resubmission) rather than resending everything.
@@ -741,13 +760,28 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
     const parsed = toolUseBlock.input;
 
+    // How many questions the FULL assignment actually has. On a normal (non-scoped) check, the
+    // model's own questionByQuestionCheck array covers every assigned question, so its length is
+    // the real total -- and that's the freshest, most authoritative value available, so it's what
+    // gets persisted going forward (see the write below). On a resubmission-scoped check, though,
+    // the model was deliberately told to only evaluate the few still-outstanding questions (see
+    // resubmissionNote above), so questionByQuestionCheck only has entries for that small subset
+    // -- using its length here would silently substitute a tiny denominator for the real one (a
+    // real incident: 1 doubt out of a 3-question scoped resubmission read as 33%, over the 30%
+    // deduction threshold, when the actual assignment had 20 questions and the true rate was 5%,
+    // well under it). Reuse whatever was persisted from the last full check instead.
+    const rawQuestionCount = Array.isArray(parsed.questionByQuestionCheck) ? parsed.questionByQuestionCheck.length : 0;
+    const effectiveTotalQuestionCount = isScopedResubmission && typeof notesFromRow.totalQuestionCount === "number" && notesFromRow.totalQuestionCount > 0
+      ? notesFromRow.totalQuestionCount
+      : rawQuestionCount;
+
     // Deterministic doubt-volume penalty -- applied on top of Claude's judgment-based score
     // (which is scored as if doubt-marked questions weren't part of the assignment at all),
     // never left to the AI's own arithmetic, for the same reason as the late penalty below: a
     // fixed rule that can't vary submission to submission. Tiers, by percentage of assigned
     // questions marked doubt: 0-30% -> no deduction, >30-50% -> 3 marks off, >50% -> score 0.
     if (typeof parsed.score === "number") {
-      const totalQuestions = Array.isArray(parsed.questionByQuestionCheck) ? parsed.questionByQuestionCheck.length : 0;
+      const totalQuestions = effectiveTotalQuestionCount;
       const doubtCount = Array.isArray(parsed.doubtQuestions) ? parsed.doubtQuestions.length : 0;
       if (totalQuestions > 0 && doubtCount > 0) {
         const doubtPercent = (doubtCount / totalQuestions) * 100;
@@ -772,12 +806,11 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // admin's explicit lateOverride (set via the "Upload Homework For A Student" form's "do not
     // mark as late" box, or via the late-status toggle on an already-checked submission) always
     // wins over that automatic timestamp comparison.
-    const existingNotes = parseAdminNotes(sub.admin_notes);
     if (typeof parsed.score === "number") {
       let isLate: boolean;
-      if (existingNotes.lateOverride === "not_late") {
+      if (notesFromRow.lateOverride === "not_late") {
         isLate = false;
-      } else if (existingNotes.lateOverride === "late") {
+      } else if (notesFromRow.lateOverride === "late") {
         isLate = true;
       } else {
         let effectiveDeadline: string | null = assignmentForDeadline?.deadline ?? null;
@@ -814,7 +847,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
-      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: existingNotes.lateOverride }),
+      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount }),
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
