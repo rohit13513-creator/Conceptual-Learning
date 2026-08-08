@@ -3729,7 +3729,6 @@ export default function App() {
                               <td className="py-2.5 pr-3 font-black">{s.rank}</td>
                               <td className="py-2.5 px-3">
                                 <p className="font-bold">{s.name}</p>
-                                <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{s.email}</p>
                               </td>
                               {s.perAssignment.map((pa: any, i: number) => (
                                 <td key={i} className="py-2.5 px-3 whitespace-nowrap">
