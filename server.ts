@@ -7963,6 +7963,54 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
+  // Processes every still-pending homework submission, shared by both the cron sweep and the
+  // admin "Check Pending Now" button below.
+  //
+  // Real incident (2026-08-08, Class X): a student's homework silently stayed "pending" through
+  // both the daily cron run AND multiple admin "Check Pending Now" clicks, night after night --
+  // yet a single admin Reevaluate on that exact submission always worked immediately. Root cause:
+  // this used to fetch up to 25 pending rows with NO explicit order (an unspecified DB order, not
+  // necessarily submission time) and check them ONE AT A TIME in a sequential for-loop, each
+  // individual AI call taking anywhere from several seconds to over a minute (vision + adaptive
+  // thinking, sometimes multiple retries) -- while the whole request shares Vercel's 120s
+  // maxDuration (see vercel.json). On any evening where a meaningful number of submissions land
+  // near the deadline, that sequential loop runs out of time partway through and Vercel kills the
+  // function mid-sweep; whichever rows hadn't been reached yet (an amount that varies per run) are
+  // left pending with no error surfaced anywhere. Because the fetch had no ordering, the same
+  // unlucky rows kept landing outside whatever prefix happened to complete before each run got cut
+  // off, so the same specific student was skipped run after run while others nearby in the query's
+  // arbitrary order kept getting through -- explaining why it looked like it was happening to one
+  // particular student's homework specifically, rather than a random subset each time.
+  //
+  // Fixed two ways: (1) run checks concurrently in small batches instead of one at a time, so far
+  // more of the backlog fits inside the same time budget instead of the total time being the sum
+  // of every individual check; (2) order oldest-submitted-first, so if a run genuinely can't finish
+  // everything, it's always the newest arrivals left over for the next run -- never the same
+  // specific student stranded indefinitely. Also stops starting new batches once within ~20s of
+  // the 120s ceiling, so an in-progress batch has room to actually finish (and get its DB write
+  // committed) rather than being killed mid-flight for nothing.
+  const PENDING_CHECK_TIME_BUDGET_MS = 100_000; // leaves ~20s headroom under the 120s maxDuration
+  const PENDING_CHECK_BATCH_SIZE = 6; // concurrent AI calls per batch -- enough to make real use of the time budget without hammering Anthropic's rate limits
+  async function processPendingHomework(): Promise<{ checked: number; remaining: number }> {
+    const startedAt = Date.now();
+    const { data: pending } = await supabase
+      .from("homework_submissions")
+      .select("id")
+      .eq("status", "pending")
+      .order("submitted_at", { ascending: true })
+      .limit(200); // a generous cap just to bound worst-case query size, not a processing limit -- see batching below
+    const queue = pending || [];
+    let checked = 0;
+    let i = 0;
+    while (i < queue.length && Date.now() - startedAt < PENDING_CHECK_TIME_BUDGET_MS) {
+      const batch = queue.slice(i, i + PENDING_CHECK_BATCH_SIZE);
+      await Promise.all(batch.map((row) => checkHomeworkSubmission(row.id)));
+      checked += batch.length;
+      i += batch.length;
+    }
+    return { checked, remaining: queue.length - checked };
+  }
+
   // Vercel Cron hits this on a schedule (see vercel.json) to check any homework that's still
   // "pending". Vercel automatically sends "Authorization: Bearer <CRON_SECRET>" for cron-triggered
   // requests when CRON_SECRET is set as an env var, which is what this checks against.
@@ -7972,11 +8020,8 @@ function buildApp(): express.Express {
       return res.status(401).json({ error: "Unauthorized." });
     }
 
-    const { data: pending } = await supabase.from("homework_submissions").select("id").eq("status", "pending").limit(25);
-    for (const row of pending || []) {
-      await checkHomeworkSubmission(row.id);
-    }
-    return res.json({ checked: (pending || []).length });
+    const result = await processPendingHomework();
+    return res.json(result);
   });
 
   // Admin-triggered immediate check of all pending homework (for local testing, or to skip
@@ -7984,11 +8029,8 @@ function buildApp(): express.Express {
   app.post("/api/admin/homework/check-now", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
 
-    const { data: pending } = await supabase.from("homework_submissions").select("id").eq("status", "pending").limit(25);
-    for (const row of pending || []) {
-      await checkHomeworkSubmission(row.id);
-    }
-    return res.json({ checked: (pending || []).length });
+    const result = await processPendingHomework();
+    return res.json(result);
   });
 
   // Admin manually re-runs the AI check on one specific submission, regardless of its current
