@@ -589,6 +589,8 @@ Working out which questions were actually assigned:
 - If you genuinely cannot tell which questions were assigned (no range stated anywhere and no other way to infer it), just grade what's shown as usual, without guessing at what might be missing.
 - Many assignments (e.g. "Examples 1-11, Exercise Q1-11") contain TWO separately-numbered lists that both restart at 1 -- a bare "Q9" is genuinely ambiguous between them and risks quoting or checking the wrong problem entirely. Whenever an assignment has more than one numbered list, always write "Example N" or "Exercise QN" (never a bare number) everywhere you refer to a question -- in pageByPageNotes, questionByQuestionCheck, feedback, missingQuestions, and incorrectQuestions alike.
 
+Counting the assignment for the doubt-percentage rule: separately from questionByQuestionCheck (which lists each lettered/numbered sub-part individually so every sub-part's arithmetic gets checked), report assignedQuestionCount as the number of TOP-LEVEL assigned questions only -- the count implied by the assigned range itself (e.g. "Question 16 to 30" is 15 questions, even though some of those, like a question with parts (i)-(iv), expand to several entries in questionByQuestionCheck). Do not derive assignedQuestionCount by counting entries in questionByQuestionCheck; count top-level question numbers in the assigned range directly.
+
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") -- this means the student is stuck and wants the teacher to explain that question in class. This applies whether the doubt marker stands alone with no attempt at all, OR the student made a partial/incorrect attempt first and then wrote "doubt" (e.g. gave up partway through and flagged it, rather than leaving it fully blank) -- either way, treat the WHOLE question as a self-flagged doubt, not a wrong or missing answer. Do not grade the partial attempt as incorrect just because one exists alongside the doubt marker, and never mark a doubt as incorrect.
 
 A doubt-marked question is fully accounted for and resolved from a grading standpoint -- it is neither missing nor something still "to be attempted." It must never appear in missingQuestions or incorrectQuestions, must never be cited as a reason the submission is INCOMPLETE, and must never be described in feedback as something the student still needs to attempt or complete (e.g. never write phrasing like "cannot be graded complete until the doubt-marked questions are attempted" -- that is exactly backwards). If literally every assigned question is either correct or marked doubt, with nothing missing and nothing incorrect, the submission is COMPLETE, and your own score for it should be 10/10 -- score purely on the merits of the non-doubt questions, as if the doubt-marked ones simply weren't part of the assignment. Separately, list every doubt-marked question number in doubtQuestions (matching the same per-sub-part granularity as questionByQuestionCheck). Do NOT factor how many questions were marked doubt into your own score in any way, however many there are -- a deterministic step outside your scoring already applies a defined deduction based on that proportion, and if you also reduce your own score for it, the submission gets penalized twice for the same thing.
@@ -654,6 +656,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           items: { type: "string" },
           description: "One entry per assigned question (by number -- 'Example N' or 'Exercise QN' if the assignment has more than one numbered list, including each lettered/numbered sub-part for questions with multiple parts, e.g. 'Exercise Q1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. First copy out the exact numbers/values the student actually wrote for that question -- do not recall or assume values from a similar-looking textbook problem. Then, for anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.), redo the calculation yourself digit-by-digit using those copied-out values, and state the correct result, then compare it to what the student concluded -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
         },
+        assignedQuestionCount: { type: "integer", minimum: 1, description: "The total number of assigned questions, counted by TOP-LEVEL question number only (e.g. an assignment description of 'Question 16 to 30' is 15 questions), NOT the number of entries in questionByQuestionCheck -- a question with lettered sub-parts like (i)-(iv) still counts as ONE question here even though it expands to several entries there. Used only as the denominator for the doubt-percentage rule." },
         integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
@@ -673,7 +676,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely -- never reduced for how many questions were marked doubt (a separate deterministic step handles that), nor for handwriting, neatness, or cut/crossed-out corrections. Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
-      required: ["pageByPageNotes", "questionByQuestionCheck", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
+      required: ["pageByPageNotes", "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
     },
   };
 
@@ -760,17 +763,23 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
     const parsed = toolUseBlock.input;
 
-    // How many questions the FULL assignment actually has. On a normal (non-scoped) check, the
-    // model's own questionByQuestionCheck array covers every assigned question, so its length is
-    // the real total -- and that's the freshest, most authoritative value available, so it's what
-    // gets persisted going forward (see the write below). On a resubmission-scoped check, though,
-    // the model was deliberately told to only evaluate the few still-outstanding questions (see
-    // resubmissionNote above), so questionByQuestionCheck only has entries for that small subset
-    // -- using its length here would silently substitute a tiny denominator for the real one (a
-    // real incident: 1 doubt out of a 3-question scoped resubmission read as 33%, over the 30%
+    // How many questions the FULL assignment actually has, counted the same top-level way the
+    // teacher assigns them (e.g. "Question 16 to 30" = 15) -- NOT questionByQuestionCheck.length,
+    // which deliberately expands into one entry per lettered sub-part (e.g. a question with parts
+    // (i)-(iv) becomes 4 entries there) for accuracy-checking purposes. Conflating those two units
+    // was a real incident: a 15-question assignment containing one question with 4 lettered
+    // sub-parts produced questionByQuestionCheck.length 19, which then silently became "19
+    // assigned questions" in the doubt-percentage feedback shown to the student. assignedQuestionCount
+    // is the model's own dedicated top-level count instead. On a resubmission-scoped check, the
+    // model was deliberately told to only evaluate the few still-outstanding questions (see
+    // resubmissionNote above), so its assignedQuestionCount would only reflect that small subset
+    // -- using it here would silently substitute a tiny denominator for the real one (a real
+    // incident: 1 doubt out of a 3-question scoped resubmission read as 33%, over the 30%
     // deduction threshold, when the actual assignment had 20 questions and the true rate was 5%,
     // well under it). Reuse whatever was persisted from the last full check instead.
-    const rawQuestionCount = Array.isArray(parsed.questionByQuestionCheck) ? parsed.questionByQuestionCheck.length : 0;
+    const rawQuestionCount = typeof parsed.assignedQuestionCount === "number" && parsed.assignedQuestionCount > 0
+      ? parsed.assignedQuestionCount
+      : (Array.isArray(parsed.questionByQuestionCheck) ? parsed.questionByQuestionCheck.length : 0);
     const effectiveTotalQuestionCount = isScopedResubmission && typeof notesFromRow.totalQuestionCount === "number" && notesFromRow.totalQuestionCount > 0
       ? notesFromRow.totalQuestionCount
       : rawQuestionCount;
@@ -782,7 +791,14 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // questions marked doubt: 0-30% -> no deduction, >30-50% -> 3 marks off, >50% -> score 0.
     if (typeof parsed.score === "number") {
       const totalQuestions = effectiveTotalQuestionCount;
-      const doubtCount = Array.isArray(parsed.doubtQuestions) ? parsed.doubtQuestions.length : 0;
+      // doubtQuestions lists sub-parts individually (matching questionByQuestionCheck's
+      // granularity, e.g. "Q25(ii)" and "Q25(iii)" as two separate entries for one question with
+      // two doubted sub-parts) -- collapse to top-level question numbers here so the numerator
+      // uses the same unit as totalQuestions above, instead of over-counting a single doubted
+      // question as several.
+      const doubtCount = Array.isArray(parsed.doubtQuestions)
+        ? new Set(parsed.doubtQuestions.map((q: string) => String(q).replace(/\(.*\)\s*$/, "").trim())).size
+        : 0;
       if (totalQuestions > 0 && doubtCount > 0) {
         const doubtPercent = (doubtCount / totalQuestions) * 100;
         let doubtNote: string | null = null;
