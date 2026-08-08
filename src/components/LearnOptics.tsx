@@ -4080,7 +4080,7 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
             color: ${isLightMode ? '#0f172a' : '#ffffff'} !important; /* Dynamic bold/heading contrast */
           }
           /* Ensure specific colorful highlight classes are brilliantly glowing and fully legible */
-          #learn-optics-main .text-[#22d3ee],
+          #learn-optics-main .text-\\[\\#22d3ee\\],
           #learn-optics-main .text-cyan-450,
           #learn-optics-main .text-cyan-400,
           #learn-optics-main .text-cyan-300,
@@ -4142,11 +4142,11 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
           /* Override all dark background blocks when isLightMode is true */
           ${isLightMode ? `
             #learn-optics-container .bg-slate-900,
-            #learn-optics-container .bg-[#0b101d],
-            #learn-optics-container .bg-[#070b12],
-            #learn-optics-container .bg-[#050912],
-            #learn-optics-container .bg-[#040810],
-            #learn-optics-container .bg-[#121c2e],
+            #learn-optics-container .bg-\\[\\#0b101d\\],
+            #learn-optics-container .bg-\\[\\#070b12\\],
+            #learn-optics-container .bg-\\[\\#050912\\],
+            #learn-optics-container .bg-\\[\\#040810\\],
+            #learn-optics-container .bg-\\[\\#121c2e\\],
             #learn-optics-container .bg-slate-950,
             #learn-optics-container .bg-slate-900\\/40,
             #learn-optics-container svg {
@@ -10607,7 +10607,7 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
               .study-notes-container table,
               .study-notes-container .bg-slate-50,
               .study-notes-container .bg-slate-100,
-              .study-notes-container .bg-[#f8fafc],
+              .study-notes-container .bg-\\[\\#f8fafc\\],
               .study-notes-container .bg-cyan-50,
               .study-notes-container .bg-amber-50,
               .study-notes-container .print\:break-inside-avoid {

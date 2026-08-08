@@ -12,6 +12,7 @@ import LearnChemistry from './components/LearnChemistry';
 import { LearnBiology } from './components/LearnBiology';
 import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnMaths8 } from './components/LearnMaths8';
+import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import html2pdf from 'html2pdf.js';
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
@@ -4474,8 +4475,8 @@ export default function App() {
               border-color: ${isLightMode ? '#cbd5e1' : '#1e293b'} !important;
             }
             #ncert-container .bg-slate-950,
-            #ncert-container .bg-[#070d18],
-            #ncert-container .bg-[#121927],
+            #ncert-container .bg-\\[\\#070d18\\],
+            #ncert-container .bg-\\[\\#121927\\],
             #ncert-container .bg-slate-950\\/60 {
               background-color: ${isLightMode ? '#f1f5f9' : '#020617'} !important;
               border-color: ${isLightMode ? '#cbd5e1' : '#1e293b'} !important;
@@ -4587,7 +4588,17 @@ export default function App() {
                     {/* Expandable Worked Content */}
                     {isOpen && (
                       <div className="p-6 border-t border-slate-800 bg-[#070d18] space-y-5">
-                        
+
+                        {/* Figure -- CBSE-pattern diagram, shown before the given values for Maths8 geometry questions */}
+                        {preparingFor === '8th' && qbSubject === 'maths' && (
+                          <div className="space-y-2">
+                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">Figure</span>
+                            <div className="max-w-sm mx-auto">
+                              <Maths8SolvedDiagram questionId={q.id} isLightMode={isLightMode} />
+                            </div>
+                          </div>
+                        )}
+
                         {/* Given values */}
                         <div className="space-y-2">
                           <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono">1. {preparingFor === '9th' && qbSubject !== 'physics' ? 'Key Concept / Context' : 'Extracted Values (Prior to substitution)'}</span>
@@ -4738,9 +4749,14 @@ export default function App() {
             #qbank-container .bg-slate-950,
             #qbank-container .bg-slate-950\\/80,
             #qbank-container .bg-slate-950\\/60,
-            #qbank-container .bg-[#070e1a],
+            #qbank-container .bg-\\[\\#070e1a\\],
             #qbank-container .bg-slate-900\\/30 {
               background-color: ${isLightMode ? '#f1f5f9' : '#020617'} !important;
+              border-color: ${isLightMode ? '#cbd5e1' : '#1e293b'} !important;
+            }
+            #qbank-container .bg-\\[\\#0b101c\\],
+            #qbank-container .bg-\\[\\#070b14\\] {
+              background-color: ${isLightMode ? '#f1f5f9' : '#0b101c'} !important;
               border-color: ${isLightMode ? '#cbd5e1' : '#1e293b'} !important;
             }
             #qbank-container .text-slate-100,
@@ -5460,8 +5476,8 @@ export default function App() {
             }
             #assessment-container .bg-slate-950,
             #assessment-container .bg-slate-950\\/80,
-            #assessment-container .bg-[#070d18],
-            #assessment-container .bg-[#121927] {
+            #assessment-container .bg-\\[\\#070d18\\],
+            #assessment-container .bg-\\[\\#121927\\] {
               background-color: ${isLightMode ? '#f1f5f9' : '#020617'} !important;
               border-color: ${isLightMode ? '#cbd5e1' : '#1e293b'} !important;
             }
