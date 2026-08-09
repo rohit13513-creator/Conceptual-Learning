@@ -5613,6 +5613,9 @@ export default function App() {
               <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                 <AlertTriangle className="w-4 h-4 text-amber-400" /> These do affect your score
               </h2>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Each of the following costs exactly <b>1 mark</b> out of 10 -- a question with several wrong parts (e.g. parts (i)-(iv)) still only costs 1 mark total, not one per part:
+              </p>
               <ul className="space-y-2">
                 {[
                   'A question that is completely missing -- no answer written, and not marked as doubt.',
@@ -5632,13 +5635,14 @@ export default function App() {
                 <AlertTriangle className="w-4 h-4 text-amber-400" /> Late submission penalty
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                Submitting after your class's deadline deducts a flat 2 marks from your score, on top of the regular checking above. This is separate from and unaffected by anything else -- a late but otherwise perfect submission loses exactly 2 marks.
+                Your ORIGINAL submission for an assignment (not a resubmission -- see below) loses more marks the more days late it is, on top of the regular checking above:
               </p>
               <ul className="space-y-2">
                 {[
-                  'Class X -- 2 marks deducted if submitted after 4:45 PM the following day.',
-                  'Class IX -- 2 marks deducted if submitted after 5:45 PM the following day.',
-                  'Class VIII -- 2 marks deducted if submitted after 6:45 PM the following day.',
+                  '1 day late -- 2 marks deducted.',
+                  '2 days late -- 3 marks deducted.',
+                  '3 days late -- 4 marks deducted.',
+                  '...and so on, 1 additional mark for each further full day late.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
@@ -5646,6 +5650,24 @@ export default function App() {
                   </li>
                 ))}
               </ul>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Each class's deadline is the same day at:
+              </p>
+              <ul className="space-y-2">
+                {[
+                  'Class X -- 4:45 PM the following day.',
+                  'Class IX -- 5:45 PM the following day.',
+                  'Class VIII -- 6:45 PM the following day.',
+                ].map((line, i) => (
+                  <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                <b>Resubmitting (Improve Score) is different:</b> if you resubmit within 2 days of the original deadline to fix flagged questions, no late penalty applies at all. If you resubmit more than 2 days after the original deadline, a flat 1 mark is deducted -- regardless of how much later than that it is.
+              </p>
             </div>
 
             <div className={`border rounded-2xl p-6 shadow-lg space-y-3 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>

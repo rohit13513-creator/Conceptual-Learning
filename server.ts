@@ -503,6 +503,17 @@ async function upsertHomeworkSubmission(params: {
 //    sweep, the scoping was silently lost and the AI graded the resubmission as a brand new
 //    submission from scratch -- discarding credit for everything the student had already gotten
 //    right, and tanking their score on what was really just a small correction.
+// Shared by every deterministic per-question tally below (score, doubt-percentage numerator).
+// missingQuestions/incorrectQuestions/doubtQuestions all list lettered/numbered sub-parts
+// individually (matching questionByQuestionCheck's granularity, e.g. "Q25(ii)" and "Q25(iii)" as
+// two separate entries for one question with two bad sub-parts) -- collapsing to top-level
+// question numbers here means a single multi-part question only ever counts once, not once per
+// sub-part, regardless of which of these lists it's being counted in.
+function countTopLevelQuestions(list: any): number {
+  if (!Array.isArray(list)) return 0;
+  return new Set(list.map((q: any) => String(q).replace(/\(.*\)\s*$/, "").trim())).size;
+}
+
 async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
@@ -598,14 +609,14 @@ A doubt-marked question is fully accounted for and resolved from a grading stand
 Students often submit homework as phone photos of each page, one photo per page, which get combined into one file in the order they were uploaded. That order does not always match question order (e.g. a student may photograph pages out of sequence) -- this is normal and not a mistake. Never comment on question numbering being "inconsistent with page order/numbering" or similar; just work out which questions are present regardless of what order they appear in.
 
 SCORING RULES (CBSE board guidelines -- follow these exactly, the score must never be reduced for anything outside this list):
-- The score is based ONLY on two things: (1) whether every assigned question was attempted, and (2) whether each attempted question was solved correctly and via the proper CBSE method/steps (not just a bare final answer where working is required).
+- The score is based ONLY on two things: (1) whether every assigned question was attempted, and (2) whether each attempted question was solved correctly and via the proper CBSE method/steps (not just a bare final answer where working is required). The final score is computed deterministically outside your own judgment as 10 minus 1 mark for every question that ends up in missingQuestions or incorrectQuestions (a multi-part question with several wrong sub-parts still only costs 1 mark total, not one per sub-part) -- so the single most important thing for an accurate score is getting those two lists exactly right, not picking a number yourself.
 - NEVER reduce the score for handwriting quality, neatness, presentation, or messiness -- even if the writing is untidy or hard to read in places, do not lower the score for it. If a question's content genuinely cannot be made out at all because of illegibility, treat that specific question as unclear in the feedback (ask the student to rewrite it clearly) but still do not treat this as a scoring deduction category of its own -- score based on whatever content you can determine.
 - Poor handwriting can make one specific digit or character genuinely ambiguous between two visually similar ones (e.g. a poorly-formed 3 that could be a 5, a 1 that could be a 7, a 6 that could be a 0, a 4 that could be a 9, or a 9 that could be a 4 -- the open vs. closed top of a hand-written 4 and 9 are a very common confusion) -- this is a reading problem, not a math problem, and must not be treated as a wrong answer. When you genuinely cannot tell which of two similar-looking characters was written, resolve the ambiguity using whichever of these two checks applies: (1) if the digit is somewhere in the student's own working or final answer, prefer whichever reading makes their own shown working and final answer internally consistent and mathematically correct; (2) if the digit is instead in a value the student copied from the assigned question itself (a "given" number, e.g. a length, angle, or coefficient stated in the problem), prefer whichever reading matches the actual value stated in the assigned question/question sheet, since a copying slip on a given value is a reading problem the same way a working-out digit is. Do not mark either kind wrong based on the other, inconsistent reading. This applies ONLY to a real visual ambiguity on a single digit/character where the student's method is otherwise sound; it does NOT apply to an answer that is clearly and unambiguously written as something wrong, and it must never be used to excuse an actual calculation error or a flawed method -- when genuinely unsure whether something is an illegible-handwriting misread or a real mistake, use the redo-the-calculation-yourself step (see questionByQuestionCheck below) to check which reading the student's own working actually supports.
 - Indian school notebooks are commonly double-ruled (two thin horizontal guide lines per row of writing, meant to keep digit height consistent) rather than single-ruled. Where a digit or character's ink physically overlaps or sits right on top of one of these printed guide lines, do not let the ruling itself be mistaken for part of the character's shape (e.g. a ruling line crossing a digit can make a 1 look like it has an extra horizontal stroke and read as a 7 or a 4, or make an open digit look closed) -- mentally separate the handwritten ink from the fixed printed lines of the page before deciding what character was actually written, the same way you would ignore a page's margin line or edge.
 - NEVER reduce the score because a student crossed out, cut, scribbled over, or erased a wrong attempt and redid it nearby -- correcting your own mistake on the page is normal and expected, not a fault. When the same question number appears worked out twice (a scratched-out/crossed-out/heavily-scribbled-over first attempt followed by a second, cleaner attempt), grade ONLY the second, non-crossed-out attempt -- it supersedes the first one entirely, even if the first attempt's wrong conclusion is easier to read than the correct final one.
 - NEVER treat a question marked "doubt" as a scoring deduction, individually or in aggregate -- it is a self-flagged request for the teacher's help, not a wrong or missing answer. This includes not reducing your score based on how MANY questions were marked doubt; a fixed, deterministic deduction for that is applied separately outside your own scoring (see the doubtQuestions field), so your own score must never account for doubt volume at all.
 - NEVER treat a question as wrong, incomplete, or disorganized just because its working starts on one page and continues or concludes on a later page (or on a page out of the normal reading order) -- this is a completely normal consequence of handwriting layout, not a mistake. A student very often runs out of room mid-derivation, so the concluding line ("Hence Proved", a final boxed answer, "= RHS", the last algebraic step) is frequently the very first line of the NEXT page rather than the last line of the page where the question started, and a proof that looks cut off at the bottom of a page is not evidence it was left unfinished. This is what the required pageByPageNotes field (see the tool schema) exists for: fill it in for every single page first, explicitly noting anything that opens a page as a continuation from the previous one, and only judge a question incomplete, wrong, or unconcluded after that page-by-page pass is done.
-- DO reduce the score for: questions that are completely missing (no answer and no doubt marker), and questions that were attempted but are incorrect or skip required CBSE-format working/steps.
+- DO put a question in missingQuestions (completely missing -- no answer and no doubt marker) or incorrectQuestions (attempted but wrong, or skipping required CBSE-format working/steps) -- each one deducts exactly 1 mark from the final score, deterministically, regardless of how minor or major the specific error is; do not try to weight individual questions differently by, say, leaving an easier one out of incorrectQuestions because the mistake felt small, or by mentally docking extra marks for a question that felt like a bigger error -- every bad question costs exactly the same 1 mark.
 
 Write EXCEPTION-BASED feedback: only report problems. Do not praise, list, or describe anything that is correct or complete -- if a question is fine, say nothing about it at all. Silence means it's fine. Specifically:
 - Do NOT list or mention which questions were attempted correctly. Never write things like "Q1-Q6 are correct."
@@ -674,7 +685,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         // at "pending" instead of graded. feedback is free text and the longest remaining field,
         // so it goes last instead -- truncating it is already handled by the retry-on-empty-
         // feedback logic below, whereas truncating score is not recoverable.
-        score: { type: "integer", minimum: 0, maximum: 10, description: "0-10 based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely -- never reduced for how many questions were marked doubt (a separate deterministic step handles that), nor for handwriting, neatness, or cut/crossed-out corrections. Must be consistent with missingQuestions and incorrectQuestions above -- e.g. a submission with several incorrectQuestions cannot score 9 or 10." },
+        score: { type: "integer", minimum: 0, maximum: 10, description: "Your best estimate, 0-10, based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely. The actual score shown to the student is computed deterministically afterward as 10 minus 1 mark per question in missingQuestions/incorrectQuestions (see those fields) plus separate fixed penalties for doubt-volume and lateness -- so this field is not the final word, but it must still be a genuine, careful estimate (not a placeholder), since an implausible value here (e.g. 10 alongside several incorrectQuestions) is a signal something else was filled in wrong." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
       required: ["pageByPageNotes", "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
@@ -785,21 +796,30 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ? notesFromRow.totalQuestionCount
       : rawQuestionCount;
 
-    // Deterministic doubt-volume penalty -- applied on top of Claude's judgment-based score
-    // (which is scored as if doubt-marked questions weren't part of the assignment at all),
-    // never left to the AI's own arithmetic, for the same reason as the late penalty below: a
-    // fixed rule that can't vary submission to submission. Tiers, by percentage of assigned
-    // questions marked doubt: 0-30% -> no deduction, >30-50% -> 3 marks off, >50% -> score 0.
+    // Deterministic score -- 10 minus 1 mark for each assigned question that is missing or
+    // incorrect, replacing whatever number Claude itself put in the score field. Never left to
+    // the AI's own arithmetic, for the same reason as the doubt-percentage and late-submission
+    // penalties below: a fixed, simple rule the teacher chose (exactly 1 mark per bad question,
+    // not an AI judgment call that was landing inconsistently at 2 or 3 marks per question in
+    // practice) that can't vary submission to submission or teacher to teacher. Doubt-marked
+    // questions never appear in either list (per the doubt-marking rules above) so they never
+    // cost anything here -- their own separate deduction is the doubt-percentage rule further
+    // below. missingQuestions/incorrectQuestions are collapsed to top-level question numbers via
+    // countTopLevelQuestions (same reasoning as the doubt-percentage numerator below), so a
+    // single multi-part question with several wrong sub-parts still only costs 1 mark, not one
+    // per sub-part.
+    if (Array.isArray(parsed.missingQuestions) && Array.isArray(parsed.incorrectQuestions)) {
+      const badQuestionCount = countTopLevelQuestions([...parsed.missingQuestions, ...parsed.incorrectQuestions]);
+      parsed.score = Math.max(0, 10 - badQuestionCount);
+    }
+
+    // Deterministic doubt-volume penalty -- applied on top of the score above, never left to the
+    // AI's own arithmetic, for the same reason as the late penalty below: a fixed rule that can't
+    // vary submission to submission. Tiers, by percentage of assigned questions marked doubt:
+    // 0-30% -> no deduction, >30-50% -> 3 marks off, >50% -> score 0.
     if (typeof parsed.score === "number") {
       const totalQuestions = effectiveTotalQuestionCount;
-      // doubtQuestions lists sub-parts individually (matching questionByQuestionCheck's
-      // granularity, e.g. "Q25(ii)" and "Q25(iii)" as two separate entries for one question with
-      // two doubted sub-parts) -- collapse to top-level question numbers here so the numerator
-      // uses the same unit as totalQuestions above, instead of over-counting a single doubted
-      // question as several.
-      const doubtCount = Array.isArray(parsed.doubtQuestions)
-        ? new Set(parsed.doubtQuestions.map((q: string) => String(q).replace(/\(.*\)\s*$/, "").trim())).size
-        : 0;
+      const doubtCount = countTopLevelQuestions(parsed.doubtQuestions);
       if (totalQuestions > 0 && doubtCount > 0) {
         const doubtPercent = (doubtCount / totalQuestions) * 100;
         let doubtNote: string | null = null;
@@ -816,19 +836,36 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       }
     }
 
-    // Deterministic 2-mark late-submission penalty -- applied after Claude's judgment-based
-    // score, on top of it, never as part of the AI's own reasoning (so it can't be talked out
-    // of it or vary submission to submission). Normally a submission is late if it landed after
-    // the student's own class-effective deadline (each class has its own cutoff time) -- but an
-    // admin's explicit lateOverride (set via the "Upload Homework For A Student" form's "do not
-    // mark as late" box, or via the late-status toggle on an already-checked submission) always
-    // wins over that automatic timestamp comparison.
+    // Deterministic late-submission penalty -- applied after the score above, on top of it,
+    // never as part of the AI's own reasoning (so it can't be talked out of it or vary submission
+    // to submission). Two different scales depending on whether this file is the student's
+    // original submission for this assignment, or a later "Improve Score" resubmission fixing
+    // previously-flagged questions (isResubmission below, true whenever this row already had
+    // outstanding questions from an earlier completed check -- true both for the automatic
+    // follow-up check right after a resubmission upload AND a later admin Reevaluate of that same
+    // fixed file, since either way sub.submitted_at reflects when the fix was actually uploaded).
+    // A resubmission is graded well after the ORIGINAL deadline as a matter of course (the
+    // student is fixing flagged work after already receiving feedback on it) -- scoring it on the
+    // same escalating scale as an original late submission would double-punish the same lateness
+    // twice, once already reflected in the original submission's own penalty.
+    //   Original submission, by full days late: 1 day = 2 marks, 2 days = 3 marks, 3 days = 4
+    //   marks, ...N days = N+1 marks (uncapped; Math.max(0, ...) below naturally floors the score).
+    //   Resubmission: a 2-day grace window (0 marks, since promptly fixing flagged work shouldn't
+    //   be punished), then a flat 1 mark regardless of how much later than that it comes in.
+    // An admin's explicit lateOverride (set via the "Upload Homework For A Student" form's "do
+    // not mark as late" box, or via the late-status toggle on an already-checked submission)
+    // always wins over the automatic timestamp comparison -- "late" with no further detail is
+    // treated as exactly 1 day late (the mildest late tier), since an override carries no day
+    // count of its own.
     if (typeof parsed.score === "number") {
-      let isLate: boolean;
+      const isResubmission = Array.isArray(notesFromRow.outstandingQuestions) && notesFromRow.outstandingQuestions.length > 0;
+      let isLate = false;
+      let daysLate = 0;
       if (notesFromRow.lateOverride === "not_late") {
         isLate = false;
       } else if (notesFromRow.lateOverride === "late") {
         isLate = true;
+        daysLate = 1;
       } else {
         let effectiveDeadline: string | null = assignmentForDeadline?.deadline ?? null;
         if (assignmentForDeadline?.target_class === "All") {
@@ -838,12 +875,28 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
             effectiveDeadline = computeDeadline(assignmentForDeadline.assigned_date, mappedTarget);
           }
         }
-        isLate = !!effectiveDeadline && !!sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime();
+        if (effectiveDeadline && sub.submitted_at) {
+          const msLate = new Date(sub.submitted_at).getTime() - new Date(effectiveDeadline).getTime();
+          isLate = msLate > 0;
+          if (isLate) daysLate = Math.floor(msLate / (24 * 60 * 60 * 1000)) + 1;
+        }
       }
       if (isLate) {
-        parsed.score = Math.max(0, parsed.score - 2);
-        const lateNote = "Submitted after the homework deadline -- 2 marks deducted as per the late-submission rule.";
-        parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
+        let penalty = 0;
+        let lateNote: string | null = null;
+        if (isResubmission) {
+          if (daysLate > 2) {
+            penalty = 1;
+            lateNote = "Resubmitted more than 2 days after the original deadline -- 1 mark deducted as per the late-resubmission rule.";
+          }
+        } else {
+          penalty = daysLate + 1;
+          lateNote = `Submitted ${daysLate} day${daysLate === 1 ? "" : "s"} after the homework deadline -- ${penalty} mark${penalty === 1 ? "" : "s"} deducted as per the late-submission rule.`;
+        }
+        if (penalty > 0) {
+          parsed.score = Math.max(0, parsed.score - penalty);
+          parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
+        }
       }
     }
 
