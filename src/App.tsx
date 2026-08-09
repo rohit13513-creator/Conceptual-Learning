@@ -5703,7 +5703,7 @@ export default function App() {
                   'Attempt every question that was assigned. If you genuinely don\'t know one, write "doubt" next to its number instead of leaving it blank.',
                   'Show your full working/steps in the proper CBSE format, not just the final answer.',
                   'Submit clear photos of every page (or one combined PDF) -- if a page is completely unreadable, that specific question can\'t be checked.',
-                  'Submit before the deadline for your class -- submitting late is still allowed, but it costs a flat 2-mark deduction.',
+                  'Submit before the deadline for your class -- submitting late is still allowed, but it costs at least 2 marks and more for each additional day late.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="text-cyan-400 font-black mt-0.5 shrink-0">•</span>
