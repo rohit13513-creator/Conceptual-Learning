@@ -514,6 +514,22 @@ function countTopLevelQuestions(list: any): number {
   return new Set(list.map((q: any) => String(q).replace(/\(.*\)\s*$/, "").trim())).size;
 }
 
+// The model occasionally writes a literal placeholder (a bare `""`, `''`, "none", "n/a", "null")
+// into an "empty string if nothing to report" field instead of actually returning an empty
+// string -- a real incident: every non-null integrityFlag in the database turned out to be the
+// literal two-character text `""`, none of them an actual integrity concern, which showed up to
+// the admin as a scary-looking red warning badge on several unrelated students' homework with no
+// real content behind it. Strips that class of placeholder before deciding whether a value is
+// "really" empty, on top of the schema instruction asking the model not to do this in the first
+// place (defense in depth, since a prompt instruction alone doesn't reliably prevent it).
+function sanitizePlaceholderText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^(""|''|none|n\/a|null)$/i.test(trimmed)) return null;
+  return trimmed;
+}
+
 async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
@@ -669,7 +685,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           description: "One entry per assigned question (by number -- 'Example N' or 'Exercise QN' if the assignment has more than one numbered list, including each lettered/numbered sub-part for questions with multiple parts, e.g. 'Exercise Q1(iv)'), in order, BEFORE deciding score, feedback, missingQuestions, or incorrectQuestions. First copy out the exact numbers/values the student actually wrote for that question -- do not recall or assume values from a similar-looking textbook problem. Then, for anything involving arithmetic (ratios, cross-multiplication, proportions, unit conversions, equation-solving, etc.), redo the calculation yourself digit-by-digit using those copied-out values, and state the correct result, then compare it to what the student concluded -- do not just judge whether their working 'looks right'. State plainly: correct / incorrect (with the actual correct value if it differs) / missing / doubt. This must be completed for every single assigned question, in a single pass without revisiting earlier entries, before anything else is decided."
         },
         assignedQuestionCount: { type: "integer", minimum: 1, description: "The total number of assigned questions, counted by TOP-LEVEL question number only (e.g. an assignment description of 'Question 16 to 30' is 15 questions), NOT the number of entries in questionByQuestionCheck -- a question with lettered sub-parts like (i)-(iv) still counts as ONE question here even though it expands to several entries there. Used only as the denominator for the doubt-percentage rule." },
-        integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student. Empty string if not." },
+        integrityFlag: { type: "string", description: "A short note ONLY if the work strongly looks copied verbatim rather than solved by the student -- e.g. 'Handwriting and ink appear identical to another submission' or 'Answers match a known solutions website verbatim, including an unusual phrasing error.' If nothing looks copied (the overwhelmingly common case), set this to a true empty string with zero characters -- not the two characters \" \" (a literal quote-quote placeholder), not the word \"none\", not any other placeholder text standing in for 'nothing to report'." },
         missingQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings, e.g. \"24\") that are completely missing -- no answer and no doubt marker. Empty array if none missing." },
         incorrectQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) that were attempted but are wrong, or skip required CBSE-format working/steps. Does NOT include missing or doubt-marked questions. Empty array if none incorrect." },
         doubtQuestions: { type: "array", items: { type: "string" }, description: "Question numbers (as strings) marked as a self-flagged doubt -- whether left blank or attempted-but-unresolved. Does NOT include missing or incorrect questions. Used only to apply a fixed deduction based on what proportion of the assignment this is -- do not let it influence your own score. Empty array if none." },
@@ -916,7 +932,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       status: "checked",
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
-      integrity_flag: typeof parsed.integrityFlag === "string" && parsed.integrityFlag.trim() ? parsed.integrityFlag : null,
+      integrity_flag: sanitizePlaceholderText(parsed.integrityFlag),
       admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount }),
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
