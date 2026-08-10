@@ -7714,10 +7714,27 @@ function buildApp(): express.Express {
     const { submissionId, priorMissingQuestions } = req.body;
     if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
 
-    const { data: existing } = await supabase.from("homework_submissions").select("id, student_email").eq("id", submissionId).maybeSingle();
+    const { data: existing } = await supabase.from("homework_submissions").select("id, student_email, status").eq("id", submissionId).maybeSingle();
     if (!existing || existing.student_email !== auth.email) return res.status(404).json({ error: "Submission not found." });
 
-    await checkHomeworkSubmission(String(submissionId), Array.isArray(priorMissingQuestions) ? priorMissingQuestions : null);
+    // Only the very first caller right after upload has a real priorMissingQuestions array to
+    // hand over -- a later retry (e.g. the student simply reopening the app while a submission is
+    // still stuck "pending", see the matching frontend comment) has no way to know that value
+    // anymore. Passing undefined through here (distinct from an explicit null) lets
+    // checkHomeworkSubmission fall back to whatever scoping is already persisted on the row
+    // instead of forcing an unscoped full recheck -- collapsing every non-array value to null
+    // would silently discard resubmission-scoping on every retry that isn't the original call.
+    const scoping: string[] | null | undefined = Array.isArray(priorMissingQuestions)
+      ? priorMissingQuestions
+      : (priorMissingQuestions === undefined ? undefined : null);
+
+    // Only actually check if still pending -- this endpoint can now be called opportunistically
+    // (e.g. a retry on app reopen) rather than exactly once right after upload, so it must be safe
+    // to call repeatedly without re-running (and potentially overwriting a manually-graded score
+    // on) a submission that's already been checked.
+    if (existing.status === "pending") {
+      await checkHomeworkSubmission(String(submissionId), scoping);
+    }
     const { data: checkedRow } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!checkedRow) return res.status(404).json({ error: "Submission not found after check." });
     return res.json({ success: true, submission: mapHomeworkRowForStudent(checkedRow) });

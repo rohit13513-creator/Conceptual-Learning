@@ -1961,7 +1961,31 @@ export default function App() {
     try {
       const resp = await fetch('/api/homework/mine', { headers: { 'Authorization': `Bearer ${user.token}` } });
       const data = await resp.json();
-      setMySubmissions(data.submissions || []);
+      const submissions = data.submissions || [];
+      setMySubmissions(submissions);
+
+      // Right after upload, a separate follow-up request runs the actual AI check (see the
+      // upload handler below) -- but that request lives entirely in the browser tab that just
+      // uploaded, so if the student closes the tab, switches apps, or loses connection in the
+      // moments right after seeing "uploaded successfully" (extremely common -- most people don't
+      // wait around once they see a success message, and mobile browsers aggressively suspend
+      // background tabs), that follow-up call dies mid-flight and the submission is stuck
+      // "pending" with nothing to retry it except the cron sweep. Rather than depend on that one
+      // narrow window, opportunistically retry any of the student's own submissions still pending
+      // every time they simply open the app -- cheap (the server-side endpoint no-ops if a
+      // submission isn't actually pending anymore, so this is safe to fire on every visit) and
+      // means a stuck submission gets a real chance to recover the very next time the student
+      // looks at the app for any reason, not just once right after the original upload.
+      const stillPending = submissions.filter((s: any) => s.status === 'pending' && s.id);
+      for (const s of stillPending) {
+        fetch('/api/homework/check-mine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+          body: JSON.stringify({ submissionId: s.id }),
+        }).catch(() => {
+          // Best-effort -- the next app open (or the cron sweep) will try again.
+        });
+      }
     } catch (err) {
       // Silent — history list simply stays empty on network failure.
     } finally {
