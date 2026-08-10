@@ -1563,6 +1563,40 @@ export default function App() {
     }
   }, [activeView]);
 
+  // Silent counterpart to the "Check Pending Now" button (handleCheckHomeworkNow) -- same
+  // endpoint, but doesn't touch checkNowLoading/checkNowResult, so it never pops up a loading
+  // spinner or result message the admin didn't ask for.
+  //
+  // Real incident: the scheduled cron sweep (vercel.json) is configured to run every 10 minutes,
+  // but that schedule turned out not to be reliably honored in production (submissions were
+  // sitting fully unprocessed -- not even a failed attempt recorded -- for 3+ hours at a time,
+  // while manually hitting the exact same check endpoint by hand worked instantly). Rather than
+  // depend on that external scheduler at all, piggyback on the admin's own natural app usage
+  // instead: every time the admin has the Homework Submissions view open, quietly sweep pending
+  // submissions on an interval. The admin checks in on this page far more often through a normal
+  // day than any cron schedule would fire anyway, and the underlying endpoint is already safe to
+  // call repeatedly (concurrent batches, oldest-first, time-budgeted -- see processPendingHomework
+  // in server.ts).
+  useEffect(() => {
+    if (!(activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email))) return;
+    const silentSweep = () => {
+      fetch('/api/admin/homework/check-now', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+      }).then(async (resp) => {
+        if (resp.ok) {
+          const data = await resp.json().catch(() => null);
+          if (data && data.checked > 0) fetchAdminData();
+        }
+      }).catch(() => {
+        // Best-effort -- the next interval tick, or the scheduled cron, will try again.
+      });
+    };
+    silentSweep();
+    const interval = setInterval(silentSweep, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [activeView, user?.email]);
+
   // Homework assignments (posted by admin, visible to everyone logged in)
   const fetchAssignments = async () => {
     setAssignmentsLoading(true);
