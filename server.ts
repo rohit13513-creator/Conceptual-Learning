@@ -182,6 +182,9 @@ function verifyApprovalToken(email: string, token: string): boolean {
 }
 
 const HOMEWORK_BUCKET = "homework";
+// Applied uniformly across every class's deadline -- see the late-submission penalty comment in
+// checkHomeworkSubmission for why.
+const LATE_SUBMISSION_GRACE_MS = 60 * 1000;
 const homeworkUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file, matches the Storage bucket limit
@@ -892,7 +895,11 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           }
         }
         if (effectiveDeadline && sub.submitted_at) {
-          const msLate = new Date(sub.submitted_at).getTime() - new Date(effectiveDeadline).getTime();
+          // A 1-minute grace margin on top of the exact deadline, for every class -- a submission
+          // landing a handful of seconds after the cutoff (upload finishing right as the clock
+          // ticks over, or a small clock-skew between the student's device and the server) isn't
+          // meaningfully "late" in the way the policy is meant to catch, and shouldn't cost marks.
+          const msLate = new Date(sub.submitted_at).getTime() - new Date(effectiveDeadline).getTime() - LATE_SUBMISSION_GRACE_MS;
           isLate = msLate > 0;
           if (isLate) daysLate = Math.floor(msLate / (24 * 60 * 60 * 1000)) + 1;
         }
@@ -8319,7 +8326,7 @@ function buildApp(): express.Express {
       const notes = parseAdminNotes(r.admin_notes);
       const isLate = notes.lateOverride === "not_late" ? false
         : notes.lateOverride === "late" ? true
-        : !!deadline && new Date(r.submitted_at).getTime() > new Date(deadline).getTime();
+        : !!deadline && new Date(r.submitted_at).getTime() - new Date(deadline).getTime() - LATE_SUBMISSION_GRACE_MS > 0;
       return {
         ...mapHomeworkRow(r, signed?.signedUrl),
         studentName: nameByEmail.get(r.student_email) || r.student_email,
@@ -8571,7 +8578,7 @@ function buildApp(): express.Express {
             const notes = parseAdminNotes(entry.adminNotes);
             if (notes.lateOverride === "not_late") return false;
             if (notes.lateOverride === "late") return true;
-            return !!effectiveDeadline && new Date(entry.submittedAt).getTime() > new Date(effectiveDeadline).getTime();
+            return !!effectiveDeadline && new Date(entry.submittedAt).getTime() - new Date(effectiveDeadline).getTime() - LATE_SUBMISSION_GRACE_MS > 0;
           })
           .map((u: any) => ({ email: u.email, name: u.name }));
         report.push({
@@ -8660,7 +8667,7 @@ function buildApp(): express.Express {
         const notes = parseAdminNotes(sub.admin_notes);
         const isLate = notes.lateOverride === "not_late" ? false
           : notes.lateOverride === "late" ? true
-          : !!a.deadline && new Date(sub.submitted_at).getTime() > new Date(a.deadline).getTime();
+          : !!a.deadline && new Date(sub.submitted_at).getTime() - new Date(a.deadline).getTime() - LATE_SUBMISSION_GRACE_MS > 0;
         if (sub.status !== "checked" || typeof sub.ai_score !== "number") {
           return { assignmentId: a.id, state: "pending" as const, score: 0, isLate };
         }

@@ -1675,6 +1675,35 @@ export default function App() {
     return new Date(deadline).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
   };
 
+  // Every other timestamp readout in the app (submission times, forum post times, announcement
+  // dates) previously used a bare `.toLocaleString()`/`.toLocaleDateString()` with no options,
+  // which falls back to the BROWSER's own locale and timezone -- on a US-locale device that's
+  // MM/DD/YYYY, not the DD/MM/YY Indian-school-familiar ordering, and the timezone isn't
+  // guaranteed to be IST at all (it's whatever the viewing device is set to). These two build the
+  // date/time parts explicitly via Intl.DateTimeFormat (rather than trusting a locale string's
+  // exact punctuation/casing, which varies across browsers) so the output is always DD/MM/YY in
+  // Asia/Kolkata time, regardless of the viewer's own device locale or timezone.
+  const istDateTimeParts = (dateStr?: string | null) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    }).formatToParts(d);
+    const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+    return { day: get('day'), month: get('month'), year: get('year'), hour: get('hour'), minute: get('minute'), dayPeriod: get('dayPeriod').toUpperCase() };
+  };
+  const formatDateIST = (dateStr?: string | null) => {
+    const p = istDateTimeParts(dateStr);
+    return p ? `${p.day}/${p.month}/${p.year}` : '';
+  };
+  const formatDateTimeIST = (dateStr?: string | null) => {
+    const p = istDateTimeParts(dateStr);
+    return p ? `${p.day}/${p.month}/${p.year}, ${p.hour}:${p.minute} ${p.dayPeriod}` : '';
+  };
+
   // Announcements / Latest Updates (posted by admin, visible to everyone logged in)
   const fetchAnnouncements = async () => {
     setAnnouncementsLoading(true);
@@ -3832,7 +3861,7 @@ export default function App() {
                           {reportViewStudentEmail ? `${filteredStudents[0]?.name || ''} -- Performance Report` : `Class ${reportClass} Performance Report`}
                         </h2>
                         <p style={{ fontSize: '10px', color: '#475569', margin: '0 0 12px 0' }}>
-                          {formatAssignmentDate(reportFromDate)} to {formatAssignmentDate(reportToDate)} -- generated {new Date().toLocaleDateString()}
+                          {formatAssignmentDate(reportFromDate)} to {formatAssignmentDate(reportToDate)} -- generated {formatDateIST(new Date().toISOString())}
                         </p>
                         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '9px' }}>
                           <thead>
@@ -4215,7 +4244,7 @@ export default function App() {
                     <div key={sub.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{sub.subject || 'Homework Submission'}</p>
-                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(sub.submittedAt).toLocaleString()}</p>
+                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{formatDateTimeIST(sub.submittedAt)}</p>
                         {sub.aiFeedback && (
                           <p className={`text-[10px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
                         )}
@@ -5845,7 +5874,7 @@ export default function App() {
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {a.description && <p className={`text-[11px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.description}</p>}
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                          {new Date(a.createdAt).toLocaleDateString()} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
+                          {formatDateIST(a.createdAt)} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
                         </p>
                         {getEffectiveDeadline(a) && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(getEffectiveDeadline(a))}</p>}
                         {a.fileUrl && (
@@ -6038,7 +6067,7 @@ export default function App() {
                     <div key={sub.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{sub.subject || 'Homework Submission'}</p>
-                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(sub.submittedAt).toLocaleString()}</p>
+                        <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{formatDateTimeIST(sub.submittedAt)}</p>
                         {sub.aiFeedback && (
                           <p className={`text-[10px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
                         )}
@@ -6194,7 +6223,7 @@ export default function App() {
                       )}
                     </div>
                     <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
-                    <p className={`text-[10px] font-mono mt-3 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{new Date(a.createdAt).toLocaleDateString()}</p>
+                    <p className={`text-[10px] font-mono mt-3 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{formatDateIST(a.createdAt)}</p>
                   </div>
                 ))}
               </div>
@@ -6342,7 +6371,7 @@ export default function App() {
                         )}
                       </div>
                       <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                        {forumThreadDetail.authorName} • {new Date(forumThreadDetail.createdAt).toLocaleString()}
+                        {forumThreadDetail.authorName} • {formatDateTimeIST(forumThreadDetail.createdAt)}
                         {forumThreadDetail.status === 'pending' && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
                         )}
@@ -6368,7 +6397,7 @@ export default function App() {
                             )}
                           </div>
                           <p className={`text-[10px] font-mono flex items-center gap-1.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                            {new Date(r.createdAt).toLocaleString()}
+                            {formatDateTimeIST(r.createdAt)}
                             {r.status === 'pending' && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
                             )}
@@ -6512,7 +6541,7 @@ export default function App() {
                             )}
                           </div>
                           <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 flex-wrap ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                            {t.authorName} • {new Date(t.createdAt).toLocaleDateString()} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
+                            {t.authorName} • {formatDateIST(t.createdAt)} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
                             {t.status === 'pending' && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
                             )}
@@ -6903,7 +6932,7 @@ export default function App() {
                         <div key={a.id} className="py-2.5 flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
-                            <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {new Date(a.createdAt).toLocaleDateString()}</p>
+                            <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {formatDateIST(a.createdAt)}</p>
                             {a.deadline && <p className="text-[10px] font-bold text-amber-400">Deadline: {formatDeadline(a.deadline)}</p>}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -7005,7 +7034,7 @@ export default function App() {
                         <div key={a.id} className="py-2.5 flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
-                            <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {new Date(a.createdAt).toLocaleDateString()}</p>
+                            <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {formatDateIST(a.createdAt)}</p>
                           </div>
                           <button
                             onClick={() => handleDeleteAnnouncement(a.id)}
@@ -7369,7 +7398,7 @@ export default function App() {
                                         <p className={sub.assignmentTitle ? `text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}` : ''}>{sub.subject || (sub.assignmentTitle ? '' : '—')}</p>
                                       </td>
                                       <td className={`py-3 px-4 font-mono text-[10px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                        {new Date(sub.submittedAt).toLocaleString()}
+                                        {formatDateTimeIST(sub.submittedAt)}
                                         {sub.isLate && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider">Late</span>}
                                       </td>
                                       <td className="py-3 px-4">
@@ -7601,7 +7630,7 @@ export default function App() {
                           <div className="min-w-0">
                             <p className={`text-xs font-black uppercase tracking-wider text-cyan-400 mb-0.5`}>New Thread</p>
                             <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{t.title}</p>
-                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{t.authorName} • {new Date(t.createdAt).toLocaleString()}</p>
+                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{t.authorName} • {formatDateTimeIST(t.createdAt)}</p>
                             <p className={`text-xs mt-1 whitespace-pre-wrap ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{t.body}</p>
                             {t.imageUrl && <img src={t.imageUrl} alt="Attached" className="mt-1.5 rounded-lg max-h-40 border border-slate-800" />}
                           </div>
@@ -7621,7 +7650,7 @@ export default function App() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className={`text-xs font-black uppercase tracking-wider text-cyan-400 mb-0.5`}>Reply {r.threadTitle ? `to "${r.threadTitle}"` : ''}</p>
-                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{r.authorName} • {new Date(r.createdAt).toLocaleString()}</p>
+                            <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{r.authorName} • {formatDateTimeIST(r.createdAt)}</p>
                             <p className={`text-xs mt-1 whitespace-pre-wrap ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{r.body}</p>
                             {r.imageUrl && <img src={r.imageUrl} alt="Attached" className="mt-1.5 rounded-lg max-h-40 border border-slate-800" />}
                           </div>
