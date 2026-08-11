@@ -5,7 +5,7 @@
     { "source": "/api/(.*)", "destination": "/api/index" }
   ],
   "crons": [
-    { "path": "/api/cron/check-homework", "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/check-homework", "schedule": "0 15 * * *" }
   ],
   "functions": {
     "api/index.ts": {
