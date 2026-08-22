@@ -225,6 +225,146 @@ const forumUpload = multer({
   },
 });
 
+const CHAPTER_NOTES_BUCKET = "chapter-notes";
+const chapterNotesUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // NCERT chapter PDFs run larger than a homework photo
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WEBP, or PDF files are allowed."));
+  },
+});
+
+// ── Chapter Notes: diagram spec, palette, SVG builder, overlap check ──
+// Diagrams are stored as this constrained shape list, never as raw AI-authored SVG/HTML -- that
+// keeps color entirely under our control (see paletteColor below), which is what actually
+// prevents the "dark text on dark background" class of bug the light/dark-mode notes pages hit
+// before, and lets the exact same spec be rendered twice: once server-side to a PNG for the
+// automated overlap self-check, and once client-side as real SVG/JSX for students -- so what got
+// checked is provably what gets shown, not two independently-drifting renderers.
+type DiagramShape =
+  | { type: "line"; x1: number; y1: number; x2: number; y2: number; role: string; dashed?: boolean }
+  | { type: "arrow"; x1: number; y1: number; x2: number; y2: number; role: string }
+  | { type: "circle"; cx: number; cy: number; r: number; role: string; filled?: boolean }
+  | { type: "rect"; x: number; y: number; w: number; h: number; role: string; filled?: boolean }
+  | { type: "polygon"; points: string; role: string; filled?: boolean }
+  | { type: "text"; x: number; y: number; text: string; role: string; anchor?: "start" | "middle" | "end"; size?: number };
+
+interface DiagramSpec {
+  id: string;
+  caption: string;
+  viewBoxW: number;
+  viewBoxH: number;
+  shapes: DiagramShape[];
+}
+
+// [light, dark] hex pair per semantic role -- add new roles here, never let generated content pick
+// a literal hex value itself, so every diagram is guaranteed theme-correct by construction.
+const DIAGRAM_PALETTE: Record<string, [string, string]> = {
+  background: ["#ffffff", "#0b101d"],
+  axis: ["#64748b", "#475569"],
+  outline: ["#334155", "#f1f5f9"],
+  fillPrimary: ["#0369a1", "#38bdf8"],
+  fillSecondary: ["#b45309", "#fbbf24"],
+  ray: ["#059669", "#34d399"],
+  label: ["#1e293b", "#e2e8f0"],
+  title: ["#0f172a", "#f8fafc"],
+};
+function paletteColor(role: string, isLight: boolean): string {
+  const pair = DIAGRAM_PALETTE[role] || DIAGRAM_PALETTE.outline;
+  return isLight ? pair[0] : pair[1];
+}
+
+function arrowHeadPolygon(x1: number, y1: number, x2: number, y2: number): string {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = 8;
+  const p1x = x2 - size * Math.cos(angle - Math.PI / 7);
+  const p1y = y2 - size * Math.sin(angle - Math.PI / 7);
+  const p2x = x2 - size * Math.cos(angle + Math.PI / 7);
+  const p2y = y2 - size * Math.sin(angle + Math.PI / 7);
+  return `${x2},${y2} ${p1x},${p1y} ${p2x},${p2y}`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildDiagramSvg(spec: DiagramSpec, isLight: boolean): string {
+  const bg = paletteColor("background", isLight);
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${spec.viewBoxW} ${spec.viewBoxH}" width="${spec.viewBoxW}" height="${spec.viewBoxH}" font-family="Arial, sans-serif">`,
+    `<rect width="100%" height="100%" fill="${bg}"/>`,
+  ];
+  for (const s of spec.shapes) {
+    const color = paletteColor(s.role, isLight);
+    if (s.type === "line") {
+      parts.push(`<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${color}" stroke-width="2"${s.dashed ? ' stroke-dasharray="6,4"' : ""}/>`);
+    } else if (s.type === "arrow") {
+      parts.push(`<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${color}" stroke-width="2"/>`);
+      parts.push(`<polygon points="${arrowHeadPolygon(s.x1, s.y1, s.x2, s.y2)}" fill="${color}"/>`);
+    } else if (s.type === "circle") {
+      parts.push(`<circle cx="${s.cx}" cy="${s.cy}" r="${s.r}" stroke="${color}" stroke-width="2" fill="${s.filled ? color : "none"}"/>`);
+    } else if (s.type === "rect") {
+      parts.push(`<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" stroke="${color}" stroke-width="2" fill="${s.filled ? color : "none"}"/>`);
+    } else if (s.type === "polygon") {
+      parts.push(`<polygon points="${s.points}" stroke="${color}" stroke-width="2" fill="${s.filled ? color : "none"}"/>`);
+    } else if (s.type === "text") {
+      const size = s.size || 13;
+      parts.push(`<text x="${s.x}" y="${s.y}" font-size="${size}" fill="${color}" text-anchor="${s.anchor || "start"}">${escapeXml(s.text)}</text>`);
+    }
+  }
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+// Cheap deterministic pre-check before ever spending a vision call: approximate every text
+// label's bounding box (monospace-ish width heuristic is intentionally generous -- overestimating
+// width means we sometimes flag labels that would have just barely fit, which is a safe direction
+// to be wrong in for "nothing must overlap") and flag pairwise overlaps between labels, and
+// between a label and any line/shape passing directly through its box.
+function findLikelyOverlaps(spec: DiagramSpec): string[] {
+  type Box = { x0: number; y0: number; x1: number; y1: number; label: string };
+  const textBoxes: Box[] = [];
+  for (const s of spec.shapes) {
+    if (s.type !== "text") continue;
+    const size = s.size || 13;
+    const w = s.text.length * size * 0.62;
+    const h = size * 1.3;
+    let x0 = s.x;
+    if (s.anchor === "middle") x0 = s.x - w / 2;
+    else if (s.anchor === "end") x0 = s.x - w;
+    textBoxes.push({ x0, y0: s.y - h, x1: x0 + w, y1: s.y + h * 0.3, label: s.text });
+  }
+  const issues: string[] = [];
+  const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  for (let i = 0; i < textBoxes.length; i++) {
+    for (let j = i + 1; j < textBoxes.length; j++) {
+      if (overlaps(textBoxes[i], textBoxes[j])) {
+        issues.push(`Labels "${textBoxes[i].label}" and "${textBoxes[j].label}" overlap each other.`);
+      }
+    }
+  }
+  const segmentNearBox = (x1: number, y1: number, x2: number, y2: number, b: Box) => {
+    const steps = 12;
+    for (let t = 0; t <= steps; t++) {
+      const px = x1 + ((x2 - x1) * t) / steps;
+      const py = y1 + ((y2 - y1) * t) / steps;
+      if (px > b.x0 && px < b.x1 && py > b.y0 && py < b.y1) return true;
+    }
+    return false;
+  };
+  for (const s of spec.shapes) {
+    if (s.type !== "line" && s.type !== "arrow") continue;
+    for (const b of textBoxes) {
+      if (segmentNearBox(s.x1, s.y1, s.x2, s.y2, b)) {
+        issues.push(`A line/arrow passes directly through the label "${b.label}".`);
+      }
+    }
+  }
+  return issues;
+}
+
 // Combines multiple photos (e.g. several notebook pages) into a single PDF, one image per page.
 async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
@@ -8150,6 +8290,131 @@ function buildApp(): express.Express {
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
+  // ── Chapter Notes routes ──
+  // Fast: just uploads files and creates the job row. Does NOT start AI work itself -- the client
+  // immediately follows up with /advance (see the pipeline comment above), same split as homework.
+  app.post("/api/admin/chapter-notes/create", (req, res, next) => {
+    chapterNotesUpload.fields([{ name: "ncertPdf", maxCount: 1 }, { name: "supportingFiles", maxCount: 10 }])(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  }, async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+
+    const { targetClass, subject, chapterName, remarks } = req.body;
+    if (!targetClass || !subject || !chapterName) {
+      return res.status(400).json({ error: "Class, subject, and chapter name are required." });
+    }
+    const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
+    const ncertFile = files?.ncertPdf?.[0];
+    if (!ncertFile) return res.status(400).json({ error: "The NCERT chapter PDF is required." });
+
+    const stamp = Date.now();
+    const ncertPath = `${stamp}-ncert-${ncertFile.originalname.replace(/[^a-zA-Z0-9.\-]/g, "_")}`;
+    const { error: ncertUploadErr } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(ncertPath, ncertFile.buffer, { contentType: ncertFile.mimetype });
+    if (ncertUploadErr) return res.status(500).json({ error: `Could not upload NCERT PDF: ${ncertUploadErr.message}` });
+
+    const supportingPaths: string[] = [];
+    for (const f of (files?.supportingFiles || [])) {
+      const p = `${stamp}-support-${supportingPaths.length}-${f.originalname.replace(/[^a-zA-Z0-9.\-]/g, "_")}`;
+      const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(p, f.buffer, { contentType: f.mimetype });
+      if (!error) supportingPaths.push(p);
+    }
+
+    const { data: inserted, error: insertErr } = await supabase.from("chapter_notes_jobs").insert({
+      admin_email: auth.email,
+      target_class: targetClass,
+      subject,
+      chapter_name: chapterName,
+      remarks: remarks || null,
+      ncert_pdf_path: ncertPath,
+      supporting_file_paths: supportingPaths,
+      status: "processing",
+      current_step: "outline",
+    }).select("*").maybeSingle();
+    if (insertErr || !inserted) return res.status(500).json({ error: insertErr?.message || "Could not create the job." });
+
+    return res.json({ success: true, job: mapChapterNotesJobRow(inserted) });
+  });
+
+  // Slow: does exactly one pipeline step and awaits it fully before responding (see the pipeline
+  // comment above for why this can't be fire-and-forget on Vercel). The client calls this
+  // repeatedly in a loop until status stops being "processing".
+  app.post("/api/admin/chapter-notes/advance", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { jobId } = req.body;
+    if (!jobId) return res.status(400).json({ error: "Missing jobId." });
+
+    await advanceChapterNotesJob(String(jobId));
+    const { data: updated } = await supabase.from("chapter_notes_jobs").select("*").eq("id", jobId).maybeSingle();
+    if (!updated) return res.status(404).json({ error: "Job not found." });
+    return res.json({ success: true, job: mapChapterNotesJobRow(updated) });
+  });
+
+  // Piggybacks on the admin's own app usage, same as the homework silent sweep -- picks a job
+  // back up if the admin's tab closed mid-generation. Bounded to a few jobs/steps per call so it
+  // stays fast enough to run unattended every few minutes without ever approaching the time limit.
+  app.post("/api/admin/chapter-notes/sweep", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { data: stuck } = await supabase.from("chapter_notes_jobs").select("id").eq("status", "processing").order("updated_at", { ascending: true }).limit(5);
+    for (const row of (stuck || [])) {
+      await advanceChapterNotesJob(row.id);
+    }
+    return res.json({ advanced: (stuck || []).length });
+  });
+
+  app.get("/api/admin/chapter-notes/list", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { data } = await supabase.from("chapter_notes_jobs").select("*").order("created_at", { ascending: false });
+    return res.json({ jobs: (data || []).map(mapChapterNotesJobRow) });
+  });
+
+  app.post("/api/admin/chapter-notes/approve", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { jobId } = req.body;
+    if (!jobId) return res.status(400).json({ error: "Missing jobId." });
+    const { data: job } = await supabase.from("chapter_notes_jobs").select("status").eq("id", jobId).maybeSingle();
+    if (!job) return res.status(404).json({ error: "Job not found." });
+    if (job.status !== "ready_for_review") return res.status(400).json({ error: "This chapter isn't ready for review yet." });
+    const { data: updated } = await supabase.from("chapter_notes_jobs").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", jobId).select("*").maybeSingle();
+    return res.json({ success: true, job: mapChapterNotesJobRow(updated) });
+  });
+
+  app.post("/api/admin/chapter-notes/reject", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { jobId } = req.body;
+    if (!jobId) return res.status(400).json({ error: "Missing jobId." });
+    const { data: updated } = await supabase.from("chapter_notes_jobs").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", jobId).select("*").maybeSingle();
+    if (!updated) return res.status(404).json({ error: "Job not found." });
+    return res.json({ success: true, job: mapChapterNotesJobRow(updated) });
+  });
+
+  app.post("/api/admin/chapter-notes/request-correction", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { jobId, correctionText } = req.body;
+    if (!jobId) return res.status(400).json({ error: "Missing jobId." });
+    if (!correctionText || !String(correctionText).trim()) return res.status(400).json({ error: "Please describe the correction you want." });
+    const { data: updated } = await supabase.from("chapter_notes_jobs").update({
+      status: "processing", current_step: "revise", correction_notes: String(correctionText).trim(), step_error: null, updated_at: new Date().toISOString(),
+    }).eq("id", jobId).select("*").maybeSingle();
+    if (!updated) return res.status(404).json({ error: "Job not found." });
+    return res.json({ success: true, job: mapChapterNotesJobRow(updated) });
+  });
+
+  // Student-facing: approved chapters only, for a given class + subject.
+  app.get("/api/chapter-notes/published", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { targetClass, subject } = req.query;
+    let query = supabase.from("chapter_notes_jobs").select("*").eq("status", "approved").order("created_at", { ascending: true });
+    if (targetClass) query = query.eq("target_class", String(targetClass));
+    if (subject) query = query.eq("subject", String(subject));
+    const { data } = await query;
+    return res.json({ chapters: (data || []).map(mapChapterNotesJobRow) });
+  });
+
   // Lets the admin set a submission's score and feedback directly, bypassing the AI entirely --
   // for when the automated grading (or a lack of it, e.g. no API credit) got it wrong and the
   // teacher wants full manual control rather than just re-running the same AI check again.
@@ -8974,6 +9239,327 @@ function buildApp(): express.Express {
       return false;
     }
     return true;
+  }
+
+  // ── Chapter Notes: AI generation pipeline ──
+  // Split into small single-purpose steps (outline, one diagram at a time, final review) driven
+  // by repeated client-awaited /advance calls -- the same "no true fire-and-forget" shape used by
+  // homework's check-mine (see the comment there), since a Vercel function invocation can be
+  // frozen the instant its response goes out. If the admin's tab closes mid-job, the admin-side
+  // sweep (mirroring the homework one) picks a stuck "processing" job back up on the next visit.
+  const DIAGRAM_CANVAS_W = 480;
+  const DIAGRAM_CANVAS_H = 320;
+
+  interface ChapterNotesDiagramState { id: string; description: string; spec: DiagramSpec | null; status: "pending" | "ok" | "flagged"; issues?: string[] }
+  interface ChapterNotesSection { heading: string; points: string[]; diagrams: ChapterNotesDiagramState[] }
+  interface ChapterNotesContent { title: string; sections: ChapterNotesSection[]; reviewSummary?: string; reviewConcerns?: string[] }
+
+  async function callClaudeTool(opts: { system: string; content: any[]; tool: any; maxTokens?: number }): Promise<any> {
+    let lastErr = "Claude did not return a usable result.";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          thinking: { type: "adaptive" },
+          output_config: { effort: "medium" },
+          max_tokens: opts.maxTokens || 8000,
+          tools: [opts.tool],
+          tool_choice: { type: "tool", name: opts.tool.name },
+          system: [{ type: "text", text: opts.system }],
+          messages: [{ role: "user", content: opts.content }],
+        }),
+      });
+      const data = await resp.json();
+      const block = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === opts.tool.name);
+      if ((resp.status === 529 || resp.status === 429 || !resp.ok || !block) && attempt === 0) {
+        lastErr = data?.error?.message || `Anthropic returned status ${resp.status}`;
+        continue;
+      }
+      if (!resp.ok || !block) { lastErr = data?.error?.message || "Claude did not return a usable result."; break; }
+      return block.input;
+    }
+    throw new Error(lastErr);
+  }
+
+  async function generateChapterOutline(job: any, correction?: string): Promise<ChapterNotesContent> {
+    const { data: pdfBlob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(job.ncert_pdf_path);
+    if (!pdfBlob) throw new Error("Could not download the NCERT chapter PDF from storage.");
+    const pdfBuf = Buffer.from(await pdfBlob.arrayBuffer());
+    const pdfBlock = { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBuf.toString("base64") } };
+
+    const supportBlocks: any[] = [];
+    for (const p of (job.supporting_file_paths || [])) {
+      const { data: b } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(p);
+      if (!b) continue;
+      const buf = Buffer.from(await b.arrayBuffer());
+      const isPdf = p.toLowerCase().endsWith(".pdf");
+      supportBlocks.push(isPdf
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") } }
+        : { type: "image", source: { type: "base64", media_type: b.type || "image/jpeg", data: buf.toString("base64") } });
+    }
+
+    const system = `You are an expert CBSE-curriculum teacher preparing exam-focused, point-wise chapter notes for Class ${job.target_class} ${job.subject}, chapter "${job.chapter_name}", from the attached official NCERT chapter PDF (the FIRST attached file; any further attached files are secondary supporting/reference material, subordinate to the NCERT PDF). Notes must be genuinely useful for CBSE board exam revision: point-wise (never long paragraphs), covering every concept/definition/formula/derivation/law in the chapter, in the chapter's own logical order, broken into clearly-headed sections. Where a diagram from the textbook would meaningfully help understanding (a labelled figure, a ray/force diagram, a geometric construction, a graph), flag that a diagram is needed with a precise description of exactly what it must show and label -- do not request a diagram for something purely textual/definitional that gains nothing from a picture. Admin's remarks on what kind of notes they want: ${job.remarks || "(none given -- use your own best judgement)"}.${correction ? `\n\nThe admin reviewed an earlier draft and asked for this correction, which takes priority over everything else: "${correction}". Revise the notes to address this fully while keeping everything else that was already good.` : ""}`;
+
+    const tool = {
+      name: "submit_notes",
+      description: "Submit the structured chapter notes.",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Chapter title." },
+          sections: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                heading: { type: "string" },
+                points: { type: "array", items: { type: "string" }, description: "Point-wise notes for this section -- each entry one short, self-contained point (a definition, a formula, a fact, a step of a derivation). Never a paragraph." },
+                diagrams: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      description: { type: "string", description: "Precisely what this diagram must show and label, in enough detail that someone else could draw it correctly from this description alone." },
+                    },
+                    required: ["id", "description"],
+                  },
+                },
+              },
+              required: ["heading", "points", "diagrams"],
+            },
+          },
+        },
+        required: ["title", "sections"],
+      },
+    };
+
+    const content = [pdfBlock, ...supportBlocks, { type: "text", text: "Generate the chapter notes now." }];
+    const result = await callClaudeTool({ system, content, tool, maxTokens: 8000 });
+
+    const sections: ChapterNotesSection[] = (result.sections || []).map((s: any, si: number) => ({
+      heading: s.heading,
+      points: Array.isArray(s.points) ? s.points : [],
+      diagrams: Array.isArray(s.diagrams)
+        ? s.diagrams.map((d: any, di: number) => ({ id: d.id || `d${si}_${di}`, description: d.description, spec: null, status: "pending" as const }))
+        : [],
+    }));
+    return { title: result.title, sections };
+  }
+
+  async function generateDiagramSpec(description: string, chapterTitle: string, feedback?: string): Promise<DiagramSpec> {
+    const system = `You are drawing a simple, clean, CBSE-textbook-style educational diagram as a constrained shape list (not raw SVG/HTML). Canvas is ${DIAGRAM_CANVAS_W}x${DIAGRAM_CANVAS_H} units. Keep it uncluttered: generous spacing between every label and every other label/line/shape -- labels must never overlap each other, and must never sit directly on top of a line or shape they are not naming. Use role "axis" for reference lines/axes, "outline" for main structural lines/shapes, "fillPrimary"/"fillSecondary" for two distinguishable filled elements if needed, "ray" for light rays/vectors/arrows, "label" for point/part labels, "title" for a diagram title if one is warranted. This diagram is for chapter "${chapterTitle}". What it must show: ${description}${feedback ? `\n\nA previous attempt had this problem -- fix it: ${feedback}` : ""}`;
+    const tool = {
+      name: "submit_diagram",
+      description: "Submit the diagram as a shape list.",
+      input_schema: {
+        type: "object",
+        properties: {
+          caption: { type: "string" },
+          shapes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["line", "arrow", "circle", "rect", "polygon", "text"] },
+                x1: { type: "number" }, y1: { type: "number" }, x2: { type: "number" }, y2: { type: "number" },
+                cx: { type: "number" }, cy: { type: "number" }, r: { type: "number" },
+                x: { type: "number" }, y: { type: "number" }, w: { type: "number" }, h: { type: "number" },
+                points: { type: "string" }, text: { type: "string" },
+                anchor: { type: "string", enum: ["start", "middle", "end"] },
+                size: { type: "number" },
+                role: { type: "string" },
+                filled: { type: "boolean" },
+                dashed: { type: "boolean" },
+              },
+              required: ["type", "role"],
+            },
+          },
+        },
+        required: ["caption", "shapes"],
+      },
+    };
+    const result = await callClaudeTool({ system, content: [{ type: "text", text: "Generate the diagram now." }], tool, maxTokens: 3000 });
+    return { id: "", caption: result.caption, viewBoxW: DIAGRAM_CANVAS_W, viewBoxH: DIAGRAM_CANVAS_H, shapes: result.shapes || [] };
+  }
+
+  async function visionCheckDiagram(spec: DiagramSpec, description: string): Promise<{ ok: boolean; issues: string[] }> {
+    const lightSvg = buildDiagramSvg(spec, true);
+    const darkSvg = buildDiagramSvg(spec, false);
+    const [lightPng, darkPng] = await Promise.all([
+      sharp(Buffer.from(lightSvg)).png().toBuffer(),
+      sharp(Buffer.from(darkSvg)).png().toBuffer(),
+    ]);
+    const system = `You are doing quality control on an auto-generated educational diagram before it's shown to students. You are shown the SAME diagram rendered twice: once for light mode, once for dark mode. Check specifically for: any text label overlapping another label, any label sitting on top of / crossed by a line or shape it doesn't belong to, any label illegible against its background in EITHER mode, and any label positioned confusingly far from what it labels. Do not flag stylistic taste, only genuine overlap/legibility/clarity problems. What the diagram is meant to show: ${description}`;
+    const tool = {
+      name: "submit_review",
+      description: "Submit the diagram QA result.",
+      input_schema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", description: "true only if there are zero overlap/legibility/clarity problems in both modes." },
+          issues: { type: "array", items: { type: "string" }, description: "Each concrete problem found, empty if ok is true." },
+        },
+        required: ["ok", "issues"],
+      },
+    };
+    const content = [
+      { type: "text", text: "Light mode render:" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: lightPng.toString("base64") } },
+      { type: "text", text: "Dark mode render:" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: darkPng.toString("base64") } },
+    ];
+    const result = await callClaudeTool({ system, content, tool, maxTokens: 1000 });
+    return { ok: !!result.ok, issues: Array.isArray(result.issues) ? result.issues : [] };
+  }
+
+  // Up to 2 generation attempts per diagram: a free deterministic bounding-box overlap check runs
+  // first (cheap, catches the obvious cases without spending a vision call), then one Claude vision
+  // pass actually looking at both rendered modes. A diagram that still isn't clean after that is
+  // kept (not silently dropped) but marked "flagged" so it surfaces in the admin's own review --
+  // matching the approve/reject/correction workflow the admin explicitly asked for, rather than
+  // pretending automated QA alone can guarantee perfection.
+  async function produceDiagram(description: string, chapterTitle: string): Promise<{ spec: DiagramSpec; status: "ok" | "flagged"; issues: string[] }> {
+    let feedback: string | undefined;
+    let spec: DiagramSpec | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      spec = await generateDiagramSpec(description, chapterTitle, feedback);
+      const geomIssues = findLikelyOverlaps(spec);
+      if (geomIssues.length > 0) {
+        feedback = geomIssues.join(" ");
+        if (attempt === 1) return { spec, status: "flagged", issues: geomIssues };
+        continue;
+      }
+      const visionResult = await visionCheckDiagram(spec, description);
+      if (visionResult.ok) return { spec, status: "ok", issues: [] };
+      feedback = visionResult.issues.join(" ");
+      if (attempt === 1) return { spec, status: "flagged", issues: visionResult.issues };
+    }
+    return { spec: spec as DiagramSpec, status: "flagged", issues: feedback ? [feedback] : ["Automatic layout check could not confirm this diagram is clean."] };
+  }
+
+  async function finalReviewChapterNotes(job: any, content: ChapterNotesContent): Promise<{ summary: string; concerns: string[] }> {
+    const { data: pdfBlob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(job.ncert_pdf_path);
+    if (!pdfBlob) throw new Error("Could not re-download the NCERT chapter PDF for final review.");
+    const pdfBuf = Buffer.from(await pdfBlob.arrayBuffer());
+    const pdfBlock = { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBuf.toString("base64") } };
+    const notesText = content.sections.map((s) => `## ${s.heading}\n${s.points.map((p) => `- ${p}`).join("\n")}`).join("\n\n");
+    const system = `You wrote the attached point-wise chapter notes from the attached original NCERT chapter PDF. Do a final accuracy/completeness self-check: is anything in the notes factually wrong compared to the PDF, and is any concept/formula/definition from the PDF missing from the notes? Be honest and specific -- this is your own final QA pass, not a rubber stamp.`;
+    const tool = {
+      name: "submit_final_review",
+      description: "Submit the final QA result.",
+      input_schema: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "One or two sentence overall verdict." },
+          concerns: { type: "array", items: { type: "string" }, description: "Specific factual errors or missing content found, empty if none." },
+        },
+        required: ["summary", "concerns"],
+      },
+    };
+    const content2 = [pdfBlock, { type: "text", text: `Generated notes:\n\n${notesText}` }];
+    const result = await callClaudeTool({ system, content: content2, tool, maxTokens: 1500 });
+    return { summary: result.summary, concerns: Array.isArray(result.concerns) ? result.concerns : [] };
+  }
+
+  function findNextDiagramCoord(content: ChapterNotesContent): { si: number; di: number } | null {
+    for (let si = 0; si < content.sections.length; si++) {
+      const diagrams = content.sections[si].diagrams || [];
+      for (let di = 0; di < diagrams.length; di++) {
+        if (!diagrams[di].spec) return { si, di };
+      }
+    }
+    return null;
+  }
+
+  // Does exactly ONE unit of work per call -- see the file-level comment above this section for
+  // why (the two-request pattern, not fire-and-forget). Safe to call repeatedly/concurrently on
+  // the same job: it always re-reads current_step fresh and no-ops if status isn't "processing".
+  async function advanceChapterNotesJob(jobId: string): Promise<void> {
+    const { data: job } = await supabase.from("chapter_notes_jobs").select("*").eq("id", jobId).maybeSingle();
+    if (!job || job.status !== "processing") return;
+
+    try {
+      if (job.current_step === "outline" || job.current_step === "revise") {
+        const content = await generateChapterOutline(job, job.current_step === "revise" ? job.correction_notes : undefined);
+        const next = findNextDiagramCoord(content);
+        await supabase.from("chapter_notes_jobs").update({
+          content, current_step: next ? `diagram:${next.si}:${next.di}` : "review", step_error: null, updated_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        return;
+      }
+
+      const diagramMatch = /^diagram:(\d+):(\d+)$/.exec(job.current_step || "");
+      if (diagramMatch) {
+        const si = parseInt(diagramMatch[1], 10);
+        const di = parseInt(diagramMatch[2], 10);
+        const content: ChapterNotesContent = job.content;
+        const d = content.sections[si].diagrams[di];
+        const produced = await produceDiagram(d.description, content.title);
+        content.sections[si].diagrams[di] = { ...d, spec: { ...produced.spec, id: d.id }, status: produced.status, issues: produced.issues };
+        const next = findNextDiagramCoord(content);
+        await supabase.from("chapter_notes_jobs").update({
+          content, current_step: next ? `diagram:${next.si}:${next.di}` : "review", step_error: null, updated_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        return;
+      }
+
+      if (job.current_step === "review") {
+        const content: ChapterNotesContent = job.content;
+        const reviewResult = await finalReviewChapterNotes(job, content);
+        const flaggedDiagrams = content.sections.flatMap((s) => s.diagrams.filter((d) => d.status === "flagged"));
+        content.reviewSummary = reviewResult.summary;
+        content.reviewConcerns = reviewResult.concerns;
+        await supabase.from("chapter_notes_jobs").update({
+          content, status: "ready_for_review", current_step: "done", step_error: null, updated_at: new Date().toISOString(),
+        }).eq("id", jobId);
+
+        const concernLines = reviewResult.concerns.length > 0
+          ? `\n\nThings the AI itself flagged for your attention:\n${reviewResult.concerns.map((c) => `- ${c}`).join("\n")}`
+          : "";
+        const diagramLines = flaggedDiagrams.length > 0
+          ? `\n\n${flaggedDiagrams.length} diagram(s) could not be fully verified as overlap-free and are marked for your extra attention in the preview.`
+          : "";
+        await sendSimulatedEmail(
+          job.admin_email,
+          `Chapter notes ready for review: ${job.chapter_name}`,
+          `The AI has finished drafting notes for Class ${job.target_class} ${job.subject} -- "${job.chapter_name}".\n\n${reviewResult.summary}${concernLines}${diagramLines}\n\nOpen the admin panel's Chapter Notes section to review, and Approve, Reject, or request a correction.`,
+          "outgoing"
+        );
+      }
+    } catch (err: any) {
+      console.error(`[Chapter Notes] Job ${jobId} step "${job.current_step}" failed:`, err);
+      const isFirstFailure = !job.step_error;
+      await supabase.from("chapter_notes_jobs").update({ step_error: err.message || String(err), updated_at: new Date().toISOString() }).eq("id", jobId);
+      if (isFirstFailure) {
+        await sendSimulatedEmail(
+          job.admin_email,
+          `Chapter notes generation hit a problem: ${job.chapter_name}`,
+          `Generating notes for Class ${job.target_class} ${job.subject} -- "${job.chapter_name}" ran into an error at step "${job.current_step}":\n\n${err.message || String(err)}\n\nOpening the admin panel will automatically retry it. If this keeps failing, the uploaded file may be unreadable -- check it opens correctly and try re-uploading.`,
+          "outgoing"
+        );
+      }
+    }
+  }
+
+  function mapChapterNotesJobRow(row: any) {
+    return {
+      id: row.id,
+      targetClass: row.target_class,
+      subject: row.subject,
+      chapterName: row.chapter_name,
+      remarks: row.remarks,
+      status: row.status,
+      currentStep: row.current_step,
+      content: row.content,
+      stepError: row.step_error,
+      correctionNotes: row.correction_notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   // Admin Dashboard Config read

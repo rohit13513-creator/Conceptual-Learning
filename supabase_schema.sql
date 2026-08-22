@@ -113,6 +113,27 @@ create table password_reset_otps (
   expires_at timestamptz not null
 );
 
+-- 10. CHAPTER NOTES JOBS — admin-uploaded NCERT PDF -> AI-generated point-wise notes, with an
+-- admin approve/reject/correction review step before anything becomes visible to students.
+create table chapter_notes_jobs (
+  id uuid primary key default gen_random_uuid(),
+  admin_email text not null,
+  target_class text not null,             -- '8th' | '9th' | '10th'
+  subject text not null,                  -- 'Maths' | 'Physics' | 'Chemistry' | 'Biology'
+  chapter_name text not null,
+  remarks text,
+  ncert_pdf_path text not null,           -- path inside the "chapter-notes" storage bucket
+  supporting_file_paths jsonb not null default '[]',
+  status text not null default 'processing',  -- processing | ready_for_review | approved | rejected
+  current_step text not null default 'outline',
+  content jsonb,                          -- generated { title, sections: [{ heading, points: [], diagrams: [] }] }
+  step_error text,
+  correction_notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index chapter_notes_jobs_status_idx on chapter_notes_jobs (status);
+
 -- Helpful indexes
 create index idx_homework_student on homework_submissions(student_email);
 create index idx_users_status on users(status);

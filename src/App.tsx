@@ -14,6 +14,7 @@ import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
+import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
 import { CompetitiveOptics } from './components/CompetitiveOptics';
@@ -761,6 +762,20 @@ export default function App() {
   // fire-and-forget row actions with no other visible confirmation, so without this a
   // successful click looks identical to a silently-failed one.
   const [adminActionMessage, setAdminActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // AI Chapter Notes: admin upload form + generated-job review state.
+  const [cnClass, setCnClass] = useState<'8th' | '9th' | '10th'>('10th');
+  const [cnSubject, setCnSubject] = useState<'Maths' | 'Physics' | 'Chemistry' | 'Biology'>('Physics');
+  const [cnChapterName, setCnChapterName] = useState('');
+  const [cnRemarks, setCnRemarks] = useState('');
+  const [cnNcertFile, setCnNcertFile] = useState<File | null>(null);
+  const [cnSupportFiles, setCnSupportFiles] = useState<File[]>([]);
+  const [cnSubmitting, setCnSubmitting] = useState(false);
+  const [cnMessage, setCnMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [chapterNotesJobs, setChapterNotesJobs] = useState<any[]>([]);
+  const [cnCorrectionDrafts, setCnCorrectionDrafts] = useState<Record<string, string>>({});
+  const [cnAdvancingIds, setCnAdvancingIds] = useState<Set<string>>(new Set());
+  const [cnExpandedIds, setCnExpandedIds] = useState<Set<string>>(new Set());
   // Active Roster table can get very long with many students -- collapsible so the admin can
   // hide it instead of scrolling past dozens of rows to reach the sections below.
   const [showRoster, setShowRoster] = useState(true);
@@ -1591,6 +1606,17 @@ export default function App() {
       }).catch(() => {
         // Best-effort -- the next interval tick, or the scheduled cron, will try again.
       });
+      // Same reasoning, for any Chapter Notes job left "processing" because the admin's tab
+      // closed mid-generation -- see the pipeline comment in server.ts.
+      fetch('/api/admin/chapter-notes/sweep', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+      }).then(async (resp) => {
+        if (resp.ok) {
+          const data = await resp.json().catch(() => null);
+          if (data && data.advanced > 0) fetchChapterNotesJobs();
+        }
+      }).catch(() => {});
     };
     silentSweep();
     const interval = setInterval(silentSweep, 3 * 60 * 1000);
@@ -2073,6 +2099,7 @@ export default function App() {
       fetchAnnouncements();
       fetchMissingReport();
       fetchForumPending();
+      fetchChapterNotesJobs();
     }
     if (activeView === 'profile' && user) {
       setProfileDob(user.dateOfBirth || '');
@@ -2248,6 +2275,106 @@ export default function App() {
       }
     } catch (e) {
       setAdminActionMessage({ type: 'error', text: `Failed to reject ${email} -- check your connection and try again.` });
+    }
+  };
+
+  const fetchChapterNotesJobs = async () => {
+    if (!user) return;
+    try {
+      const resp = await fetch('/api/admin/chapter-notes/list', { headers: { 'Authorization': `Bearer ${user.token}` } });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.jobs) setChapterNotesJobs(data.jobs);
+    } catch {
+      // best-effort -- the admin can just reopen the panel
+    }
+  };
+
+  // Drives one job's pipeline to completion from this tab, one /advance call at a time (never
+  // fire-and-forget -- see the server-side comment on why). Capped so a stuck job can't loop
+  // forever in one tab session; if the tab closes mid-way, the silent sweep effect below picks it
+  // back up on the admin's next visit.
+  const driveChapterNotesJob = async (jobId: string) => {
+    if (!user) return;
+    setCnAdvancingIds(prev => new Set(prev).add(jobId));
+    try {
+      for (let i = 0; i < 40; i++) {
+        const resp = await fetch('/api/admin/chapter-notes/advance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+          body: JSON.stringify({ jobId }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.job) break;
+        setChapterNotesJobs(prev => prev.map(j => j.id === jobId ? data.job : j));
+        if (data.job.status !== 'processing') break;
+      }
+    } catch {
+      // best-effort -- the silent sweep below will retry later
+    } finally {
+      setCnAdvancingIds(prev => { const next = new Set(prev); next.delete(jobId); return next; });
+    }
+  };
+
+  const handleCreateChapterNotesJob = async () => {
+    if (!user || !cnNcertFile || !cnChapterName.trim()) return;
+    setCnSubmitting(true);
+    setCnMessage(null);
+    try {
+      const fd = new FormData();
+      fd.append('targetClass', cnClass);
+      fd.append('subject', cnSubject);
+      fd.append('chapterName', cnChapterName.trim());
+      fd.append('remarks', cnRemarks.trim());
+      fd.append('ncertPdf', cnNcertFile);
+      cnSupportFiles.forEach(f => fd.append('supportingFiles', f));
+      const resp = await fetch('/api/admin/chapter-notes/create', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+        body: fd,
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.job) {
+        setChapterNotesJobs(prev => [data.job, ...prev]);
+        setCnMessage({ type: 'success', text: `Working on it in the background -- you'll get an email at ${user.email} once "${data.job.chapterName}" is ready for your review.` });
+        setCnChapterName('');
+        setCnRemarks('');
+        setCnNcertFile(null);
+        setCnSupportFiles([]);
+        driveChapterNotesJob(data.job.id);
+      } else {
+        setCnMessage({ type: 'error', text: data.error || 'Could not start the job.' });
+      }
+    } catch {
+      setCnMessage({ type: 'error', text: 'Could not start the job -- check your connection and try again.' });
+    } finally {
+      setCnSubmitting(false);
+    }
+  };
+
+  const handleApproveChapterNotes = async (jobId: string) => {
+    if (!user) return;
+    const resp = await fetch('/api/admin/chapter-notes/approve', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` }, body: JSON.stringify({ jobId }) });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.job) setChapterNotesJobs(prev => prev.map(j => j.id === jobId ? data.job : j));
+  };
+
+  const handleRejectChapterNotes = async (jobId: string) => {
+    if (!user) return;
+    const resp = await fetch('/api/admin/chapter-notes/reject', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` }, body: JSON.stringify({ jobId }) });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.job) setChapterNotesJobs(prev => prev.map(j => j.id === jobId ? data.job : j));
+  };
+
+  const handleRequestChapterNotesCorrection = async (jobId: string) => {
+    if (!user) return;
+    const text = (cnCorrectionDrafts[jobId] || '').trim();
+    if (!text) return;
+    const resp = await fetch('/api/admin/chapter-notes/request-correction', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` }, body: JSON.stringify({ jobId, correctionText: text }) });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.job) {
+      setChapterNotesJobs(prev => prev.map(j => j.id === jobId ? data.job : j));
+      setCnCorrectionDrafts(prev => ({ ...prev, [jobId]: '' }));
+      driveChapterNotesJob(jobId);
     }
   };
 
@@ -6645,6 +6772,166 @@ export default function App() {
                       ))
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* AI Chapter Notes: upload -> AI generation -> admin approve/reject/correct */}
+              <div>
+                <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-violet-400">
+                    <Sparkles className="w-4 h-4" /> AI Chapter Notes
+                  </h3>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Upload an NCERT chapter PDF and the AI drafts point-wise notes with diagrams in the background. You'll get an email when a chapter is ready, and nothing reaches students until you Approve it here.
+                  </p>
+
+                  {cnMessage && (
+                    <div className={`mt-3 px-3 py-2 rounded-lg text-[11px] font-bold ${cnMessage.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                      {cnMessage.text}
+                    </div>
+                  )}
+
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Class</label>
+                      <select value={cnClass} onChange={(e) => setCnClass(e.target.value as any)} className={`mt-1 w-full text-xs font-bold rounded-lg px-2.5 py-2 border ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`}>
+                        <option value="8th">8th</option>
+                        <option value="9th">9th</option>
+                        <option value="10th">10th</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Subject</label>
+                      <select value={cnSubject} onChange={(e) => setCnSubject(e.target.value as any)} className={`mt-1 w-full text-xs font-bold rounded-lg px-2.5 py-2 border ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`}>
+                        <option value="Maths">Maths</option>
+                        <option value="Physics">Physics</option>
+                        <option value="Chemistry">Chemistry</option>
+                        <option value="Biology">Biology</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Chapter Name</label>
+                    <input value={cnChapterName} onChange={(e) => setCnChapterName(e.target.value)} placeholder="e.g. Light -- Reflection and Refraction" className={`mt-1 w-full text-xs font-semibold rounded-lg px-2.5 py-2 border ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`} />
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>NCERT Chapter PDF (required)</label>
+                    <input type="file" accept="application/pdf" onChange={(e) => setCnNcertFile(e.target.files?.[0] || null)} className={`mt-1 w-full text-[11px] font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`} />
+                    {cnNcertFile && <p className="text-[10px] mt-1 font-bold text-emerald-400">✓ {cnNcertFile.name}</p>}
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Supporting Notes (optional, add one or more)</label>
+                    <div className="mt-1 space-y-1.5">
+                      {cnSupportFiles.map((f, i) => (
+                        <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold ${isLightMode ? 'bg-slate-100 text-slate-700' : 'bg-slate-800/60 text-slate-300'}`}>
+                          <span className="truncate flex items-center gap-1.5"><FileText className="w-3 h-3 shrink-0" /> {f.name}</span>
+                          <button onClick={() => setCnSupportFiles(prev => prev.filter((_, pi) => pi !== i))} className="text-red-400 hover:text-red-300 shrink-0 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                      <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer ${isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'}`}>
+                        <Plus className="w-3.5 h-3.5" /> Add File
+                        <input type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => {
+                          if (e.target.files?.[0]) setCnSupportFiles(prev => [...prev, e.target.files![0]]);
+                          e.target.value = '';
+                        }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className={`text-[10px] font-bold uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Remarks (what kind of notes do you want?)</label>
+                    <textarea value={cnRemarks} onChange={(e) => setCnRemarks(e.target.value)} rows={2} placeholder="e.g. Keep it exam-focused, include all NCERT diagrams, add formula boxes..." className={`mt-1 w-full text-xs font-semibold rounded-lg px-2.5 py-2 border resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`} />
+                  </div>
+
+                  <button
+                    onClick={handleCreateChapterNotesJob}
+                    disabled={cnSubmitting || !cnNcertFile || !cnChapterName.trim()}
+                    className="mt-4 w-full px-4 py-2.5 rounded-lg bg-violet-500 text-white font-black text-xs uppercase cursor-pointer hover:bg-violet-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {cnSubmitting ? 'Starting…' : 'Generate Notes'}
+                  </button>
+
+                  {/* Job list */}
+                  {chapterNotesJobs.length > 0 && (
+                    <div className={`mt-5 pt-4 border-t divide-y ${isLightMode ? 'border-slate-200 divide-slate-200' : 'border-slate-800 divide-slate-800/60'}`}>
+                      {chapterNotesJobs.map((job) => {
+                        const isExpanded = cnExpandedIds.has(job.id);
+                        const isAdvancing = cnAdvancingIds.has(job.id);
+                        return (
+                          <div key={job.id} className="py-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{job.chapterName}</p>
+                                <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{job.targetClass} · {job.subject}</p>
+                              </div>
+                              <span className={`shrink-0 px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                                job.status === 'approved' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/20'
+                                : job.status === 'rejected' ? 'bg-red-950/40 text-red-400 border-red-800/20'
+                                : job.status === 'ready_for_review' ? 'bg-amber-950/40 text-amber-400 border-amber-800/20'
+                                : 'bg-cyan-950/40 text-cyan-400 border-cyan-800/20'
+                              }`}>
+                                {job.status === 'processing'
+                                  ? (isAdvancing
+                                      ? (job.currentStep === 'outline' || job.currentStep === 'revise' ? 'Writing notes…' : job.currentStep === 'review' ? 'Final check…' : /^diagram:/.test(job.currentStep) ? 'Drawing a diagram…' : 'Working…')
+                                      : 'Paused -- reopen this page to resume')
+                                  : job.status === 'ready_for_review' ? 'Ready for review' : job.status}
+                              </span>
+                            </div>
+
+                            {job.stepError && job.status === 'processing' && (
+                              <p className="text-[10px] mt-1.5 font-semibold text-red-400">⚠ {job.stepError} -- will retry automatically.</p>
+                            )}
+
+                            {job.status === 'processing' && !isAdvancing && !job.stepError && (
+                              <button onClick={() => driveChapterNotesJob(job.id)} className="text-[10px] mt-1.5 font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer">Resume generating →</button>
+                            )}
+
+                            {job.status === 'ready_for_review' && (
+                              <div className="mt-2">
+                                <button onClick={() => setCnExpandedIds(prev => { const next = new Set(prev); next.has(job.id) ? next.delete(job.id) : next.add(job.id); return next; })} className="text-[10px] font-bold text-violet-400 hover:text-violet-300 cursor-pointer flex items-center gap-1">
+                                  {isExpanded ? 'Hide preview' : 'Preview notes'} <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {isExpanded && job.content && (
+                                  <div className={`mt-2 p-3 rounded-xl border max-h-[500px] overflow-y-auto ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+                                    <ChapterNotesViewer content={job.content} isLightMode={isLightMode} showFlags />
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2 mt-2.5">
+                                  <button onClick={() => handleApproveChapterNotes(job.id)} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-black text-[10px] uppercase cursor-pointer hover:bg-emerald-400">
+                                    Approve ✅
+                                  </button>
+                                  <button onClick={() => handleRejectChapterNotes(job.id)} className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-white font-black text-[10px] uppercase cursor-pointer">
+                                    Reject ❌
+                                  </button>
+                                </div>
+
+                                <div className="mt-2.5 flex items-center gap-2">
+                                  <input
+                                    value={cnCorrectionDrafts[job.id] || ''}
+                                    onChange={(e) => setCnCorrectionDrafts(prev => ({ ...prev, [job.id]: e.target.value }))}
+                                    placeholder="Not quite right? Describe the correction you want, then Resubmit…"
+                                    className={`flex-1 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`}
+                                  />
+                                  <button
+                                    onClick={() => handleRequestChapterNotesCorrection(job.id)}
+                                    disabled={!(cnCorrectionDrafts[job.id] || '').trim()}
+                                    className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-black text-[10px] uppercase cursor-pointer hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    Resubmit
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
