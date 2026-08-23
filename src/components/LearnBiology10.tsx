@@ -17,7 +17,10 @@ import {
   Trophy,
   Dna,
   Filter,
+  Download,
 } from "lucide-react";
+
+const LIFE_PROCESSES_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-life-processes.pdf";
 
 type BioTopicId =
   | "life-processes-intro"
@@ -208,6 +211,15 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
             <HeartPulse className="w-4 h-4 text-green-500" />
             <span className={`text-sm uppercase tracking-widest font-black font-mono ${isLightMode ? "text-slate-800" : "text-green-400"}`}>Life Processes</span>
           </div>
+          <a
+            href={LIFE_PROCESSES_NOTES_PDF_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center gap-1 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded transition ${isLightMode ? "bg-green-600 hover:bg-green-700 text-white" : "bg-green-500 hover:bg-green-400 text-[#052e18]"}`}
+          >
+            <Download className="w-2.5 h-2.5" />
+            PDF
+          </a>
         </div>
       </div>
 
@@ -223,6 +235,19 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               Nutrition, respiration, transportation, and excretion -- how living things keep themselves running.
             </p>
           </div>
+          <a
+            href={LIFE_PROCESSES_NOTES_PDF_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${
+              isLightMode
+                ? "bg-green-600 hover:bg-green-700 text-white shadow-green-600/10"
+                : "bg-green-500 hover:bg-green-400 text-slate-950 shadow-green-450/5"
+            }`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download Notes
+          </a>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
