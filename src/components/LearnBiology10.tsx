@@ -55,7 +55,7 @@ const BIO_TOPICS: BioTopic[] = [
   { id: "excretion-humans", title: "11. Excretion in Human Beings", category: "Excretion" },
   { id: "excretion-plants", title: "12. Excretion in Plants & Dialysis", category: "Excretion" },
   { id: "glossary-mindmap", title: "13. Quick Glossary & Mind Map", category: "Revision" },
-  { id: "competitive-corner", title: "14. Competitive Corner: SOF, NTSE & Olympiad", category: "Beyond NCERT" },
+  { id: "competitive-corner", title: "14. Competitive Corner", category: "Advanced" },
 ];
 
 interface LearnBiology10Props {
@@ -137,7 +137,7 @@ const DiagramCard: React.FC<{ caption: string; children: React.ReactNode; isLigh
 );
 
 // A numbered marker placed ON a diagram, paired with a numbered legend list beside/below it.
-// Deliberately used instead of free-floating text labels for every densely-labelled NCERT
+// Deliberately used instead of free-floating text labels for every densely-labelled
 // figure in this chapter (a leaf cross-section, the alimentary canal, the respiratory system,
 // the heart) -- with 8-13 real labels per figure, positioning that much text directly around a
 // small diagram risks exactly the label/label and label/line overlap the notes must never have.
@@ -278,7 +278,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <HeartPulse className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h4 className="font-extrabold text-green-400 tracking-tight">Class X: Life Processes, Notes</h4>
+                <h4 className="font-extrabold text-green-400 tracking-tight">Life Processes, Notes</h4>
               </div>
             </div>
           </div>
@@ -348,7 +348,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               </ol>
               <p className="text-sm font-semibold leading-relaxed">These steps need not happen immediately one after another. <b>Desert plants</b> take up CO2 at night (forming an intermediate substance) and use daytime light energy to process it later, which limits water loss.</p>
 
-              <DiagramCard caption="Cross-section of a leaf, showing every structure NCERT labels in this figure" isLightMode={isLightMode}>
+              <DiagramCard caption="Cross-section of a leaf, showing every labelled structure" isLightMode={isLightMode}>
                 <svg viewBox="0 0 720 300" className="w-full h-auto">
                   <rect x="140" y="40" width="440" height="16" rx="4" fill={isLightMode ? "#a3e635" : "#65a30d"} fillOpacity="0.7" />
                   <rect x="140" y="60" width="440" height="60" rx="4" fill={isLightMode ? "#bbf7d0" : "#14532d"} fillOpacity="0.6" />
@@ -486,7 +486,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p>The <b className="text-white">alimentary canal</b> is a long tube, running from the mouth to the anus, with specialised regions for chewing, digesting, and absorbing food. Food is pushed along it by rhythmic muscular contractions called <b className="text-white">peristaltic movements</b>.</p>
               </InfoCard>
 
-              <DiagramCard caption="The human alimentary canal and its associated glands, showing every structure NCERT labels in this figure" isLightMode={isLightMode}>
+              <DiagramCard caption="The human alimentary canal and its associated glands, showing every labelled structure" isLightMode={isLightMode}>
                 <svg viewBox="0 0 720 340" className="w-full h-auto">
                   <circle cx="120" cy="45" r="20" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="2.5" />
                   <path d="M 130 60 Q 100 90 130 130 Q 90 160 140 190" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="10" strokeLinecap="round" />
@@ -619,7 +619,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p className="text-base font-semibold text-slate-400">The pathway air takes, and how the lungs squeeze an enormous surface area into your chest.</p>
               </div>
 
-              <DiagramCard caption="Pathway of air through the human respiratory system, showing every structure NCERT labels in this figure" isLightMode={isLightMode}>
+              <DiagramCard caption="Pathway of air through the human respiratory system, showing every labelled structure" isLightMode={isLightMode}>
                 <svg viewBox="0 0 640 320" className="w-full h-auto">
                   <ellipse cx="320" cy="35" rx="60" ry="18" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="2.5" />
                   <rect x="305" y="50" width="30" height="70" rx="10" fill={isLightMode ? "#e0f2fe" : "#0c2536"} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="2.5" />
@@ -700,7 +700,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p><b className="text-white">Plasma</b> is the fluid medium that transports food, CO2, and nitrogenous wastes in dissolved form, plus salts. <b className="text-white">Red blood cells (RBCs)</b> carry oxygen via haemoglobin. The system needs a pump (heart), tubes (blood vessels), and a repair mechanism (platelets).</p>
               </InfoCard>
 
-              <DiagramCard caption="Schematic sectional view of the human heart, showing every structure NCERT labels in this figure" isLightMode={isLightMode}>
+              <DiagramCard caption="Schematic sectional view of the human heart, showing every labelled structure" isLightMode={isLightMode}>
                 <svg viewBox="0 0 640 320" className="w-full h-auto">
                   <rect x="140" y="40" width="26" height="90" rx="10" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.7" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2" />
                   <rect x="470" y="40" width="26" height="90" rx="10" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.7" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2" />
@@ -875,7 +875,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               </div>
 
               <SectionHeading>The Nephron: The Kidney's Filtration Unit</SectionHeading>
-              <DiagramCard caption="Structure of a nephron, showing every structure NCERT labels in this figure" isLightMode={isLightMode}>
+              <DiagramCard caption="Structure of a nephron, showing every labelled structure" isLightMode={isLightMode}>
                 <svg viewBox="0 0 680 260" className="w-full h-auto">
                   <path d="M 120 130 Q 40 130 40 90 Q 40 55 90 55 Q 140 55 140 95 Q 140 130 120 130 Z" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="3" />
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -1019,11 +1019,11 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
           {activeTopic === "competitive-corner" && (
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
-                <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Competitive Corner: SOF, NTSE & Olympiad</h1>
-                <p className="text-base font-semibold text-slate-400">NCERT covers the fundamentals. Exams like SOF-NSO, NTSE, and IJSO often push a step further with these same ideas.</p>
+                <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Competitive Corner</h1>
+                <p className="text-base font-semibold text-slate-400">The earlier topics cover the fundamentals. Competitive exams often push a step further with these same ideas.</p>
               </div>
 
-              <SectionHeading>Ideas That Go a Step Beyond NCERT</SectionHeading>
+              <SectionHeading>Ideas That Go a Step Further</SectionHeading>
 
               <InfoCard title="Counter-Current Exchange in Fish Gills" icon={Trophy}>
                 <p>Fish gills use a counter-current mechanism: blood in the gill capillaries flows in the OPPOSITE direction to the water flowing over them. This keeps a concentration gradient favouring oxygen uptake along the entire length of the gill, letting fish extract far more oxygen from water than a simple parallel-flow system would allow. This is a favourite "why" question in competitive exams.</p>
@@ -1033,12 +1033,12 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p>Both ventricles pump the same volume of blood per beat, but the left ventricle must generate enough pressure to push blood through the ENTIRE body (systemic circulation), a much longer and higher-resistance path than the right ventricle's short trip to the lungs (pulmonary circulation). This is why the left ventricle's muscular wall is noticeably thicker.</p>
               </InfoCard>
 
-              <InfoCard title="C3 vs C4 Photosynthesis (Beyond NCERT Basics)" icon={Leaf}>
-                <p>Most plants (C3) fix CO2 directly into a 3-carbon compound. Some plants adapted to hot, dry climates (like maize, sugarcane -- C4 plants) first fix CO2 into a 4-carbon compound in specialised cells, minimising water loss and photorespiration. Desert plants using a similar night-time CO2 uptake strategy (mentioned in NCERT without naming it) follow a related pathway called CAM (Crassulacean Acid Metabolism).</p>
+              <InfoCard title="C3 vs C4 Photosynthesis (Beyond the Basics)" icon={Leaf}>
+                <p>Most plants (C3) fix CO2 directly into a 3-carbon compound. Some plants adapted to hot, dry climates (like maize, sugarcane -- C4 plants) first fix CO2 into a 4-carbon compound in specialised cells, minimising water loss and photorespiration. Desert plants using a similar night-time CO2 uptake strategy (mentioned earlier in this chapter without naming it) follow a related pathway called CAM (Crassulacean Acid Metabolism).</p>
               </InfoCard>
 
               <InfoCard title="Osmoregulation Beyond the Nephron" icon={Filter}>
-                <p>ADH (antidiuretic hormone), released by the pituitary gland, controls how much water the nephron's tubule reabsorbs -- more ADH means more water reabsorbed and more concentrated urine. This hormonal fine-tuning is what actually regulates urine volume day to day, beyond the basic filtration/reabsorption NCERT describes.</p>
+                <p>ADH (antidiuretic hormone), released by the pituitary gland, controls how much water the nephron's tubule reabsorbs -- more ADH means more water reabsorbed and more concentrated urine. This hormonal fine-tuning is what actually regulates urine volume day to day, beyond the basic filtration/reabsorption described earlier in this chapter.</p>
               </InfoCard>
 
               <div className="grid grid-cols-1 gap-2.5">

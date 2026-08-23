@@ -5783,7 +5783,7 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? 'Class X (Biology)' : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology' : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
