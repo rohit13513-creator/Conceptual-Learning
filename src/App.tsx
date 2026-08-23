@@ -10,6 +10,7 @@ import { Quiz } from './components/Quiz';
 import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
 import LearnChemistry from './components/LearnChemistry';
 import { LearnBiology } from './components/LearnBiology';
+import { LearnBiology10 } from './components/LearnBiology10';
 import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
@@ -91,6 +92,15 @@ import {
   MATHS8_COMPETENCY,
   MATHS8_SELF_ASSESSMENT,
 } from './data/maths8';
+import {
+  BIOLOGY10_NCERT_SOLVED,
+  BIOLOGY10_MCQS,
+  BIOLOGY10_VERY_SHORT,
+  BIOLOGY10_SHORT,
+  BIOLOGY10_LONG,
+  BIOLOGY10_COMPETENCY,
+  BIOLOGY10_SELF_ASSESSMENT,
+} from './data/biology10';
 import {
   Home,
   BookOpen,
@@ -482,10 +492,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
   const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -2448,7 +2458,7 @@ export default function App() {
   const SUBJECT_AVAILABILITY: Record<'8th' | '9th' | '10th', Record<'Maths' | 'Physics' | 'Chemistry' | 'Biology', boolean>> = {
     '8th': { Maths: true, Physics: true, Chemistry: false, Biology: false },
     '9th': { Maths: false, Physics: true, Chemistry: false, Biology: true },
-    '10th': { Maths: false, Physics: true, Chemistry: true, Biology: false },
+    '10th': { Maths: false, Physics: true, Chemistry: true, Biology: true },
   };
 
   const openSubject = (cls: '8th' | '9th' | '10th', subject: 'Maths' | 'Physics' | 'Chemistry' | 'Biology') => {
@@ -2460,6 +2470,7 @@ export default function App() {
     setPreparingFor(cls);
     if (subject === 'Physics' && cls === '9th') { setQbSubject('physics'); changeView('physicsNotes9'); }
     else if (subject === 'Maths' && cls === '8th') { setQbSubject('maths'); changeView('mathsNotes8'); }
+    else if (subject === 'Biology' && cls === '10th') { setQbSubject('biology'); changeView('bioNotes10'); }
     else if (subject === 'Physics') changeView('learn');
     else if (subject === 'Chemistry') changeView('chemNotes');
     else if (subject === 'Biology') { setQbSubject('biology'); changeView('bioNotes'); }
@@ -2524,6 +2535,16 @@ export default function App() {
         long: CHEMISTRY10_LONG,
         assertion: CHEMISTRY10_ASSERTION_REASON,
         competency: CHEMISTRY10_COMPETENCY,
+      };
+    } else if (preparingFor === '10th' && qbSubject === 'biology') {
+      return {
+        ncert: BIOLOGY10_NCERT_SOLVED,
+        mcqs: BIOLOGY10_MCQS,
+        veryshort: BIOLOGY10_VERY_SHORT,
+        short: BIOLOGY10_SHORT,
+        long: BIOLOGY10_LONG,
+        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        competency: BIOLOGY10_COMPETENCY,
       };
     } else if (preparingFor === '10th') {
       return {
@@ -3179,6 +3200,7 @@ export default function App() {
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('physicsNotes9'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('learn'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('chemNotes'); } },
+              { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('bioNotes10'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('competitive'); } },
             ]);
             const locked = notesItems.length === 0;
@@ -3191,7 +3213,7 @@ export default function App() {
                     setOpenMenu(openMenu === 'notes' ? null : 'notes');
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'physicsNotes9' || activeView === 'mathsNotes8' || activeView === 'competitive')
+                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'mathsNotes8' || activeView === 'competitive')
                       ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
                       : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
                   }`}
@@ -4652,6 +4674,14 @@ export default function App() {
         />
       )}
 
+      {activeView === 'bioNotes10' && (
+        <LearnBiology10
+          isLightMode={isLightMode}
+          onCompleteNotes={() => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); }}
+          onGoToSelfAssessment={() => { setPreparingFor('10th'); setQbSubject('biology'); changeView('assessment'); }}
+        />
+      )}
+
       {activeView === 'physicsNotes9' && (
         <LearnPhysics9
           isLightMode={isLightMode}
@@ -4828,7 +4858,7 @@ export default function App() {
                         {/* Equations block */}
                         <div className="space-y-3 bg-slate-950/60 rounded-xl p-4.5 border border-slate-800">
                           <div>
-                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono mb-1">2. {preparingFor === '9th' && qbSubject === 'physics' ? 'Applied Formula' : preparingFor === '9th' ? 'Key Concept Used' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Applied Concept / Reaction Pattern' : 'Applied Mirror / Lens Formula'}</span>
+                            <span className="text-xs font-black text-slate-300 uppercase tracking-widest block font-mono mb-1">2. {preparingFor === '9th' && qbSubject === 'physics' ? 'Applied Formula' : preparingFor === '9th' ? 'Key Concept Used' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Applied Concept / Reaction Pattern' : preparingFor === '10th' && qbSubject === 'biology' ? 'Key Concept Used' : 'Applied Mirror / Lens Formula'}</span>
                             <span className="text-sm font-black text-yellow-300 font-mono bg-yellow-400/5 border border-yellow-400/15 py-1.5 px-3.5 rounded-xl inline-block">
                               {renderTextWithFractions(q.formulaUsed)}
                             </span>
@@ -4922,7 +4952,7 @@ export default function App() {
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-cyan-400 bg-cyan-400/10 px-2.5 py-0.5 rounded border border-cyan-500/20">Next Chapter Milestone</span>
                 <h4 className="text-base font-bold text-slate-100 mt-1">{preparingFor === '9th' || (preparingFor === '8th' && qbSubject === 'maths') ? 'Solved Textbook Exercises Completed!' : 'Solved NCERT Exercises Completed!'}</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? (qbSubject === 'physics' ? 'motion' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '8th' && qbSubject === 'maths' ? 'quadrilateral' : 'optics'} concepts to the test in the Question Bank.</p>
+                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? (qbSubject === 'physics' ? 'motion' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? 'life processes' : preparingFor === '8th' && qbSubject === 'maths' ? 'quadrilateral' : 'optics'} concepts to the test in the Question Bank.</p>
               </div>
               <button
                 onClick={() => changeView('qbank')}
@@ -5653,7 +5683,7 @@ export default function App() {
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/25">Final Chapter Milestone</span>
                 <h4 className="text-base font-bold text-slate-100 mt-1">Question Bank Completed!</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '9th' ? (qbSubject === 'physics' ? 'motion' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '8th' && qbSubject === 'maths' ? 'quadrilateral' : 'optics'} scoring badge.</p>
+                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '9th' ? (qbSubject === 'physics' ? 'motion' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? 'life processes' : preparingFor === '8th' && qbSubject === 'maths' ? 'quadrilateral' : 'optics'} scoring badge.</p>
               </div>
               <button
                 onClick={() => changeView('assessment')}
@@ -5753,7 +5783,7 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? 'Class X (Biology)' : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
@@ -5774,12 +5804,12 @@ export default function App() {
                     : preparingFor === '9th'
                     ? (qbSubject === 'physics' ? PHYSICS9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT)
                     : preparingFor === '10th'
-                    ? (qbSubject === 'chemistry' ? CHEMISTRY10_SELF_ASSESSMENT : CLASSX_SELF_ASSESSMENT)
+                    ? (qbSubject === 'chemistry' ? CHEMISTRY10_SELF_ASSESSMENT : qbSubject === 'biology' ? BIOLOGY10_SELF_ASSESSMENT : CLASSX_SELF_ASSESSMENT)
                     : COMPETITION_SELF_ASSESSMENT
                 }
-                subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : 'Biology Self-Assessment') : undefined}
-                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Ready to test your knowledge of Quadrilaterals?' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
-                durationSeconds={preparingFor === '8th' && qbSubject === 'maths' ? 2400 : undefined}
+                subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : 'Biology Self-Assessment') : undefined}
+                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Ready to test your knowledge of Quadrilaterals?' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? 'Ready to test your knowledge of Life Processes?' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
+                durationSeconds={preparingFor === '8th' && qbSubject === 'maths' ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? 1800 : undefined}
                 isLightMode={isLightMode}
               />
             </div>
