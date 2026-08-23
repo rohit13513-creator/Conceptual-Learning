@@ -3313,6 +3313,7 @@ export default function App() {
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('ncert'); } },
+              { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); } },
             ]);
             const locked = ncertItems.length === 0;
             return (
@@ -3365,6 +3366,7 @@ export default function App() {
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('qbank'); } },
+              { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('qbank'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('qbank'); } },
             ]);
             const locked = qbankItems.length === 0;
@@ -3418,6 +3420,7 @@ export default function App() {
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('assessment'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('assessment'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('assessment'); } },
+              { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('assessment'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('assessment'); } },
             ]);
             const locked = assessmentItems.length === 0;
@@ -4778,10 +4781,12 @@ export default function App() {
               <div className="space-y-1">
                 <h2 className="text-xl font-black text-slate-100 tracking-tight flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-teal-400" />
-                  {preparingFor === '9th' || (preparingFor === '8th' && qbSubject === 'maths') ? 'Solved Textbook Questions' : 'Solved NCERT Questions'}
+                  {preparingFor === '9th' || (preparingFor === '8th' && qbSubject === 'maths') || (preparingFor === '10th' && qbSubject === 'biology') ? 'Solved Textbook Questions' : 'Solved NCERT Questions'}
                 </h2>
                 <p className="text-sm font-semibold text-slate-300">
-                  Search & study official {preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? 'Quadrilaterals' : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.
+                  {preparingFor === '10th' && qbSubject === 'biology'
+                    ? 'Search & study official Life Processes textbook questions with exact step-by-step solutions.'
+                    : <>Search & study official {preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? 'Quadrilaterals' : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -4951,7 +4956,7 @@ export default function App() {
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 mt-8">
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-cyan-400 bg-cyan-400/10 px-2.5 py-0.5 rounded border border-cyan-500/20">Next Chapter Milestone</span>
-                <h4 className="text-base font-bold text-slate-100 mt-1">{preparingFor === '9th' || (preparingFor === '8th' && qbSubject === 'maths') ? 'Solved Textbook Exercises Completed!' : 'Solved NCERT Exercises Completed!'}</h4>
+                <h4 className="text-base font-bold text-slate-100 mt-1">{preparingFor === '9th' || (preparingFor === '8th' && qbSubject === 'maths') || (preparingFor === '10th' && qbSubject === 'biology') ? 'Solved Textbook Exercises Completed!' : 'Solved NCERT Exercises Completed!'}</h4>
                 <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? (qbSubject === 'physics' ? 'motion' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? 'life processes' : preparingFor === '8th' && qbSubject === 'maths' ? 'quadrilateral' : 'optics'} concepts to the test in the Question Bank.</p>
               </div>
               <button
