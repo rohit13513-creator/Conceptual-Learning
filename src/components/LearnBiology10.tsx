@@ -372,7 +372,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                   <NumMarker x={200} y={206} n={12} isLightMode={isLightMode} />
                   <NumMarker x={262} y={222} n={11} isLightMode={isLightMode} />
                   <NumMarker x={338} y={230} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={140} y={130} n={2} isLightMode={isLightMode} />
+                  <NumMarker x={95} y={130} n={2} isLightMode={isLightMode} />
                   <NumMarker x={620} y={90} n={8} isLightMode={isLightMode} />
                   <NumMarker x={620} y={160} n={6} isLightMode={isLightMode} />
                 </svg>
@@ -499,9 +499,9 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                   <circle cx="640" cy="302" r="14" fill={isLightMode ? "#a78bfa" : "#6d28d9"} fillOpacity="0.4" stroke={isLightMode ? "#6d28d9" : "#a78bfa"} strokeWidth="2" />
                   <rect x="660" y="296" width="14" height="14" rx="4" fill={isLightMode ? "#475569" : "#cbd5e1"} />
 
-                  <NumMarker x={155} y={25} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={155} y={62} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={165} y={70} n={3} isLightMode={isLightMode} />
+                  <NumMarker x={185} y={15} n={1} isLightMode={isLightMode} />
+                  <NumMarker x={190} y={50} n={2} isLightMode={isLightMode} />
+                  <NumMarker x={150} y={90} n={3} isLightMode={isLightMode} />
                   <NumMarker x={90} y={110} n={4} isLightMode={isLightMode} />
                   <NumMarker x={230} y={190} n={5} isLightMode={isLightMode} />
                   <NumMarker x={210} y={230} n={6} isLightMode={isLightMode} />
