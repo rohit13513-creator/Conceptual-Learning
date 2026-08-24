@@ -165,7 +165,7 @@ const DiagramCard: React.FC<{ caption: string; children: React.ReactNode; isLigh
 // rendered inside the same card frame every other diagram in this chapter uses.
 const DiagramImage: React.FC<{ src: string; alt: string; caption?: string; isLightMode?: boolean }> = ({ src, alt, caption, isLightMode = false }) => (
   <DiagramCard caption={caption || alt} isLightMode={isLightMode}>
-    <img src={src} alt={alt} className="w-full h-auto rounded-lg" loading="lazy" />
+    <img src={src} alt={alt} className="w-full h-auto rounded-lg" />
   </DiagramCard>
 );
 
