@@ -22,6 +22,28 @@ import {
 
 const LIFE_PROCESSES_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-life-processes.pdf";
 
+// Real diagram images cropped from the admin's own downloadable notes PDF -- used instead of
+// hand-drawn SVGs, which reviewed as too unclear to keep.
+const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/biology10-diagrams/";
+const DIAGRAMS = {
+  leafParts: DIAGRAM_BASE + "leaf-parts.webp",
+  photosynthesisEq: DIAGRAM_BASE + "photosynthesis-eq.webp",
+  leafCrossSection: DIAGRAM_BASE + "leaf-cross-section.webp",
+  stomata: DIAGRAM_BASE + "stomata.webp",
+  amoebaDigestion: DIAGRAM_BASE + "amoeba-digestion.webp",
+  alimentaryCanal: DIAGRAM_BASE + "alimentary-canal.webp",
+  glucoseBreakdown: DIAGRAM_BASE + "glucose-breakdown.webp",
+  atpAdpCycle: DIAGRAM_BASE + "atp-adp-cycle.webp",
+  respiratorySystem: DIAGRAM_BASE + "respiratory-system.webp",
+  alveolusGasExchange: DIAGRAM_BASE + "alveolus-gas-exchange.webp",
+  heartDiagram: DIAGRAM_BASE + "heart-diagram.webp",
+  doubleCirculation: DIAGRAM_BASE + "double-circulation.webp",
+  lymphDiagram: DIAGRAM_BASE + "lymph-diagram.webp",
+  xylemPhloem: DIAGRAM_BASE + "xylem-phloem.webp",
+  excretorySystem: DIAGRAM_BASE + "excretory-system.webp",
+  kidneyNephron: DIAGRAM_BASE + "kidney-nephron.webp",
+};
+
 type BioTopicId =
   | "life-processes-intro"
   | "autotrophic-nutrition"
@@ -139,28 +161,12 @@ const DiagramCard: React.FC<{ caption: string; children: React.ReactNode; isLigh
   </div>
 );
 
-// A numbered marker placed ON a diagram, paired with a numbered legend list beside/below it.
-// Deliberately used instead of free-floating text labels for every densely-labelled
-// figure in this chapter (a leaf cross-section, the alimentary canal, the respiratory system,
-// the heart) -- with 8-13 real labels per figure, positioning that much text directly around a
-// small diagram risks exactly the label/label and label/line overlap the notes must never have.
-// A numbered dot has zero text to collide with anything; the legend is a plain list.
-const NumMarker: React.FC<{ x: number; y: number; n: number; isLightMode?: boolean }> = ({ x, y, n, isLightMode = false }) => (
-  <g>
-    <circle cx={x} cy={y} r="11" fill={isLightMode ? "#065f46" : "#34d399"} stroke={isLightMode ? "#ffffff" : "#052e18"} strokeWidth="2" />
-    <text x={x} y={y + 4} textAnchor="middle" fontSize="11" fontWeight="900" fill={isLightMode ? "#ffffff" : "#052e18"}>{n}</text>
-  </g>
-);
-
-const NumberedLegend: React.FC<{ items: string[]; isLightMode?: boolean }> = ({ items, isLightMode = false }) => (
-  <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 mt-3 pt-3 border-t ${isLightMode ? "border-slate-200" : "border-slate-800/60"}`}>
-    {items.map((label, i) => (
-      <div key={i} className="flex items-center gap-2 text-[13px] font-bold">
-        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${isLightMode ? "bg-emerald-800 text-white" : "bg-emerald-400 text-emerald-950"}`}>{i + 1}</span>
-        <span className={isLightMode ? "text-slate-700" : "text-slate-300"}>{label}</span>
-      </div>
-    ))}
-  </div>
+// Real, pre-drawn diagram images (cropped from the admin's own notes PDF -- see DIAGRAMS above)
+// rendered inside the same card frame every other diagram in this chapter uses.
+const DiagramImage: React.FC<{ src: string; alt: string; caption?: string; isLightMode?: boolean }> = ({ src, alt, caption, isLightMode = false }) => (
+  <DiagramCard caption={caption || alt} isLightMode={isLightMode}>
+    <img src={src} alt={alt} className="w-full h-auto rounded-lg" loading="lazy" />
+  </DiagramCard>
 );
 
 type MindMapColor = "green" | "emerald" | "indigo" | "orange" | "amber" | "rose" | "cyan";
@@ -361,9 +367,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               </InfoCard>
 
               <SectionHeading>The Overall Photosynthesis Equation</SectionHeading>
-              <div className={`p-4 rounded-xl border text-center font-mono text-[13px] font-bold ${isLightMode ? "bg-slate-50 border-slate-200 text-slate-800" : "bg-slate-950 border-slate-800 text-slate-200"}`}>
-                6CO₂ + 12H₂O &nbsp;—(chlorophyll, sunlight)→&nbsp; C₆H₁₂O₆ (glucose) + 6O₂ + 6H₂O
-              </div>
+              <DiagramImage src={DIAGRAMS.photosynthesisEq} alt="6CO2 + 12H2O, with sunlight and chlorophyll, gives glucose + water + oxygen" caption="The photosynthesis reaction" isLightMode={isLightMode} />
 
               <SectionHeading>Three Key Events of Photosynthesis</SectionHeading>
               <ol className="list-decimal pl-5 text-sm font-semibold leading-relaxed space-y-1.5">
@@ -373,40 +377,10 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               </ol>
               <p className="text-sm font-semibold leading-relaxed">These steps need not happen immediately one after another. <b>Desert plants</b> take up CO2 at night (forming an intermediate substance) and use daytime light energy to process it later, which limits water loss.</p>
 
-              <DiagramCard caption="Cross-section of a leaf, showing every labelled structure" isLightMode={isLightMode}>
-                <svg viewBox="0 0 720 300" className="w-full h-auto">
-                  <rect x="140" y="40" width="440" height="16" rx="4" fill={isLightMode ? "#a3e635" : "#65a30d"} fillOpacity="0.7" />
-                  <rect x="140" y="60" width="440" height="60" rx="4" fill={isLightMode ? "#bbf7d0" : "#14532d"} fillOpacity="0.6" />
-                  <rect x="140" y="124" width="440" height="70" rx="4" fill={isLightMode ? "#dcfce7" : "#0a2018"} fillOpacity="0.6" />
-                  <rect x="140" y="198" width="440" height="16" rx="4" fill={isLightMode ? "#a3e635" : "#65a30d"} fillOpacity="0.7" />
-                  <rect x="330" y="40" width="16" height="174" fill={isLightMode ? "#7c3aed" : "#c4b5fd"} fillOpacity="0.55" />
-                  {[80, 100, 140, 160, 175].map((cy, i) => (
-                    <circle key={i} cx={230 + i * 55} cy={cy} r="7" fill={isLightMode ? "#16a34a" : "#4ade80"} />
-                  ))}
-                  <circle cx="230" cy="205" r="9" fill={isLightMode ? "#0369a1" : "#38bdf8"} fillOpacity="0.7" />
-                  <rect x="215" y="200" width="30" height="10" rx="5" fill="none" stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="1.5" />
-                  <circle cx="450" cy="205" r="9" fill={isLightMode ? "#0369a1" : "#38bdf8"} fillOpacity="0.7" />
-                  <rect x="435" y="200" width="30" height="10" rx="5" fill="none" stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="1.5" />
-
-                  <NumMarker x={200} y={48} n={7} isLightMode={isLightMode} />
-                  <NumMarker x={200} y={90} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={338} y={90} n={9} isLightMode={isLightMode} />
-                  <NumMarker x={500} y={90} n={5} isLightMode={isLightMode} />
-                  <NumMarker x={200} y={160} n={10} isLightMode={isLightMode} />
-                  <NumMarker x={500} y={160} n={4} isLightMode={isLightMode} />
-                  <NumMarker x={200} y={206} n={12} isLightMode={isLightMode} />
-                  <NumMarker x={262} y={222} n={11} isLightMode={isLightMode} />
-                  <NumMarker x={338} y={230} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={95} y={130} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={620} y={90} n={8} isLightMode={isLightMode} />
-                  <NumMarker x={620} y={160} n={6} isLightMode={isLightMode} />
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={[
-                  "Upper epidermis", "Lamina or leaf blade", "Vascular bundle", "Xylem", "Phloem",
-                  "Air spaces", "Waxy cuticle", "Vein", "Chloroplast", "Lower epidermis",
-                  "Guard cell", "Midrib",
-                ]} />
-              </DiagramCard>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <DiagramImage src={DIAGRAMS.leafParts} alt="Parts of a leaf: tip, midrib, margin, lamina, vein, petiole" isLightMode={isLightMode} />
+                <DiagramImage src={DIAGRAMS.leafCrossSection} alt="Cross section of a leaf showing cuticle, palisade layer, air space, chloroplast, guard cell, spongy cell, lower epidermis" isLightMode={isLightMode} />
+              </div>
 
               <SectionHeading>Stomata and Guard Cells</SectionHeading>
               <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
@@ -414,6 +388,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <li><b>Guard cells</b> regulate the opening/closing of each stomatal pore: they swell with water to open it, and shrink to close it.</li>
                 <li>Closing the pore mainly prevents excessive water loss when CO2 is not urgently needed.</li>
               </ul>
+
+              <DiagramImage src={DIAGRAMS.stomata} alt="Stoma open (guard cells swollen) vs stoma closed (guard cells shrunk)" caption="Open vs closed stomatal pore" isLightMode={isLightMode} />
 
               <SectionHeading>Two Classic Photosynthesis Experiments</SectionHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -459,35 +435,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               </div>
 
               <SectionHeading>How Single-Celled Organisms Feed</SectionHeading>
-              <DiagramCard caption="Amoeba engulfing a food particle using pseudopodia, forming a food vacuole" isLightMode={isLightMode}>
-                <svg viewBox="0 0 680 200" className="w-full h-auto">
-                  {[0, 1, 2, 3].map((i) => {
-                    const cx = 85 + i * 165;
-                    const stage = i;
-                    return (
-                      <g key={i}>
-                        <path
-                          d={
-                            stage === 0 ? `M ${cx - 40} 100 Q ${cx - 50} 70 ${cx - 10} 65 Q ${cx + 30} 60 ${cx + 40} 95 Q ${cx + 45} 130 ${cx + 5} 138 Q ${cx - 35} 140 ${cx - 40} 100 Z`
-                            : stage === 1 ? `M ${cx - 45} 100 Q ${cx - 55} 60 ${cx - 5} 58 Q ${cx + 35} 60 ${cx + 45} 90 Q ${cx + 50} 100 ${cx + 15} 100 L ${cx - 5} 100 L ${cx + 15} 100 Q ${cx + 50} 100 ${cx + 45} 115 Q ${cx + 35} 145 ${cx - 5} 143 Q ${cx - 55} 140 ${cx - 45} 100 Z`
-                            : stage === 2 ? `M ${cx - 42} 100 Q ${cx - 52} 62 ${cx - 2} 60 Q ${cx + 42} 62 ${cx + 44} 100 Q ${cx + 42} 138 ${cx - 2} 140 Q ${cx - 52} 138 ${cx - 42} 100 Z`
-                            : `M ${cx - 42} 100 Q ${cx - 52} 62 ${cx - 2} 60 Q ${cx + 42} 62 ${cx + 44} 100 Q ${cx + 42} 138 ${cx - 2} 140 Q ${cx - 52} 138 ${cx - 42} 100 Z`
-                          }
-                          fill={isLightMode ? "#e0f2fe" : "#0c1f2e"} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="2"
-                        />
-                        <circle cx={cx - 10} cy={100} r="10" fill={isLightMode ? "#7c3aed" : "#c4b5fd"} fillOpacity="0.7" />
-                        {stage < 3 ? (
-                          <circle cx={cx + (stage === 0 ? 35 : stage === 1 ? 5 : -2)} cy={100} r="7" fill={isLightMode ? "#b45309" : "#fbbf24"} />
-                        ) : (
-                          <circle cx={cx - 2} cy={100} r="10" fill={isLightMode ? "#b45309" : "#fbbf24"} fillOpacity="0.3" stroke={isLightMode ? "#b45309" : "#fbbf24"} strokeWidth="1.5" strokeDasharray="3 2" />
-                        )}
-                        <text x={cx} y="180" textAnchor="middle" fontSize="12" fontWeight="bold" fill={isLightMode ? "#334155" : "#94a3b8"}>{["(a) Food nearby", "(b) Pseudopodia extend", "(c) Food surrounded", "(d) Food vacuole formed"][stage]}</text>
-                      </g>
-                    );
-                  })}
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={["Nucleus (purple)", "Food particle (orange, becomes food vacuole in stage d)"]} />
-              </DiagramCard>
+              <DiagramImage src={DIAGRAMS.amoebaDigestion} alt="Stages in Amoeba's digestion process: ingestion, digestion, absorption, assimilation, egestion" caption="Stages in Amoeba's digestion process" isLightMode={isLightMode} />
 
               <ul className="list-disc pl-5 text-sm font-semibold leading-relaxed space-y-2">
                 <li><b>Amoeba</b> puts out temporary finger-like extensions called <b>pseudopodia</b>, which fuse over a food particle to form a <b>food vacuole</b>. Complex substances are broken down inside the vacuole and diffuse into the cytoplasm; undigested material is expelled.</li>
@@ -511,39 +459,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p>The <b className="text-white">alimentary canal</b> is a long tube, running from the mouth to the anus, with specialised regions for chewing, digesting, and absorbing food. Food is pushed along it by rhythmic muscular contractions called <b className="text-white">peristaltic movements</b>.</p>
               </InfoCard>
 
-              <DiagramCard caption="The human alimentary canal and its associated glands, showing every labelled structure" isLightMode={isLightMode}>
-                <svg viewBox="0 0 720 340" className="w-full h-auto">
-                  <circle cx="120" cy="45" r="20" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="2.5" />
-                  <path d="M 130 60 Q 100 90 130 130 Q 90 160 140 190" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="10" strokeLinecap="round" />
-                  <ellipse cx="230" cy="210" rx="55" ry="45" fill={isLightMode ? "#fde68a" : "#78350f"} fillOpacity="0.5" stroke={isLightMode ? "#b45309" : "#fbbf24"} strokeWidth="2.5" />
-                  <path d="M 140 190 Q 230 175 260 240 Q 250 290 180 285 Q 130 275 140 240 Z" fill={isLightMode ? "#fecaca" : "#450a0a"} fillOpacity="0.6" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2.5" />
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <path key={i} d={`M ${290 + i * 70} 100 Q ${330 + i * 70} 90 ${290 + i * 70} 170 Q ${330 + i * 70} 200 ${290 + i * 70} 260`} fill="none" stroke={isLightMode ? "#059669" : "#34d399"} strokeWidth="14" strokeLinecap="round" opacity={0.75} />
-                  ))}
-                  <rect x="60" y="290" width="580" height="24" rx="12" fill={isLightMode ? "#a78bfa" : "#6d28d9"} fillOpacity="0.5" stroke={isLightMode ? "#6d28d9" : "#a78bfa"} strokeWidth="2" />
-                  <circle cx="640" cy="302" r="14" fill={isLightMode ? "#a78bfa" : "#6d28d9"} fillOpacity="0.4" stroke={isLightMode ? "#6d28d9" : "#a78bfa"} strokeWidth="2" />
-                  <rect x="660" y="296" width="14" height="14" rx="4" fill={isLightMode ? "#475569" : "#cbd5e1"} />
-
-                  <NumMarker x={185} y={15} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={190} y={50} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={150} y={90} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={90} y={110} n={4} isLightMode={isLightMode} />
-                  <NumMarker x={230} y={190} n={5} isLightMode={isLightMode} />
-                  <NumMarker x={210} y={230} n={6} isLightMode={isLightMode} />
-                  <NumMarker x={280} y={215} n={7} isLightMode={isLightMode} />
-                  <NumMarker x={195} y={280} n={8} isLightMode={isLightMode} />
-                  <NumMarker x={330} y={120} n={9} isLightMode={isLightMode} />
-                  <NumMarker x={470} y={95} n={10} isLightMode={isLightMode} />
-                  <NumMarker x={150} y={270} n={11} isLightMode={isLightMode} />
-                  <NumMarker x={605} y={332} n={12} isLightMode={isLightMode} />
-                  <NumMarker x={705} y={325} n={13} isLightMode={isLightMode} />
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={[
-                  "Tongue", "Mouth (buccal cavity)", "Oesophagus", "Diaphragm",
-                  "Gall bladder (stores bile)", "Bile duct", "Stomach", "Liver",
-                  "Pancreas", "Small intestine", "Large intestine (colon)", "Appendix", "Anus",
-                ]} />
-              </DiagramCard>
+              <DiagramImage src={DIAGRAMS.alimentaryCanal} alt="Human alimentary canal: tongue, mouth, oesophagus, stomach, liver, gall bladder, pancreas, small intestine, large intestine, appendix, anus" caption="The human alimentary canal and its associated glands" isLightMode={isLightMode} />
 
               <SectionHeading>Digestion, Step by Step</SectionHeading>
               <ol className="list-decimal pl-5 text-sm font-semibold leading-relaxed space-y-1.5">
@@ -576,44 +492,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p><b className="text-white">Respiration</b> is the process of acquiring oxygen from outside and using it to break down food, releasing energy the cell can use.</p>
               </InfoCard>
 
-              <DiagramCard caption="The three possible pathways for breaking down glucose, depending on oxygen availability" isLightMode={isLightMode}>
-                <svg viewBox="0 0 700 300" className="w-full h-auto">
-                  <rect x="270" y="15" width="160" height="42" rx="10" fill={isLightMode ? "#e0f2fe" : "#0c2536"} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="2" />
-                  <text x="350" y="41" textAnchor="middle" fontSize="13.5" fontWeight="800" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Glucose (6-C)</text>
-
-                  <line x1="350" y1="57" x2="350" y2="88" stroke={isLightMode ? "#64748b" : "#94a3b8"} strokeWidth="2.5" markerEnd="url(#bio10arrow)" />
-                  <text x="365" y="76" fontSize="11" fontWeight="700" fill={isLightMode ? "#64748b" : "#94a3b8"}>in cytoplasm</text>
-                  <defs>
-                    <marker id="bio10arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                      <path d="M 0,0 L 10,5 L 0,10 Z" fill={isLightMode ? "#64748b" : "#94a3b8"} />
-                    </marker>
-                  </defs>
-
-                  <rect x="265" y="90" width="170" height="42" rx="10" fill={isLightMode ? "#fef3c7" : "#3f2d0a"} stroke={isLightMode ? "#b45309" : "#fbbf24"} strokeWidth="2" />
-                  <text x="350" y="116" textAnchor="middle" fontSize="13.5" fontWeight="800" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Pyruvate (3-C) + Energy</text>
-
-                  <line x1="285" y1="132" x2="130" y2="185" stroke={isLightMode ? "#64748b" : "#94a3b8"} strokeWidth="2" markerEnd="url(#bio10arrow)" />
-                  <line x1="350" y1="132" x2="350" y2="185" stroke={isLightMode ? "#64748b" : "#94a3b8"} strokeWidth="2" markerEnd="url(#bio10arrow)" />
-                  <line x1="415" y1="132" x2="570" y2="185" stroke={isLightMode ? "#64748b" : "#94a3b8"} strokeWidth="2" markerEnd="url(#bio10arrow)" />
-
-                  <rect x="20" y="188" width="220" height="66" rx="10" fill={isLightMode ? "#fce7f3" : "#3b0d24"} stroke={isLightMode ? "#be185d" : "#f472b6"} strokeWidth="2" />
-                  <text x="130" y="208" textAnchor="middle" fontSize="11.5" fontWeight="800" fill={isLightMode ? "#be185d" : "#f472b6"}>NO OXYGEN (in yeast)</text>
-                  <text x="130" y="228" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Ethanol + CO₂</text>
-                  <text x="130" y="245" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>+ Energy</text>
-
-                  <rect x="240" y="188" width="220" height="66" rx="10" fill={isLightMode ? "#dcfce7" : "#052e18"} stroke={isLightMode ? "#15803d" : "#4ade80"} strokeWidth="2" />
-                  <text x="350" y="208" textAnchor="middle" fontSize="11.5" fontWeight="800" fill={isLightMode ? "#15803d" : "#4ade80"}>NO OXYGEN (muscle cells)</text>
-                  <text x="350" y="228" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>Lactic acid</text>
-                  <text x="350" y="245" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>+ Energy</text>
-
-                  <rect x="460" y="188" width="220" height="66" rx="10" fill={isLightMode ? "#e0f2fe" : "#0c2536"} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="2" />
-                  <text x="570" y="208" textAnchor="middle" fontSize="11.5" fontWeight="800" fill={isLightMode ? "#0369a1" : "#38bdf8"}>WITH OXYGEN (mitochondria)</text>
-                  <text x="570" y="228" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>CO₂ + Water</text>
-                  <text x="570" y="245" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#0f172a" : "#f1f5f9"}>+ (much more) Energy</text>
-
-                  <text x="350" y="285" textAnchor="middle" fontSize="12" fontWeight="700" fill={isLightMode ? "#64748b" : "#94a3b8"}>Left two paths: anaerobic respiration. Right path: aerobic respiration.</text>
-                </svg>
-              </DiagramCard>
+              <DiagramImage src={DIAGRAMS.glucoseBreakdown} alt="Glucose to pyruvate in cytoplasm, then three pathways: absence of O2 (yeast) gives ethanol + CO2, lack of O2 (muscle cells) gives lactic acid, presence of O2 (mitochondria) gives CO2 + water" caption="The three pathways for breaking down glucose" isLightMode={isLightMode} />
 
               <SectionHeading>Aerobic vs Anaerobic Respiration</SectionHeading>
               <CompareTable
@@ -627,6 +506,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                   ["End products: CO₂ + water", "End products: ethanol + CO₂ (yeast) or lactic acid (muscle)"],
                 ]}
               />
+
+              <DiagramImage src={DIAGRAMS.atpAdpCycle} alt="ATP-ADP cycle: phosphorylation adds a phosphate to ADP using energy from food to form ATP; hydrolysis breaks ATP back to ADP, releasing energy for cells" caption="The ATP-ADP cycle" isLightMode={isLightMode} />
 
               <RememberBox title="ATP: the cell's energy currency">
                 ATP is formed from ADP + inorganic phosphate using energy released during respiration. Breaking ATP's terminal phosphate bond (using water) releases about 30.5 kJ/mol, which drives many cellular processes -- muscle contraction, protein synthesis, nerve impulse conduction, and more.
@@ -644,47 +525,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p className="text-base font-semibold text-slate-400">The pathway air takes, and how the lungs squeeze an enormous surface area into your chest.</p>
               </div>
 
-              <DiagramCard caption="Pathway of air through the human respiratory system, showing every labelled structure" isLightMode={isLightMode}>
-                <svg viewBox="0 0 640 320" className="w-full h-auto">
-                  <ellipse cx="320" cy="35" rx="60" ry="18" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="2.5" />
-                  <rect x="305" y="50" width="30" height="70" rx="10" fill={isLightMode ? "#e0f2fe" : "#0c2536"} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="2.5" />
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <line key={i} x1="305" y1={58 + i * 10} x2="335" y2={58 + i * 10} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="1.5" opacity="0.6" />
-                  ))}
-                  <path d="M 320 120 L 220 175 M 320 120 L 420 175" stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="8" strokeLinecap="round" fill="none" />
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <g key={i}>
-                      <path d={`M ${215 - i * 10} ${180 + i * 18} L ${175 - i * 14} ${200 + i * 22}`} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="4" strokeLinecap="round" fill="none" opacity="0.8" />
-                      <path d={`M ${425 + i * 10} ${180 + i * 18} L ${465 + i * 14} ${200 + i * 22}`} stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="4" strokeLinecap="round" fill="none" opacity="0.8" />
-                    </g>
-                  ))}
-                  <ellipse cx="150" cy="230" rx="80" ry="70" fill={isLightMode ? "#fecaca" : "#450a0a"} fillOpacity="0.35" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2" />
-                  <ellipse cx="490" cy="230" rx="80" ry="70" fill={isLightMode ? "#fecaca" : "#450a0a"} fillOpacity="0.35" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2" />
-                  {[[110, 200], [150, 220], [110, 250], [180, 255]].map(([cx, cy], i) => (
-                    <circle key={i} cx={cx} cy={cy} r="14" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.6" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="1.5" />
-                  ))}
-                  <rect x="80" y="290" width="480" height="20" rx="10" fill={isLightMode ? "#a78bfa" : "#6d28d9"} fillOpacity="0.5" stroke={isLightMode ? "#6d28d9" : "#a78bfa"} strokeWidth="2" />
-                  <line x1="60" y1="160" x2="60" y2="300" stroke={isLightMode ? "#94a3b8" : "#475569"} strokeWidth="4" strokeLinecap="round" />
-                  <line x1="580" y1="160" x2="580" y2="300" stroke={isLightMode ? "#94a3b8" : "#475569"} strokeWidth="4" strokeLinecap="round" />
-
-                  <NumMarker x={280} y={30} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={320} y={20} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={355} y={40} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={320} y={70} n={4} isLightMode={isLightMode} />
-                  <NumMarker x={340} y={90} n={5} isLightMode={isLightMode} />
-                  <NumMarker x={260} y={155} n={6} isLightMode={isLightMode} />
-                  <NumMarker x={220} y={230} n={7} isLightMode={isLightMode} />
-                  <NumMarker x={150} y={165} n={8} isLightMode={isLightMode} />
-                  <NumMarker x={95} y={155} n={9} isLightMode={isLightMode} />
-                  <NumMarker x={60} y={150} n={10} isLightMode={isLightMode} />
-                  <NumMarker x={320} y={302} n={11} isLightMode={isLightMode} />
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={[
-                  "Nasal passage", "Mouth cavity", "Pharynx", "Larynx", "Rings of cartilage",
-                  "Trachea", "Bronchi / bronchioles", "Lung", "Alveolar sac (alveoli)",
-                  "Ribs", "Diaphragm",
-                ]} />
-              </DiagramCard>
+              <DiagramImage src={DIAGRAMS.respiratorySystem} alt="Human respiratory system: nasal cavity, pharynx, larynx, trachea, bronchi, bronchioles, lungs, alveoli, diaphragm" caption="The human respiratory system" isLightMode={isLightMode} />
 
               <SectionHeading>Air's Pathway</SectionHeading>
               <p className="text-sm font-semibold leading-relaxed">Nostrils (filtered by hairs and mucus) → pharynx → larynx → trachea (kept open by cartilage rings) → bronchi → bronchioles → <b>alveoli</b> -- tiny, thin-walled, balloon-like sacs with a dense network of blood vessels, where actual gas exchange happens.</p>
@@ -701,6 +542,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                   ["Air is drawn into the lungs", "Air is pushed out of the lungs"],
                 ]}
               />
+
+              <DiagramImage src={DIAGRAMS.alveolusGasExchange} alt="Alveolus gas exchange: oxygen diffuses from air into red blood cells, carbon dioxide diffuses out, across the capillary and alveolar wall" caption="Gas exchange at the alveolus" isLightMode={isLightMode} />
 
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="Alveolar surface area">Roughly 80 square metres in an adult -- this enormous area is what makes gas exchange so efficient.</FactRow>
@@ -725,40 +568,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <p><b className="text-white">Plasma</b> is the fluid medium that transports food, CO2, and nitrogenous wastes in dissolved form, plus salts. <b className="text-white">Red blood cells (RBCs)</b> carry oxygen via haemoglobin. The system needs a pump (heart), tubes (blood vessels), and a repair mechanism (platelets).</p>
               </InfoCard>
 
-              <DiagramCard caption="Schematic sectional view of the human heart, showing every labelled structure" isLightMode={isLightMode}>
-                <svg viewBox="0 0 640 320" className="w-full h-auto">
-                  <rect x="140" y="40" width="26" height="90" rx="10" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.7" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2" />
-                  <rect x="470" y="40" width="26" height="90" rx="10" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.7" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2" />
-                  <rect x="220" y="55" width="200" height="26" rx="10" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.5" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2" />
-                  <path d="M 250 30 Q 320 15 390 30" fill="none" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="10" strokeLinecap="round" />
-
-                  <rect x="170" y="130" width="140" height="70" rx="14" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.55" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2.5" />
-                  <rect x="330" y="130" width="140" height="70" rx="14" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.55" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2.5" />
-                  <rect x="315" y="130" width="10" height="200" fill={isLightMode ? "#334155" : "#cbd5e1"} />
-
-                  <rect x="180" y="205" width="130" height="110" rx="18" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.75" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2.5" />
-                  <rect x="330" y="205" width="130" height="110" rx="18" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.75" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2.5" />
-
-                  <rect x="480" y="140" width="24" height="55" rx="8" fill={isLightMode ? "#fca5a5" : "#7f1d1d"} fillOpacity="0.5" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2" />
-                  <rect x="140" y="140" width="24" height="55" rx="8" fill={isLightMode ? "#93c5fd" : "#1e3a8a"} fillOpacity="0.5" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="2" />
-
-                  <NumMarker x={320} y={22} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={155} y={20} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={492} y={20} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={230} y={68} n={4} isLightMode={isLightMode} />
-                  <NumMarker x={410} y={68} n={5} isLightMode={isLightMode} />
-                  <NumMarker x={240} y={165} n={6} isLightMode={isLightMode} />
-                  <NumMarker x={400} y={165} n={7} isLightMode={isLightMode} />
-                  <NumMarker x={152} y={165} n={8} isLightMode={isLightMode} />
-                  <NumMarker x={245} y={260} n={9} isLightMode={isLightMode} />
-                  <NumMarker x={395} y={260} n={10} isLightMode={isLightMode} />
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={[
-                  "Aorta", "Vena cava from upper body", "Pulmonary arteries (to lungs)",
-                  "Right atrium", "Left atrium", "Pulmonary veins (from lungs, into left atrium)",
-                  "Septum (dividing wall)", "Vena cava from lower body", "Right ventricle", "Left ventricle",
-                ]} />
-              </DiagramCard>
+              <DiagramImage src={DIAGRAMS.heartDiagram} alt="Human heart: aorta, superior and inferior vena cava, pulmonary arteries and veins, right and left atrium, right and left ventricle, tricuspid, pulmonary, mitral and aortic valves" caption="Schematic sectional view of the human heart" isLightMode={isLightMode} />
 
               <SectionHeading>Blood Flow, Step by Step</SectionHeading>
               <ol className="list-decimal pl-5 text-sm font-semibold leading-relaxed space-y-1.5">
@@ -814,6 +624,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <FactRow label="Carries fat">Digested and absorbed fat from the intestine.</FactRow>
                 <FactRow label="Drains fluid">Excess fluid from the extracellular space, back into the blood.</FactRow>
               </div>
+
+              <DiagramImage src={DIAGRAMS.lymphDiagram} alt="Lymph capillary, tissue cells, tissue spaces, arteriole, tissue fluid, venule, lymphatic vessel" caption="How lymph forms from tissue fluid" isLightMode={isLightMode} />
             </div>
           )}
 
@@ -842,6 +654,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               <RememberBox title="Single vs double circulation, in one line">
                 Single circulation = blood passes through the heart ONCE per full body circuit (fish). Double circulation = blood passes through the heart TWICE per full body circuit (birds, mammals) -- once toward the lungs, once toward the body.
               </RememberBox>
+
+              <DiagramImage src={DIAGRAMS.doubleCirculation} alt="Double circulation: blood passes through the heart twice per cycle, once to the lungs and back, once to the body and back" caption="Double circulation in mammals and birds" isLightMode={isLightMode} />
             </div>
           )}
 
@@ -877,6 +691,8 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
 
               <SectionHeading>Moving Food: Translocation</SectionHeading>
               <p className="text-sm font-semibold leading-relaxed"><b>Translocation</b> is the transport of soluble photosynthesis products (mainly sucrose) through phloem, via <b>sieve tubes</b> with help from <b>companion cells</b>. Sucrose is actively loaded into phloem using ATP, raising osmotic pressure, drawing in water, and building pressure that pushes material toward tissues that need it -- e.g. stored sugar moving from root to growing buds in spring.</p>
+
+              <DiagramImage src={DIAGRAMS.xylemPhloem} alt="Xylem carries water upward; phloem transports sucrose from source (leaf cell) to sink (root cell) via sieve-tube elements and companion cells" caption="Translocation of food through phloem, alongside xylem" isLightMode={isLightMode} />
             </div>
           )}
 
@@ -899,32 +715,10 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
                 <FactRow label="Urethra">The tube through which urine is finally released from the body; the bladder is muscular and under nervous control, so urination can be voluntarily held.</FactRow>
               </div>
 
-              <SectionHeading>The Nephron: The Kidney's Filtration Unit</SectionHeading>
-              <DiagramCard caption="Structure of a nephron, showing every labelled structure" isLightMode={isLightMode}>
-                <svg viewBox="0 0 680 260" className="w-full h-auto">
-                  <path d="M 120 130 Q 40 130 40 90 Q 40 55 90 55 Q 140 55 140 95 Q 140 130 120 130 Z" fill="none" stroke={isLightMode ? "#334155" : "#94a3b8"} strokeWidth="3" />
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <path key={i} d={`M ${75 + (i % 4) * 15} ${65 + Math.floor(i / 4) * 40} q 15 -10 25 10 q 10 20 -5 25`} fill="none" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="2.5" opacity="0.85" />
-                  ))}
-                  <path d="M 130 100 Q 220 60 260 110 Q 300 160 220 170 Q 140 180 180 220 Q 220 250 320 235" fill="none" stroke={isLightMode ? "#0369a1" : "#38bdf8"} strokeWidth="9" strokeLinecap="round" />
-                  <rect x="320" y="220" width="120" height="26" rx="10" fill={isLightMode ? "#fde68a" : "#78350f"} fillOpacity="0.6" stroke={isLightMode ? "#b45309" : "#fbbf24"} strokeWidth="2" />
-                  <line x1="15" y1="90" x2="40" y2="90" stroke={isLightMode ? "#b91c1c" : "#f87171"} strokeWidth="5" strokeLinecap="round" />
-                  <line x1="15" y1="115" x2="55" y2="120" stroke={isLightMode ? "#1d4ed8" : "#60a5fa"} strokeWidth="5" strokeLinecap="round" />
+              <DiagramImage src={DIAGRAMS.excretorySystem} alt="Human excretory system: aorta, right and left kidney, inferior vena cava, ureter, bladder, urethra" caption="The excretory system" isLightMode={isLightMode} />
 
-                  <NumMarker x={90} y={90} n={1} isLightMode={isLightMode} />
-                  <NumMarker x={128} y={122} n={2} isLightMode={isLightMode} />
-                  <NumMarker x={230} y={140} n={3} isLightMode={isLightMode} />
-                  <NumMarker x={22} y={88} n={4} isLightMode={isLightMode} />
-                  <NumMarker x={22} y={118} n={5} isLightMode={isLightMode} />
-                  <NumMarker x={95} y={70} n={6} isLightMode={isLightMode} />
-                  <NumMarker x={380} y={233} n={7} isLightMode={isLightMode} />
-                </svg>
-                <NumberedLegend isLightMode={isLightMode} items={[
-                  "Glomerulus", "Bowman's capsule", "Tubular part of nephron",
-                  "Branch of renal artery (blood in)", "Branch of renal vein (blood out)",
-                  "Capillaries", "Collecting duct",
-                ]} />
-              </DiagramCard>
+              <SectionHeading>The Nephron: The Kidney's Filtration Unit</SectionHeading>
+              <DiagramImage src={DIAGRAMS.kidneyNephron} alt="Kidney and nephron: glomerulus, Bowman's capsule, loop of the nephron, collecting duct, artery, vein, urine" caption="Structure of a nephron" isLightMode={isLightMode} />
 
               <SectionHeading>Filtration and Reabsorption</SectionHeading>
               <ol className="list-decimal pl-5 text-sm font-semibold leading-relaxed space-y-1.5">
