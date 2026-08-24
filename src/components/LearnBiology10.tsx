@@ -18,6 +18,7 @@ import {
   Dna,
   Filter,
   Download,
+  FlaskConical,
 } from "lucide-react";
 
 const LIFE_PROCESSES_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-life-processes.pdf";
@@ -57,6 +58,7 @@ type BioTopicId =
   | "transport-in-plants"
   | "excretion-humans"
   | "excretion-plants"
+  | "activities"
   | "glossary-mindmap"
   | "competitive-corner";
 
@@ -79,8 +81,9 @@ const BIO_TOPICS: BioTopic[] = [
   { id: "transport-in-plants", title: "10. Transportation in Plants", category: "Transportation" },
   { id: "excretion-humans", title: "11. Excretion in Human Beings", category: "Excretion" },
   { id: "excretion-plants", title: "12. Excretion in Plants & Dialysis", category: "Excretion" },
-  { id: "glossary-mindmap", title: "13. Quick Glossary & Mind Map", category: "Revision" },
-  { id: "competitive-corner", title: "14. Competitive Corner", category: "Advanced" },
+  { id: "activities", title: "13. Hands-On Activities", category: "Practical" },
+  { id: "glossary-mindmap", title: "14. Quick Glossary & Mind Map", category: "Revision" },
+  { id: "competitive-corner", title: "15. Competitive Corner", category: "Advanced" },
 ];
 
 interface LearnBiology10Props {
@@ -167,6 +170,61 @@ const DiagramImage: React.FC<{ src: string; alt: string; caption?: string; isLig
   <DiagramCard caption={caption || alt} isLightMode={isLightMode}>
     <img src={src} alt={alt} className="w-full h-auto rounded-lg" />
   </DiagramCard>
+);
+
+interface ActivityStep {
+  step: string;
+  why?: string;
+}
+
+const ActivityCard: React.FC<{
+  number: number;
+  title: string;
+  aim: string;
+  materials: string[];
+  procedure: ActivityStep[];
+  observation: string;
+  conclusion: string;
+  isLightMode?: boolean;
+}> = ({ number, title, aim, materials, procedure, observation, conclusion, isLightMode = false }) => (
+  <div className={`rounded-2xl border p-5 space-y-4 shadow-md ${isLightMode ? "bg-white border-slate-200" : "bg-[#0f1a12] border-green-500/15"}`}>
+    <div className="flex items-start gap-2.5">
+      <FlaskConical className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+      <h3 className={`text-base font-black leading-snug ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>
+        <span className="text-green-400 font-mono">Activity {number}.</span> {title}
+      </h3>
+    </div>
+
+    <p className={`text-sm font-semibold leading-relaxed ${isLightMode ? "text-slate-600" : "text-slate-300"}`}>
+      <span className="text-green-400 font-black">Aim: </span>{aim}
+    </p>
+
+    <div className="space-y-1.5">
+      <SectionHeading>Materials Required</SectionHeading>
+      <ul className={`list-disc pl-5 text-sm font-semibold leading-relaxed space-y-1 ${isLightMode ? "text-slate-600" : "text-slate-300"}`}>
+        {materials.map((m, i) => <li key={i}>{m}</li>)}
+      </ul>
+    </div>
+
+    <div className="space-y-1.5">
+      <SectionHeading>Procedure</SectionHeading>
+      <ol className={`list-decimal pl-5 text-sm font-semibold leading-relaxed space-y-2.5 ${isLightMode ? "text-slate-600" : "text-slate-300"}`}>
+        {procedure.map((p, i) => (
+          <li key={i}>
+            <span>{p.step}</span>
+            {p.why && (
+              <span className={`block text-[12.5px] font-semibold mt-0.5 ${isLightMode ? "text-cyan-700" : "text-cyan-400/90"}`}>
+                Why: {p.why}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+
+    <RememberBox title="Observation">{observation}</RememberBox>
+    <RememberBox title="Conclusion">{conclusion}</RememberBox>
+  </div>
 );
 
 type MindMapColor = "green" | "emerald" | "indigo" | "orange" | "amber" | "rose" | "cyan";
@@ -759,6 +817,148 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               <RememberBox title="Organ donation">
                 Donating an organ (with consent) to someone with organ failure can save or transform their life. Common transplants include corneas, kidneys, heart, liver, pancreas, lungs, intestines, and bone marrow. Most donations happen after death, though some organs/tissues (like a kidney, or part of a liver/lung) can be donated by a living donor.
               </RememberBox>
+            </div>
+          )}
+
+          {activeTopic === "activities" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="space-y-1.5 border-b border-slate-800 pb-4">
+                <h1 className="text-2xl font-black text-slate-100 tracking-tight leading-tight">Hands-On Activities</h1>
+                <p className="text-base font-semibold text-slate-400">Every practical activity from this chapter, in full: aim, materials, step-by-step procedure, observation, conclusion, and the reasoning behind each step.</p>
+              </div>
+
+              <InfoCard title="Why these activities matter" icon={FlaskConical}>
+                <p>Every activity below is a real experiment/demonstration you can actually try (with adult supervision where needed) or that has already been performed to establish a fact you're studying as theory elsewhere in this chapter. Exam questions frequently ask about the procedure, expected observation, or the reason for a specific step -- so treat this list as seriously as the theory topics.</p>
+              </InfoCard>
+
+              <ActivityCard
+                number={1}
+                title="Chlorophyll is necessary for photosynthesis"
+                aim="To show that a leaf can make starch (i.e. photosynthesise) only in the parts that contain chlorophyll."
+                materials={["A potted plant with variegated leaves (green and white patches, e.g. money plant/Croton)", "Dark room", "Beaker, water, alcohol", "Water bath / bowl of hot water", "Dilute iodine solution", "White tile or petri dish"]}
+                procedure={[
+                  { step: "Keep the potted plant in a dark room for 3 days.", why: "This uses up all the starch already stored in the leaves (destarching), so any starch found afterwards must be freshly made." },
+                  { step: "Place the plant in bright sunlight for about 6 hours.", why: "Gives the leaf time to photosynthesise again -- but only in the parts that actually contain chlorophyll." },
+                  { step: "Pluck a variegated leaf and trace its green and white areas onto paper before testing it.", why: "Once the leaf is decolorised in the next steps, the green and white patches become impossible to tell apart by eye." },
+                  { step: "Dip the leaf in boiling water for a few minutes.", why: "Softens and breaks down the leaf's cell walls so that alcohol can penetrate the tissue easily in the next step." },
+                  { step: "Put the leaf in a beaker of alcohol, and heat that beaker in a water bath until the alcohol boils.", why: "Alcohol dissolves out all the chlorophyll, turning the leaf pale -- alcohol is heated indirectly (water bath), never on a direct flame, because it is highly flammable." },
+                  { step: "Dip the decolorised leaf in dilute iodine solution for a few minutes, then rinse with water.", why: "Iodine reacts with any starch present to give a blue-black colour, revealing exactly where starch was made." },
+                ]}
+                observation="The areas of the leaf that were green turn blue-black with iodine. The areas that were white (no chlorophyll) stay iodine's own brown colour -- no blue-black change."
+                conclusion="Starch is formed only in the parts of the leaf that had chlorophyll, proving that chlorophyll is necessary for photosynthesis."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={2}
+                title="Carbon dioxide is necessary for photosynthesis"
+                aim="To show that a plant needs carbon dioxide from the air in order to photosynthesise and form starch."
+                materials={["Two healthy potted plants of nearly the same size", "A watch-glass", "Potassium hydroxide (KOH)", "Two bell jars", "Vaseline", "Dark room, then sunlight", "Alcohol, water, dilute iodine solution"]}
+                procedure={[
+                  { step: "Keep both potted plants in a dark room for three days.", why: "Destarches both plants so the test result only reflects what happens during the experiment, not leftover starch." },
+                  { step: "Place a watch-glass containing KOH beside one plant (call it Plant A); leave the other plant (Plant B) without any KOH, as the control.", why: "KOH absorbs carbon dioxide from the air around it (forming potassium carbonate), so Plant A is left with almost no CO2 available." },
+                  { step: "Cover both plants with separate bell jars and seal the base of each jar to its glass plate with Vaseline, making them air-tight.", why: "Stops outside air (and its CO2) from leaking in or out, so each plant's own sealed atmosphere is what actually gets tested." },
+                  { step: "Keep both air-tight set-ups in sunlight for about two hours.", why: "Gives light and time for photosynthesis to occur wherever CO2 is actually available." },
+                  { step: "Pluck a leaf from each plant and test both for starch using the iodine test (boil in water, decolorise in alcohol via a water bath, then dip in iodine).", why: "Same reasoning as Activity 1 -- this reveals whether starch was actually made." },
+                ]}
+                observation="The leaf from Plant B (no KOH, CO2 freely available) turns blue-black with iodine. The leaf from Plant A (KOH present, CO2 absorbed) does not turn blue-black, or turns only a very faint shade."
+                conclusion="Since the CO2-starved plant could not make starch while the other plant could, carbon dioxide is necessary for photosynthesis."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={3}
+                title="Saliva breaks down starch"
+                aim="To show that saliva contains an enzyme that digests starch into simpler sugars."
+                materials={["Two test tubes", "Starch solution", "A small saliva sample", "Dropper", "Dilute iodine solution"]}
+                procedure={[
+                  { step: "Take starch solution in two separate test tubes.", why: "Gives one tube to test with saliva and one to act as an untouched control for comparison." },
+                  { step: "Add a little saliva to one test tube only, and leave both test tubes undisturbed for 20-30 minutes.", why: "This resting time lets the enzyme in saliva (salivary amylase) act on and break down the starch in that tube." },
+                  { step: "Add a few drops of dilute iodine solution to both test tubes.", why: "Iodine turns blue-black in the presence of starch, so it shows directly whether starch is still there." },
+                ]}
+                observation="The test tube without saliva turns blue-black (starch is still present). The test tube with saliva stays largely unchanged or only faintly coloured -- the starch has already been broken down."
+                conclusion="Saliva contains an enzyme (salivary amylase) that breaks starch down into simpler sugars, which is why digestion of starchy food already begins in the mouth."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={4}
+                title="Exhaled air contains more carbon dioxide"
+                aim="To compare the carbon dioxide content of exhaled (breathed-out) air with that of normal atmospheric air, using lime water."
+                materials={["Two test tubes of fresh, clear lime water (calcium hydroxide solution)", "A delivery tube, syringe, or pichkari", "Cotton"]}
+                procedure={[
+                  { step: "Take two test tubes, each with a small amount of fresh lime water.", why: "Fresh lime water is clear, so any change to milky white is easy to see." },
+                  { step: "Using a delivery tube or syringe, gently pass ordinary atmospheric air through the lime water in the first tube.", why: "This tube acts as the control, showing what normal room air does to lime water." },
+                  { step: "Breathe out (exhale) directly into the lime water of the second tube several times through a tube.", why: "This tube captures the effect of air that has just come out of the lungs." },
+                  { step: "Compare how quickly and how strongly each tube turns milky.", why: "The speed and strength of the milkiness is a direct measure of how much CO2 was present." },
+                ]}
+                observation="The tube into which exhaled air was blown turns milky quickly and heavily. The tube with ordinary atmospheric air passed through it stays clear, or turns only very faintly milky even after a long time."
+                conclusion="Exhaled air contains far more carbon dioxide than atmospheric air, because CO2 reacts with the calcium hydroxide in lime water to form insoluble calcium carbonate, which is what makes the solution turn milky."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={5}
+                title="Fermentation by yeast releases carbon dioxide"
+                aim="To demonstrate that yeast carries out anaerobic respiration (fermentation) on sugar and releases carbon dioxide gas."
+                materials={["A conical flask or bottle", "Lukewarm water", "Sugar", "Dry yeast granules", "A balloon (or a delivery tube leading into a test tube of lime water)", "Rubber band"]}
+                procedure={[
+                  { step: "Add lukewarm water and a spoonful of sugar to the flask.", why: "Sugar is the food substrate yeast will ferment; the water is kept warm (not hot) so it activates the yeast without killing it." },
+                  { step: "Add a small amount of dry yeast granules to the sugar solution and swirl gently.", why: "This introduces the living yeast cells that will actually carry out the fermentation." },
+                  { step: "Immediately stretch a deflated balloon tightly over the mouth of the flask and secure it with a rubber band.", why: "Traps any gas produced inside the flask so it can be seen inflating the balloon, instead of escaping into the room." },
+                  { step: "Keep the set-up undisturbed in a warm place for 30-60 minutes and check on it periodically.", why: "Fermentation needs time to build up a detectable amount of gas." },
+                ]}
+                observation="The balloon gradually inflates on its own, and a faint alcohol-like smell may be noticed near the flask."
+                conclusion="Yeast breaks down sugar without using oxygen (anaerobic respiration/fermentation), releasing carbon dioxide gas (which inflates the balloon) and ethanol as by-products."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={6}
+                title="Observing the breathing rate of a fish"
+                aim="To observe the gill (breathing) movements of a fish and estimate its breathing rate."
+                materials={["A fish in an aquarium or fish bowl", "A stop-watch or timer"]}
+                procedure={[
+                  { step: "Observe a fish swimming normally in an aquarium without disturbing or stressing it.", why: "A calm, undisturbed fish gives a natural, resting breathing rate rather than a panicked one." },
+                  { step: "Watch the gill covers (operculum) at the sides of its head and count how many times they open and close in one full minute, using a stop-watch.", why: "Counting over a full minute (not just a few seconds) gives a far more reliable rate, since breathing can vary moment to moment." },
+                  { step: "Repeat the count 2-3 times and take the average.", why: "Averaging multiple counts reduces the effect of any one unusually fast or slow reading." },
+                ]}
+                observation="The gill covers open and close rhythmically and quite rapidly -- noticeably faster than a human's breathing rate."
+                conclusion="Fish breathe faster than land animals because the amount of dissolved oxygen in water is far lower than the amount of oxygen in air, so a much larger volume of water must pass over the gills every minute to obtain enough oxygen."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={7}
+                title="Field visit: measuring haemoglobin and blood pressure"
+                aim="To visit a nearby health centre and see, first-hand, how haemoglobin content and blood pressure are measured, and to learn their normal ranges."
+                materials={["No equipment of your own is needed -- this is an observational field visit", "A notebook to record the readings shown by the technician/doctor"]}
+                procedure={[
+                  { step: "Visit a nearby primary health centre, hospital, or pathology lab along with a teacher or family member.", why: "Seeing real clinical instruments in use makes the abstract numbers from theory concrete." },
+                  { step: "Observe (or ask the technician to explain) how a small blood sample is used to estimate haemoglobin content using a haemoglobinometer.", why: "Connects directly to the role of haemoglobin in carrying oxygen, covered under blood and transportation." },
+                  { step: "Observe how blood pressure is measured using a sphygmomanometer, noting both the systolic and diastolic readings.", why: "Shows exactly how the systolic/diastolic pressures discussed in theory are actually measured in practice." },
+                  { step: "Note down the normal ranges the technician or doctor states.", why: "Lets you compare the textbook's normal values against what a real clinician quotes." },
+                ]}
+                observation="Typical normal ranges quoted are: Haemoglobin -- about 14-18 g/dL for males and 12-16 g/dL for females; Blood pressure -- about 120/80 mm Hg."
+                conclusion="Haemoglobin content and blood pressure are two vital signs of the transportation system's health, and both can be measured quickly with simple, everyday clinical instruments."
+                isLightMode={isLightMode}
+              />
+
+              <ActivityCard
+                number={8}
+                title="Demonstrating transpiration"
+                aim="To demonstrate that leaves lose water to the atmosphere through transpiration."
+                materials={["A healthy, leafy potted plant (or a leafy twig standing in a bottle of water)", "A transparent polythene bag", "Thread or a rubber band"]}
+                procedure={[
+                  { step: "Choose a few healthy, leafy branches on the plant.", why: "Healthy leaves with open stomata transpire actively, giving a clear result." },
+                  { step: "Cover the chosen branches completely with a transparent polythene bag and tie the mouth of the bag tightly around the stem with thread.", why: "A tight seal ensures that any water vapour collected genuinely came from the leaves themselves, not from the surrounding air." },
+                  { step: "Keep the set-up in sunlight for a few hours.", why: "Sunlight keeps the stomata open and drives active transpiration, so water loss happens quickly enough to observe." },
+                  { step: "Check the inner surface of the polythene bag periodically.", why: "The bag is the only surface the water vapour can condense on, since it is sealed off from the outside air." },
+                ]}
+                observation="Fine droplets of water gradually appear and collect on the inside surface of the polythene bag."
+                conclusion="The leaves continuously release water vapour into the air through transpiration; the sealed bag simply traps and condenses it so the water loss becomes visible."
+                isLightMode={isLightMode}
+              />
             </div>
           )}
 
