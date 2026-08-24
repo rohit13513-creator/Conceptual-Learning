@@ -21,13 +21,16 @@ import {
 const CONTROL_COORDINATION_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-control-coordination.pdf";
 
 const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/control-coordination10-diagrams/";
+// "?v=2" cache-busts every diagram URL below so browsers/CDN edges that cached the
+// earlier (watermarked) images fetch the corrected, clean files instead of a stale copy.
+const DIAGRAM_V = "?v=2";
 const DIAGRAMS = {
-  cnsPnsOverview: DIAGRAM_BASE + "cns-pns-overview.webp",
-  neuronStructure: DIAGRAM_BASE + "neuron-structure.webp",
-  brainStructure: DIAGRAM_BASE + "brain-structure.webp",
-  reflexArc: DIAGRAM_BASE + "reflex-arc.webp",
-  neuromuscularJunction: DIAGRAM_BASE + "neuromuscular-junction.webp",
-  endocrineSystem: DIAGRAM_BASE + "endocrine-system.webp",
+  cnsPnsOverview: DIAGRAM_BASE + "cns-pns-overview.webp" + DIAGRAM_V,
+  neuronStructure: DIAGRAM_BASE + "neuron-structure.webp" + DIAGRAM_V,
+  brainStructure: DIAGRAM_BASE + "brain-structure.webp" + DIAGRAM_V,
+  reflexArc: DIAGRAM_BASE + "reflex-arc.webp" + DIAGRAM_V,
+  neuromuscularJunction: DIAGRAM_BASE + "neuromuscular-junction.webp" + DIAGRAM_V,
+  endocrineSystem: DIAGRAM_BASE + "endocrine-system.webp" + DIAGRAM_V,
 };
 
 type CCTopicId =
