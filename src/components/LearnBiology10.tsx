@@ -29,7 +29,7 @@ const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object
 // "?v=2" cache-busts every diagram URL below so browsers/CDN edges that cached the
 // earlier (mis-cropped, lower-resolution) images fetch the corrected files instead
 // of silently reusing a stale copy.
-const DIAGRAM_V = "?v=2";
+const DIAGRAM_V = "?v=3";
 const DIAGRAMS = {
   leafParts: DIAGRAM_BASE + "leaf-parts.webp" + DIAGRAM_V,
   photosynthesisEq: DIAGRAM_BASE + "photosynthesis-eq.webp" + DIAGRAM_V,
