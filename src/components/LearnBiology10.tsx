@@ -26,23 +26,27 @@ const LIFE_PROCESSES_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/s
 // Real diagram images cropped from the admin's own downloadable notes PDF -- used instead of
 // hand-drawn SVGs, which reviewed as too unclear to keep.
 const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/biology10-diagrams/";
+// "?v=2" cache-busts every diagram URL below so browsers/CDN edges that cached the
+// earlier (mis-cropped, lower-resolution) images fetch the corrected files instead
+// of silently reusing a stale copy.
+const DIAGRAM_V = "?v=2";
 const DIAGRAMS = {
-  leafParts: DIAGRAM_BASE + "leaf-parts.webp",
-  photosynthesisEq: DIAGRAM_BASE + "photosynthesis-eq.webp",
-  leafCrossSection: DIAGRAM_BASE + "leaf-cross-section.webp",
-  stomata: DIAGRAM_BASE + "stomata.webp",
-  amoebaDigestion: DIAGRAM_BASE + "amoeba-digestion.webp",
-  alimentaryCanal: DIAGRAM_BASE + "alimentary-canal.webp",
-  glucoseBreakdown: DIAGRAM_BASE + "glucose-breakdown.webp",
-  atpAdpCycle: DIAGRAM_BASE + "atp-adp-cycle.webp",
-  respiratorySystem: DIAGRAM_BASE + "respiratory-system.webp",
-  alveolusGasExchange: DIAGRAM_BASE + "alveolus-gas-exchange.webp",
-  heartDiagram: DIAGRAM_BASE + "heart-diagram.webp",
-  doubleCirculation: DIAGRAM_BASE + "double-circulation.webp",
-  lymphDiagram: DIAGRAM_BASE + "lymph-diagram.webp",
-  xylemPhloem: DIAGRAM_BASE + "xylem-phloem.webp",
-  excretorySystem: DIAGRAM_BASE + "excretory-system.webp",
-  kidneyNephron: DIAGRAM_BASE + "kidney-nephron.webp",
+  leafParts: DIAGRAM_BASE + "leaf-parts.webp" + DIAGRAM_V,
+  photosynthesisEq: DIAGRAM_BASE + "photosynthesis-eq.webp" + DIAGRAM_V,
+  leafCrossSection: DIAGRAM_BASE + "leaf-cross-section.webp" + DIAGRAM_V,
+  stomata: DIAGRAM_BASE + "stomata.webp" + DIAGRAM_V,
+  amoebaDigestion: DIAGRAM_BASE + "amoeba-digestion.webp" + DIAGRAM_V,
+  alimentaryCanal: DIAGRAM_BASE + "alimentary-canal.webp" + DIAGRAM_V,
+  glucoseBreakdown: DIAGRAM_BASE + "glucose-breakdown.webp" + DIAGRAM_V,
+  atpAdpCycle: DIAGRAM_BASE + "atp-adp-cycle.webp" + DIAGRAM_V,
+  respiratorySystem: DIAGRAM_BASE + "respiratory-system.webp" + DIAGRAM_V,
+  alveolusGasExchange: DIAGRAM_BASE + "alveolus-gas-exchange.webp" + DIAGRAM_V,
+  heartDiagram: DIAGRAM_BASE + "heart-diagram.webp" + DIAGRAM_V,
+  doubleCirculation: DIAGRAM_BASE + "double-circulation.webp" + DIAGRAM_V,
+  lymphDiagram: DIAGRAM_BASE + "lymph-diagram.webp" + DIAGRAM_V,
+  xylemPhloem: DIAGRAM_BASE + "xylem-phloem.webp" + DIAGRAM_V,
+  excretorySystem: DIAGRAM_BASE + "excretory-system.webp" + DIAGRAM_V,
+  kidneyNephron: DIAGRAM_BASE + "kidney-nephron.webp" + DIAGRAM_V,
 };
 
 type BioTopicId =
