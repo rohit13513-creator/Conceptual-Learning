@@ -1674,18 +1674,10 @@ export default function App() {
     return a.deadline;
   };
 
-  const visibleAssignments = useMemo(() => {
-    const now = Date.now();
-    return assignments.filter(a => {
-      if (!(a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)) return false;
-      const effectiveDeadline = getEffectiveDeadline(a);
-      return !effectiveDeadline || new Date(effectiveDeadline).getTime() > now;
-    });
-  }, [assignments, isClassExempt, studentTrack]);
-
-  // The homework picker is just a simple list: the 10 most recent assignments for this student's
-  // class, regardless of whether the deadline has passed (late submission/updates are allowed) --
-  // clicking a row selects it, so there's no separate dropdown or current/previous distinction.
+  // The 10 most recent assignments for this student's class, regardless of whether the deadline
+  // has passed (late submission/updates are allowed) -- used both for the upload picker (clicking
+  // a row selects it) and for the "Homework Assigned" displays, so a student always sees the last
+  // posted homework and its status instead of an empty list once its deadline has quietly expired.
   const recentAssignmentsForStudent = useMemo(() => {
     return assignments
       .filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)
@@ -4230,14 +4222,16 @@ export default function App() {
                 <div className={`mt-3 divide-y flex-1 ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
                   {assignmentsLoading ? (
                     <p className="text-[11px] font-semibold text-slate-500 py-3">Loading assignments...</p>
-                  ) : visibleAssignments.length === 0 ? (
+                  ) : recentAssignmentsForStudent.length === 0 ? (
                     <p className="text-[11px] font-semibold text-slate-500 py-3">No homework assigned yet.</p>
                   ) : (
-                    visibleAssignments.slice(0, 3).map((a) => (
+                    recentAssignmentsForStudent.slice(0, 3).map((a) => {
+                      const badge = homeworkStatusBadge(a);
+                      return (
                       <div key={a.id} className="py-2.5">
                         <p className={`text-xs font-bold flex items-center gap-1.5 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
                           {a.title}
-                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30">New</span>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badge.className}`}>{badge.text}</span>
                         </p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {getEffectiveDeadline(a) && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(getEffectiveDeadline(a))}</p>}
@@ -4253,7 +4247,8 @@ export default function App() {
                           </a>
                         )}
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
                 <button onClick={() => changeView('homework')} className={`mt-2 text-[11px] font-black self-start cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
@@ -6131,16 +6126,18 @@ export default function App() {
               </div>
               {assignmentsLoading ? (
                 <div className="text-center py-4 text-xs font-semibold text-slate-500">Loading assignments...</div>
-              ) : visibleAssignments.length === 0 ? (
+              ) : recentAssignmentsForStudent.length === 0 ? (
                 <div className="text-center py-4 text-xs font-semibold text-slate-500">No homework assigned yet.</div>
               ) : (
                 <div className={`divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
-                  {visibleAssignments.map((a) => (
+                  {recentAssignmentsForStudent.map((a) => {
+                    const badge = homeworkStatusBadge(a);
+                    return (
                     <div key={a.id} className="py-3 flex items-start justify-between gap-2">
                       <div>
                         <p className={`text-xs font-bold flex items-center gap-1.5 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
                           {a.title}
-                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-400 border border-rose-500/30">New</span>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badge.className}`}>{badge.text}</span>
                         </p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {a.description && <p className={`text-[11px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.description}</p>}
@@ -6161,7 +6158,8 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
