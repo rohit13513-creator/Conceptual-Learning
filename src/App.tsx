@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import OpticsCanvas, {
   computeImage,
   getImageDescription,
@@ -713,6 +713,73 @@ export default function App() {
       setRevisionReportError(err.message);
     } finally {
       setRevisionReportLoading(false);
+    }
+  };
+
+  // Reference textbooks (full NCERT PDFs) that ground Revision paper generation for a given
+  // class/subject -- lets the admin keep these current (e.g. the 2026 book changes for Class 8/9)
+  // without needing a developer in the loop. One file per (class, subject); re-uploading replaces it.
+  const [referenceBooks, setReferenceBooks] = useState<{ fileName: string; sizeBytes: number | null; updatedAt: string | null }[]>([]);
+  const [referenceBooksLoading, setReferenceBooksLoading] = useState(false);
+  const [referenceBookUploadKey, setReferenceBookUploadKey] = useState<string | null>(null);
+  const [referenceBookError, setReferenceBookError] = useState<string | null>(null);
+
+  const fetchReferenceBooks = useCallback(async () => {
+    if (!user) return;
+    setReferenceBooksLoading(true);
+    try {
+      const resp = await fetch('/api/admin/revision/reference-books', { headers: { Authorization: `Bearer ${user.token}` } });
+      const data = await resp.json();
+      if (resp.ok) setReferenceBooks(data.files || []);
+    } finally {
+      setReferenceBooksLoading(false);
+    }
+  }, [user]);
+
+  const handleUploadReferenceBook = async (classKey: string, subject: 'Maths' | 'Science', file: File) => {
+    if (!user) return;
+    const slotKey = `${classKey}-${subject}`;
+    setReferenceBookError(null);
+    setReferenceBookUploadKey(slotKey);
+    try {
+      const formData = new FormData();
+      formData.append('classKey', classKey);
+      formData.append('subject', subject);
+      formData.append('file', file);
+      const resp = await fetch('/api/admin/revision/reference-books', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${user.token}` },
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to upload the reference book.');
+      await fetchReferenceBooks();
+    } catch (err: any) {
+      setReferenceBookError(err.message);
+    } finally {
+      setReferenceBookUploadKey(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email)) {
+      fetchReferenceBooks();
+    }
+  }, [activeView, fetchReferenceBooks]);
+
+  const handleDeleteReferenceBook = async (fileName: string) => {
+    if (!user) return;
+    setReferenceBookError(null);
+    try {
+      const resp = await fetch(`/api/admin/revision/reference-books/${encodeURIComponent(fileName)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to remove the reference book.');
+      await fetchReferenceBooks();
+    } catch (err: any) {
+      setReferenceBookError(err.message);
     }
   };
 
@@ -8198,6 +8265,66 @@ export default function App() {
                   </div>
                 )
               )}
+            </div>
+
+            {/* Revision Reference Books -- optional full-textbook PDFs that ground paper generation
+                for a class/subject (e.g. the 2026 new NCERT books for Class 8/9). Upload once per
+                (class, subject); Revision falls back to general knowledge when none is on file. */}
+            <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div>
+                <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
+                  <FileText className="w-4 h-4 text-cyan-400" /> Revision Reference Books
+                </h3>
+                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Upload the actual NCERT textbook PDF for a class and subject to ground Revision's questions in it -- useful when the syllabus changes (e.g. the new Class 8/9 books). Optional: without one, Revision uses its own curriculum knowledge as before.</p>
+              </div>
+
+              {referenceBookError && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{referenceBookError}</div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['8th', '9th', '10th'] as const).flatMap((classKey) =>
+                  (['Maths', 'Science'] as const).map((subject) => {
+                    const slotKey = `${classKey}-${subject}`;
+                    const existing = referenceBooks.find((f) => f.fileName === `${slotKey}.pdf`);
+                    const uploading = referenceBookUploadKey === slotKey;
+                    return (
+                      <div key={slotKey} className={`border rounded-xl p-3 space-y-2 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/60'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-black ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>Class {classKey} -- {subject}</span>
+                          {existing && (
+                            <button
+                              onClick={() => handleDeleteReferenceBook(existing.fileName)}
+                              className="text-red-400 hover:text-red-300"
+                              title="Remove this reference book"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        {existing ? (
+                          <p className={`text-[10px] font-semibold ${isLightMode ? 'text-emerald-600' : 'text-emerald-400'}`}>On file{existing.updatedAt ? ` -- updated ${new Date(existing.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</p>
+                        ) : (
+                          <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No file on file -- uses general knowledge</p>
+                        )}
+                        <label className={`flex items-center justify-center gap-1.5 border border-dashed rounded-lg py-2 text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${uploading ? 'opacity-50 pointer-events-none' : ''} ${isLightMode ? 'border-slate-300 text-slate-500 hover:border-cyan-500 hover:text-cyan-600' : 'border-slate-700 text-slate-400 hover:border-cyan-500 hover:text-cyan-400'}`}>
+                          <Upload className="w-3 h-3" /> {uploading ? 'Uploading...' : existing ? 'Replace PDF' : 'Upload PDF'}
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadReferenceBook(classKey, subject, f);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* Pending Forum Posts */}

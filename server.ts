@@ -405,6 +405,22 @@ const HOMEWORK_TEMP_PREFIX = "homework-temp";
 // section below) -- reuses the same HOMEWORK_BUCKET and the same merge/chunk helpers, just a
 // different temp prefix so the two features' in-flight uploads never collide.
 const REVISION_TEMP_PREFIX = "revision-temp";
+// Admin-uploaded full NCERT textbook PDFs used to ground Revision paper generation for classes
+// whose syllabus/books changed for 2026 (new Class 8 "Ganita Prakash"/"Curiosity" and Class 9
+// "Ganita Manjari"/"Exploration" books) -- stored in the existing chapter-notes bucket under a
+// fixed, predictable path per (class, subject) so lookup never needs a DB table: whichever
+// chapter name a student's own syllabus gives us, generation just needs to search within
+// whichever book is on file for their class. No file on file for a class/subject just falls back
+// to the model's own knowledge, exactly as it did before this existed.
+const REVISION_REFERENCE_PREFIX = "revision-reference-books";
+const revisionReferenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 40 * 1024 * 1024 }, // full textbooks run much larger than a single chapter PDF
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("Only PDF files are allowed."));
+  },
+});
 
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
 // deletes the temp copies. Returns null if no photos were found for that session. `prefix`
@@ -9410,9 +9426,27 @@ function buildApp(): express.Express {
     },
   };
 
+  // Looks up an admin-uploaded full textbook PDF for this class/subject (see
+  // REVISION_REFERENCE_PREFIX above) and returns it as a Claude document content block, or null
+  // if none is on file. classLabel is the Roman-numeral form ("VIII"/"IX"/"X") already used
+  // elsewhere in Revision; CLASS_TO_TARGET converts it to the "8th"/"9th"/"10th" storage key.
+  async function getRevisionReferenceBookBlock(classLabel: string, subject: "Maths" | "Science"): Promise<any | null> {
+    const classKey = CLASS_TO_TARGET[classLabel];
+    if (!classKey) return null;
+    const path = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}.pdf`;
+    const { data: blob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(path);
+    if (!blob) return null;
+    const buf = Buffer.from(await blob.arrayBuffer());
+    return { type: "document", source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") } };
+  }
+
   async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
-    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}". Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
+    const referenceBlock = await getRevisionReferenceBookBlock(classLabel, subject);
+    const referenceInstruction = referenceBlock
+      ? ` The attached PDF is the actual official textbook this student's class uses for ${subject} -- it may use different chapter names, ordering, or a different topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find the specific chapter or topic matching "${chapterName}" within this attached book and base every question strictly on that chapter's actual content, terminology, and depth as it appears in the book -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached book.`
+      : ` No reference textbook is on file for this class/subject, so use your own best knowledge of the CBSE curriculum for this chapter -- if "${chapterName}" doesn't clearly match a chapter you know, interpret it as sensibly as possible from the name and class level given.`;
+    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction} Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
 ${sectionsText}
 Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer.
 
@@ -9422,7 +9456,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
 
     const result = await callClaudeTool({
       system,
-      content: [{ type: "text", text: "Generate the paper now." }],
+      content: referenceBlock ? [referenceBlock, { type: "text", text: "Generate the paper now." }] : [{ type: "text", text: "Generate the paper now." }],
       tool: REVISION_PAPER_TOOL,
       maxTokens: 6000,
     });
@@ -9435,10 +9469,12 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     // would show up. Mirrors the same "generate, then separately self-critique" shape already used
     // for chapter notes (finalReviewChapterNotes) rather than trusting a single-pass draft.
     try {
-      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student. Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
+      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student.${referenceBlock ? " The attached PDF is the actual official textbook for this class/subject -- cross-check every question against its real content, terminology, and depth, and fix anything that doesn't actually match what's in the book." : ""} Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
       const reviewed = await callClaudeTool({
         system: reviewSystem,
-        content: [{ type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
+        content: referenceBlock
+          ? [referenceBlock, { type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }]
+          : [{ type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
         tool: REVISION_PAPER_TOOL,
         maxTokens: 6000,
       });
@@ -10081,6 +10117,49 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     });
 
     return res.json({ report, fromDate, toDate, todayIST });
+  });
+
+  // Reference textbooks used to ground Revision paper generation (see REVISION_REFERENCE_PREFIX
+  // above). One PDF per (class, subject) -- uploading again for the same pair overwrites it.
+  app.get("/api/admin/revision/reference-books", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { data, error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(REVISION_REFERENCE_PREFIX);
+    if (error) return res.status(500).json({ error: error.message });
+    const files = (data || []).filter((f: any) => f.name.endsWith(".pdf")).map((f: any) => ({
+      fileName: f.name,
+      sizeBytes: f.metadata?.size || null,
+      updatedAt: f.updated_at || f.created_at || null,
+    }));
+    return res.json({ files });
+  });
+
+  app.post("/api/admin/revision/reference-books", (req, res, next) => {
+    revisionReferenceUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  }, async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { classKey, subject } = req.body as { classKey?: string; subject?: string };
+    if (!classKey || !subject || (subject !== "Maths" && subject !== "Science")) {
+      return res.status(400).json({ error: "classKey (e.g. 8th/9th/10th) and subject ('Maths' or 'Science') are required." });
+    }
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ error: "A PDF file is required." });
+
+    const path = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}.pdf`;
+    const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(path, file.buffer, { contentType: "application/pdf", upsert: true });
+    if (error) return res.status(500).json({ error: `Could not upload the reference book: ${error.message}` });
+    return res.json({ success: true, fileName: `${classKey}-${subject}.pdf` });
+  });
+
+  app.delete("/api/admin/revision/reference-books/:fileName", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { fileName } = req.params;
+    if (!/^[a-zA-Z0-9]+-(Maths|Science)\.pdf$/.test(fileName)) return res.status(400).json({ error: "Invalid file name." });
+    const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).remove([`${REVISION_REFERENCE_PREFIX}/${fileName}`]);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true });
   });
 
   // ── ADMIN PROTECTED ENDPOINTS ──
