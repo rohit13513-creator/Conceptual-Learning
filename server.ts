@@ -9649,6 +9649,8 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       // The very first graded score is captured here, permanently, the moment a student
       // re-submits to improve it -- a second or third "Improve Score" attempt never overwrites
       // it again, so "first attempt" in admin reports always genuinely means attempt 1.
+      // TODO: also preserve first_attempt_feedback once that column exists (pending SQL migration
+      // handed to the admin -- see the "first attempt remarks" work).
       if (existing.first_attempt_score == null && existing.ai_score != null) {
         updates.first_attempt_score = existing.ai_score;
       }
@@ -9856,6 +9858,75 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     { name: "scienceSyllabusImage", maxCount: 1 },
   ]);
 
+  // Resolves the "8th"/"9th"/"10th"-style class key for validating a syllabus AT SAVE TIME --
+  // distinct from resolveClassLabelForRevision (which returns the Roman-numeral form used
+  // elsewhere) because a fallbackClass submitted in THIS request hasn't been saved to
+  // revision_setups yet, so it needs to be checked before falling back to the DB.
+  async function resolveClassKeyForRevisionSetup(auth: { email: string }, submittedFallbackClass?: string): Promise<string | null> {
+    const { data: userRow } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
+    if (userRow?.student_class) return CLASS_TO_TARGET[userRow.student_class] || null;
+    if (submittedFallbackClass) return submittedFallbackClass;
+    const { data: setup } = await supabase.from("revision_setups").select("fallback_class").eq("student_email", auth.email).maybeSingle();
+    return setup?.fallback_class || null;
+  }
+
+  async function getKnownNcertChapters(classKey: string, subject: "Maths" | "Science"): Promise<string[]> {
+    const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`);
+    return (data || []).filter((f: any) => f.name.toLowerCase().endsWith(".pdf")).map((f: any) => referenceBookDisplayTitle(f.name));
+  }
+
+  // Checks a student's typed/photographed chapter names against the real NCERT chapter list for
+  // their class/subject (derived from the admin-uploaded, renamed reference book files -- see
+  // REVISION_REFERENCE_PREFIX), so a paper never gets generated for a chapter that doesn't
+  // actually exist. A near-miss (misspelled, abbreviated, or a common short name like "Acid" for
+  // "Acids, Bases and Salts") is auto-corrected to the real title rather than rejected outright;
+  // only genuinely unrecognizable names come back as invalid. Fails open (accepts everything as
+  // typed) when there's no reference chapter list to check against for that class/subject, or if
+  // the validation call itself fails -- this is a safety net, not something that should ever block
+  // a student from saving their syllabus due to an unrelated outage.
+  async function validateAndNormalizeChapters(chapters: string[], classKey: string | null, subject: "Maths" | "Science"): Promise<{ corrected: string[]; invalid: string[] }> {
+    if (!classKey || chapters.length === 0) return { corrected: chapters, invalid: [] };
+    const known = await getKnownNcertChapters(classKey, subject);
+    if (known.length === 0) return { corrected: chapters, invalid: [] };
+
+    const tool = {
+      name: "submit_matches",
+      description: "Submit the matched real chapter title for each input, in the same order.",
+      input_schema: {
+        type: "object",
+        properties: {
+          matches: {
+            type: "array",
+            description: "Same length and order as the input chapter list. Each entry is either the exact matching chapter title copied from the reference list, or an empty string if that input doesn't genuinely match any chapter in the list.",
+            items: { type: "string" },
+          },
+        },
+        required: ["matches"],
+      },
+    };
+    const system = `Here is the real, complete list of NCERT chapters for this class/subject:\n${known.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nA student typed the following as their own syllabus chapter names. For each one, decide which real chapter above (if any) it clearly refers to -- even if misspelled, shortened, or just a common partial name (e.g. "Acid" clearly means "Acids, Bases and Salts" if that's the closest chapter in the list; "chem reactions" means "Chemical Reactions and Equations"). Return that chapter's title copied EXACTLY as written in the list above. If an input genuinely doesn't match any chapter in the list (a made-up name, a chapter from a different class/subject entirely, or gibberish), return an empty string for it instead of guessing.`;
+    try {
+      const result = await callClaudeTool({
+        system,
+        content: [{ type: "text", text: `Chapters to check, in order:\n${chapters.map((c, i) => `${i + 1}. ${c}`).join("\n")}` }],
+        tool,
+        maxTokens: 1500,
+      });
+      const matches: string[] = Array.isArray(result.matches) ? result.matches : [];
+      if (matches.length !== chapters.length) return { corrected: chapters, invalid: [] };
+      const corrected: string[] = [];
+      const invalid: string[] = [];
+      chapters.forEach((original, i) => {
+        if (matches[i]) corrected.push(matches[i]);
+        else invalid.push(original);
+      });
+      return { corrected, invalid };
+    } catch (err: any) {
+      console.error("Chapter validation failed, accepting syllabus as typed:", err.message);
+      return { corrected: chapters, invalid: [] };
+    }
+  }
+
   app.post("/api/revision/setup", (req, res, next) => {
     revisionSetupUpload(req, res, (err: any) => {
       if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded file." });
@@ -9870,6 +9941,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     const { data: existing } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
 
     const update: any = { student_email: auth.email, updated_at: new Date().toISOString() };
+    const newlySubmittedSubjects: ("maths" | "science")[] = [];
 
     for (const subj of ["maths", "science"] as const) {
       const examDateField = `${subj}ExamDate`;
@@ -9886,6 +9958,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
           if (chapters.length > 0) {
             update[`${subj}_chapters`] = chapters;
             update[`${subj}_syllabus_text`] = null;
+            newlySubmittedSubjects.push(subj);
             const imgPath = `revision-syllabus/${auth.email}/${subj}-${Date.now()}.jpg`;
             const { error: upErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(imgPath, imageFile.buffer, { contentType: imageFile.mimetype });
             if (!upErr) update[`${subj}_syllabus_image_path`] = imgPath;
@@ -9898,6 +9971,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         const chapters = splitSyllabusText(typedText);
         update[`${subj}_chapters`] = chapters;
         update[`${subj}_syllabus_text`] = typedText;
+        newlySubmittedSubjects.push(subj);
       } else if (existing) {
         // Neither a new image nor new text for this subject this time -- keep whatever was there.
         update[`${subj}_chapters`] = existing[`${subj}_chapters`];
@@ -9911,6 +9985,21 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
 
     if (body.fallbackClass) update.fallback_class = String(body.fallbackClass);
+
+    // Only freshly typed/photographed chapter lists get checked against the real NCERT syllabus --
+    // an unchanged subject was presumably already valid (or already accepted before this check
+    // existed), so re-validating it on every unrelated edit would be pointless extra cost.
+    if (newlySubmittedSubjects.length > 0) {
+      const classKey = await resolveClassKeyForRevisionSetup(auth, body.fallbackClass ? String(body.fallbackClass) : undefined);
+      for (const subj of newlySubmittedSubjects) {
+        const subjectLabel = subj === "maths" ? "Maths" : "Science";
+        const { corrected, invalid } = await validateAndNormalizeChapters(update[`${subj}_chapters`] || [], classKey, subjectLabel);
+        if (invalid.length > 0) {
+          return res.status(400).json({ error: `These don't match any real NCERT Class ${classKey ? classKey.replace("th", "") + "th" : ""} ${subjectLabel} chapter: ${invalid.join(", ")}. Please check the name(s) and try again.` });
+        }
+        update[`${subj}_chapters`] = corrected;
+      }
+    }
 
     const { error: upsertError } = await supabase.from("revision_setups").upsert(update, { onConflict: "student_email" });
     if (upsertError) {
@@ -10202,9 +10291,13 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
     const submissionByPaper = new Map(submissionRows.map((s: any) => [s.revision_paper_id, s]));
 
-    // "Today" here means the IST calendar day the report is being viewed on, matching the same
-    // 00:00-24:00 IST cycle language used for homework's own day-boundary logic.
-    const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    // "Missed" is evaluated against the most recently fully-completed IST calendar day (i.e.
+    // yesterday), never today -- a student's day isn't over yet while it's still happening, so
+    // flagging them mid-day as having "missed" it is premature and can wrongly read as neglect
+    // when they simply haven't gotten to it yet. The 24h-IST cycle only closes at midnight, so
+    // that's when a day can first be judged as missed or not.
+    const nowIST = new Date();
+    const checkDateIST = new Date(nowIST.getTime() - 24 * 60 * 60 * 1000).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const report = roster.map((u: any) => {
       const myPapers = (paperRows || []).filter((p: any) => p.student_email === u.email);
@@ -10212,7 +10305,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       const avgScore = scored.length > 0 ? Math.round((scored.reduce((sum: number, s: any) => sum + s.ai_score, 0) / scored.length) * 10) / 10 : null;
       const lateCount = scored.filter((s: any) => s.is_late).length;
       const attemptDatesIST = myPapers.map((p: any) => new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
-      const didNothingToday = !attemptDatesIST.includes(todayIST);
+      const missedLastCompletedDay = !attemptDatesIST.includes(checkDateIST);
       const lastAttempt = myPapers.length > 0 ? myPapers.reduce((latest: any, p: any) => (new Date(p.created_at) > new Date(latest.created_at) ? p : latest)).created_at : null;
       return {
         email: u.email,
@@ -10223,11 +10316,11 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         avgScore,
         lateCount,
         lastAttempt,
-        didNothingToday,
+        missedLastCompletedDay,
       };
     });
 
-    return res.json({ report, fromDate, toDate, todayIST });
+    return res.json({ report, fromDate, toDate, checkDateIST });
   });
 
   // Every paper a given student has attempted, newest first, with its submission (if any) -- lets
@@ -10291,7 +10384,8 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     if (paperIds.length > 0) {
       const { data } = await supabase
         .from("revision_submissions")
-        .select("id, revision_paper_id, status, ai_score, first_attempt_score, is_late, submitted_at, file_path")
+        // TODO: add first_attempt_feedback once that column exists (pending SQL migration).
+        .select("id, revision_paper_id, status, ai_score, ai_feedback, first_attempt_score, is_late, submitted_at, file_path")
         .in("revision_paper_id", paperIds);
       submissions = data || [];
     }
@@ -10306,7 +10400,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         status: p.status,
         createdAt: p.created_at,
         cycleNumber: p.cycle_number || 1,
-        submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, firstAttemptScore: sub.first_attempt_score, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
+        submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, aiFeedback: sub.ai_feedback, firstAttemptScore: sub.first_attempt_score, firstAttemptFeedback: sub.first_attempt_feedback, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
       };
     });
     return res.json({ papers: result });

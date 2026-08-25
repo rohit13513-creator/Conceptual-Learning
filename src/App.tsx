@@ -696,7 +696,7 @@ export default function App() {
   const [revisionReportToDate, setRevisionReportToDate] = useState('');
   const [revisionReportLoading, setRevisionReportLoading] = useState(false);
   const [revisionReportError, setRevisionReportError] = useState<string | null>(null);
-  const [revisionReportData, setRevisionReportData] = useState<{ report: any[]; fromDate: string; toDate: string; todayIST: string } | null>(null);
+  const [revisionReportData, setRevisionReportData] = useState<{ report: any[]; fromDate: string; toDate: string; checkDateIST: string } | null>(null);
 
   const handleGenerateRevisionReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -743,7 +743,7 @@ export default function App() {
         case 'avgScore': return r.avgScore ?? -1;
         case 'lateCount': return r.lateCount;
         case 'lastAttempt': return r.lastAttempt ? new Date(r.lastAttempt).getTime() : -1;
-        case 'missedToday': return r.didNothingToday ? 1 : 0;
+        case 'missedToday': return r.missedLastCompletedDay ? 1 : 0;
         default: return '';
       }
     };
@@ -753,7 +753,7 @@ export default function App() {
       .filter((r: any) => {
         if (revisionReportStatusFilter === 'attempted') return r.papersAttempted > 0;
         if (revisionReportStatusFilter === 'never') return r.papersAttempted === 0;
-        if (revisionReportStatusFilter === 'missedToday') return r.didNothingToday;
+        if (revisionReportStatusFilter === 'missedToday') return r.missedLastCompletedDay;
         return true;
       })
       .slice()
@@ -774,6 +774,9 @@ export default function App() {
   const [revisionPaperDetail, setRevisionPaperDetail] = useState<any | null>(null);
   const [revisionPaperDetailLoading, setRevisionPaperDetailLoading] = useState(false);
   const [revisionAnswerSheetDownloading, setRevisionAnswerSheetDownloading] = useState<string | null>(null);
+  const [revisionPaperPdfDownloading, setRevisionPaperPdfDownloading] = useState(false);
+  const revisionPaperPrintRef = useRef<HTMLDivElement>(null);
+  const [revisionExpandedRemarks, setRevisionExpandedRemarks] = useState<Set<string>>(new Set());
 
   const openRevisionStudentDetail = async (email: string, name: string) => {
     if (!user) return;
@@ -807,6 +810,27 @@ export default function App() {
     } finally {
       setRevisionPaperDetailLoading(false);
     }
+  };
+
+  const handleDownloadRevisionPaperPdf = () => {
+    if (revisionPaperPdfDownloading || !revisionPaperDetail || revisionPaperDetail.error) return;
+    const element = revisionPaperPrintRef.current;
+    if (!element) return;
+    setRevisionPaperPdfDownloading(true);
+    const filename = `${revisionPaperDetail.subject}_${String(revisionPaperDetail.chapterName).replace(/\s+/g, '_')}_Cycle${revisionPaperDetail.cycleNumber || 1}.pdf`;
+    const opt = {
+      margin: [14, 14, 14, 14],
+      filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2.0, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    };
+    const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
+    if (!html2pdfFunc) { setRevisionPaperPdfDownloading(false); return; }
+    html2pdfFunc().set(opt).from(element).save()
+      .then(() => setRevisionPaperPdfDownloading(false))
+      .catch(() => setRevisionPaperPdfDownloading(false));
   };
 
   const handleDownloadAnswerSheet = async (submissionId: string, studentName: string) => {
@@ -4164,7 +4188,8 @@ export default function App() {
             ) : (
               <div className="space-y-2">
                 {(revisionStudentPapers || []).map((p: any) => (
-                  <div key={p.id} className={`p-3 rounded-xl border flex items-center justify-between gap-3 flex-wrap ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                  <div key={p.id} className={`p-3 rounded-xl border space-y-2 ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <p className={`text-xs font-black ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>{p.subject} -- {p.chapterName}</p>
                       <p className={`text-[10px] font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -4206,6 +4231,39 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                  {(p.submission?.aiFeedback || p.submission?.firstAttemptFeedback) && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setRevisionExpandedRemarks((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                          return next;
+                        })}
+                        className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                      >
+                        <ChevronRight className={`w-3 h-3 transition-transform ${revisionExpandedRemarks.has(p.id) ? 'rotate-90' : ''}`} />
+                        {revisionExpandedRemarks.has(p.id) ? 'Hide Remarks' : 'Show Remarks'}
+                      </button>
+                      {revisionExpandedRemarks.has(p.id) && (
+                        <div className="mt-1.5 space-y-2">
+                          {p.submission?.firstAttemptFeedback && (
+                            <div className={`text-[11px] font-semibold whitespace-pre-line p-2.5 rounded-lg border ${isLightMode ? 'bg-white border-slate-200 text-slate-600' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+                              <span className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Remarks -- First Attempt</span>
+                              {p.submission.firstAttemptFeedback}
+                            </div>
+                          )}
+                          {p.submission?.aiFeedback && (
+                            <div className={`text-[11px] font-semibold whitespace-pre-line p-2.5 rounded-lg border ${isLightMode ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'}`}>
+                              <span className={`block text-[9px] font-black uppercase tracking-wider mb-1 ${isLightMode ? 'text-emerald-600' : 'text-emerald-500'}`}>{p.submission.firstAttemptFeedback ? 'Remarks -- After Improvement' : 'Remarks'}</span>
+                              {p.submission.aiFeedback}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  </div>
                 ))}
               </div>
             )}
@@ -4230,9 +4288,18 @@ export default function App() {
                     <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{revisionPaperDetail.subject}</span>
                     <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{revisionPaperDetail.chapterName}</h3>
                   </div>
-                  <button onClick={() => setRevisionPaperDetail(null)} className={`p-1 rounded-lg cursor-pointer shrink-0 ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-800'}`}>
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={handleDownloadRevisionPaperPdf}
+                      disabled={revisionPaperPdfDownloading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-cyan-500/20 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> {revisionPaperPdfDownloading ? 'Preparing...' : 'Download PDF'}
+                    </button>
+                    <button onClick={() => setRevisionPaperDetail(null)} className={`p-1 rounded-lg cursor-pointer ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-800'}`}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-3">
                   {(revisionPaperDetail.questions || []).map((q: any) => (
@@ -4251,6 +4318,30 @@ export default function App() {
                       )}
                     </div>
                   ))}
+                </div>
+
+                {/* Hidden print node for the admin's own PDF copy -- unlike the student's
+                    questions-only download, this includes the marking scheme/solution too, since
+                    it's for the admin's own reference rather than something a student attempts. */}
+                <div className="fixed -left-[9999px] top-0" aria-hidden="true">
+                  <div ref={revisionPaperPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
+                    <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Revision Paper (Admin Copy)</h1>
+                    <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{revisionPaperDetail.subject} -- {revisionPaperDetail.chapterName}{revisionPaperDetail.cycleNumber > 1 ? ` (Cycle ${revisionPaperDetail.cycleNumber})` : ''}</p>
+                    {(revisionPaperDetail.questions || []).map((q: any) => (
+                      <div key={q.id} style={{ marginBottom: '14px' }}>
+                        <p style={{ fontSize: '12px', margin: '6px 0', lineHeight: 1.5 }}>
+                          <b>{q.id}.</b> {q.text} <i>[{q.marks} mark{q.marks > 1 ? 's' : ''}]</i>
+                        </p>
+                        {q.markingPoints && q.markingPoints.length > 0 && (
+                          <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+                            {q.markingPoints.map((mp: string, i: number) => (
+                              <li key={i} style={{ fontSize: '11px', lineHeight: 1.5 }}>{mp}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
@@ -8574,7 +8665,7 @@ export default function App() {
                 <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
                   <BookOpen className="w-4 h-4 text-cyan-400" /> Assess Revision
                 </h3>
-                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Who's using Revision daily, and how they're scoring -- "Missed Today" is based on the same 00:00-24:00 IST day used everywhere else in this app.</p>
+                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Who's using Revision daily, and how they're scoring -- the "Missed" column only judges the most recently completed IST day (00:00-24:00), never today while it's still in progress.</p>
               </div>
 
               {revisionReportError && (
@@ -8648,7 +8739,7 @@ export default function App() {
                         <option value="">All Attempt Statuses</option>
                         <option value="attempted">Attempted at Least Once</option>
                         <option value="never">Never Attempted</option>
-                        <option value="missedToday">Missed Today</option>
+                        <option value="missedToday">Missed Last Day</option>
                       </select>
                       {(revisionReportClassFilter || revisionReportStudentFilter || revisionReportStatusFilter) && (
                         <button
@@ -8677,8 +8768,8 @@ export default function App() {
                             { key: 'avgScore', label: 'Avg Score' },
                             { key: 'lateCount', label: 'Late' },
                             { key: 'lastAttempt', label: 'Last Attempt' },
-                            { key: 'missedToday', label: 'Missed Today' },
-                          ] as const).map((col) => (
+                            { key: 'missedToday', label: `Missed ${revisionReportData?.checkDateIST ? new Date(revisionReportData.checkDateIST).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Last Day'}` },
+                          ]).map((col) => (
                             <th key={col.key} className="py-2 pr-3">
                               <button
                                 type="button"
@@ -8709,7 +8800,7 @@ export default function App() {
                             <td className="py-2 pr-3">{r.lateCount}</td>
                             <td className="py-2 pr-3 font-mono">{r.lastAttempt ? new Date(r.lastAttempt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}</td>
                             <td className="py-2 pr-3">
-                              {r.didNothingToday ? (
+                              {r.missedLastCompletedDay ? (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">Yes</span>
                               ) : (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">No</span>
