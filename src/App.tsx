@@ -724,6 +724,9 @@ export default function App() {
   const [referenceBookUploadKey, setReferenceBookUploadKey] = useState<string | null>(null);
   const [referenceBookUploadStatus, setReferenceBookUploadStatus] = useState<string | null>(null);
   const [referenceBookError, setReferenceBookError] = useState<string | null>(null);
+  // Which (class, subject) slots currently have their file list expanded -- collapsed by default
+  // so a slot with many chapter files doesn't dump its whole list onto the screen unasked.
+  const [expandedRefBookSlots, setExpandedRefBookSlots] = useState<Set<string>>(new Set());
 
   const fetchReferenceBooks = useCallback(async () => {
     if (!user) return;
@@ -8378,20 +8381,35 @@ export default function App() {
                           )}
                         </div>
                         {files.length > 0 ? (
-                          <ul className="space-y-1 max-h-32 overflow-y-auto">
-                            {files.map((f) => (
-                              <li key={f.fileName} className={`flex items-center justify-between gap-2 text-[10px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>
-                                <span className="truncate" title={f.fileName}>{f.fileName}</span>
-                                <button
-                                  onClick={() => setDeleteConfirmRefBook({ classKey, subject, fileName: f.fileName, label: f.fileName })}
-                                  className="text-red-400 hover:text-red-300 shrink-0"
-                                  title="Remove this file"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
+                          <>
+                            <button
+                              onClick={() => setExpandedRefBookSlots((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(slotKey)) next.delete(slotKey); else next.add(slotKey);
+                                return next;
+                              })}
+                              className={`flex items-center gap-1 text-[10px] font-black uppercase tracking-wider ${isLightMode ? 'text-cyan-600 hover:text-cyan-700' : 'text-cyan-400 hover:text-cyan-300'}`}
+                            >
+                              <ChevronRight className={`w-3 h-3 transition-transform ${expandedRefBookSlots.has(slotKey) ? 'rotate-90' : ''}`} />
+                              {files.length} file{files.length === 1 ? '' : 's'} on file
+                            </button>
+                            {expandedRefBookSlots.has(slotKey) && (
+                              <ul className="space-y-1 max-h-32 overflow-y-auto">
+                                {files.map((f) => (
+                                  <li key={f.fileName} className={`flex items-center justify-between gap-2 text-[10px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                                    <span className="truncate" title={f.fileName}>{f.fileName}</span>
+                                    <button
+                                      onClick={() => setDeleteConfirmRefBook({ classKey, subject, fileName: f.fileName, label: f.fileName })}
+                                      className="text-red-400 hover:text-red-300 shrink-0"
+                                      title="Remove this file"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </>
                         ) : (
                           <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No files on file -- uses general knowledge</p>
                         )}
