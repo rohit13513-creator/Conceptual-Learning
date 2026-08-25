@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   Award,
   ImagePlus,
+  Info,
+  ArrowLeft,
+  ListChecks,
 } from 'lucide-react';
 
 interface RevisionUser {
@@ -51,6 +54,7 @@ interface RevisionSubmission {
   aiScore: number | null;
   aiFeedback: string | null;
   isLate: boolean;
+  submittedAt?: string | null;
 }
 
 interface RevisionSetup {
@@ -84,6 +88,20 @@ function formatCountdown(ms: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// How long after the 75-minute window a submission actually came in -- shown to the student purely
+// as information (there is deliberately no score penalty for it in Revision, unlike Homework).
+function formatLateBy(deadlineAt: string | null | undefined, submittedAt: string | null | undefined): string | null {
+  if (!deadlineAt || !submittedAt) return null;
+  const diffMs = new Date(submittedAt).getTime() - new Date(deadlineAt).getTime();
+  if (diffMs <= 0) return null;
+  const totalMin = Math.round(diffMs / 60000);
+  if (totalMin < 1) return 'under a minute';
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m} minute${m === 1 ? '' : 's'}`;
+  return `${h} hour${h === 1 ? '' : 's'}${m > 0 ? ` ${m} minute${m === 1 ? '' : 's'}` : ''}`;
+}
+
 export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [loading, setLoading] = useState(true);
   const [setup, setSetup] = useState<RevisionSetup | null>(null);
@@ -110,6 +128,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // Active/timer
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   // Submission upload
   const [uploadMode, setUploadMode] = useState<'photos' | 'pdf'>('photos');
@@ -288,7 +307,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       setSessionId(crypto.randomUUID());
       setPdfFile(null);
       setCurrentPaper((p) => (p ? { ...p, status: 'submitted' } : p));
-      setCurrentSubmission({ id: submissionId, revisionPaperId: currentPaper.id, status: 'pending', aiScore: null, aiFeedback: null, isLate: !!result.data.submission?.isLate });
+      setCurrentSubmission({ id: submissionId, revisionPaperId: currentPaper.id, status: 'pending', aiScore: null, aiFeedback: null, isLate: !!result.data.submission?.isLate, submittedAt: result.data.submission?.submittedAt });
 
       if (submissionId) {
         setCheckingNow(true);
@@ -339,6 +358,101 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     );
   }
 
+  if (showGuidelines) {
+    const section = (icon: React.ElementType, title: string, lines: string[], iconColor: string) => {
+      const Icon = icon;
+      return (
+        <div className={`${cardClass(isLightMode)} space-y-3`}>
+          <h2 className={`text-sm font-black flex items-center gap-2 uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+            <Icon className={`w-4 h-4 ${iconColor}`} /> {title}
+          </h2>
+          <ul className="space-y-2">
+            {lines.map((line, i) => (
+              <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                <span className={`mt-0.5 shrink-0 ${iconColor}`}>•</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    };
+    return (
+      <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+        <div className="max-w-3xl mx-auto space-y-6">
+          <button onClick={() => setShowGuidelines(false)} className={`flex items-center gap-1.5 text-xs font-bold cursor-pointer ${isLightMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}>
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Revision
+          </button>
+
+          <div className={`${cardClass(isLightMode)} space-y-2`}>
+            <h1 className={`text-xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+              <ListChecks className="w-5 h-5 text-cyan-400" /> Revision Guidelines
+            </h1>
+            <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+              Everything about how Revision works, how your paper is set, and exactly how it's checked -- read this once so there are no surprises.
+            </p>
+          </div>
+
+          {section(BookOpen, 'What Revision is for', [
+            'Revision is separate from admin-posted Homework -- it\'s a self-serve practice tool you control yourself, for a half-yearly, pre-board, unit test, periodic test, final exam, or just for the habit of revising regularly.',
+            'It is not graded coursework -- your admin/teacher can see your activity and scores in a report, but nothing here affects your Homework record.',
+          ], 'text-cyan-400')}
+
+          {section(Calendar, 'Setting your syllabus', [
+            'Set your syllabus for Maths and/or Science by typing chapter names (one per line) or uploading a photo of your syllabus/date-sheet page -- either works.',
+            'For each subject, you can give an exam date, or tick "No exam -- just revising" if you\'re not preparing for a specific exam.',
+            'You can edit your syllabus or exam dates at any time using "Edit Syllabus / Exam Dates" above.',
+          ], 'text-cyan-400')}
+
+          {section(RefreshCw, 'How your paper is picked', [
+            'Each time you get a new paper, Revision picks whichever subject is furthest behind in this cycle (fewest chapters completed so far); if both are equal, the subject with the nearer exam date goes first. You will always get both subjects over time -- it never sticks to just one.',
+            'Within that subject, a chapter you haven\'t completed yet is picked (randomly, so you don\'t always see the same order).',
+            'You can hit "Switch Chapter" as many times as you like before starting -- switching never counts as using up a chapter.',
+            'Once you submit and a chapter\'s paper is graded, that chapter won\'t come up again until every chapter in that subject\'s syllabus has been covered -- then the cycle starts fresh with new questions.',
+          ], 'text-cyan-400')}
+
+          {section(Award, 'The paper itself', [
+            'Every paper is a fixed 30-mark, 13-question CBSE-style paper: Section A (5 x 1 mark, objective/MCQ), Section B (3 x 2 marks), Section C (2 x 3 marks), Section D (2 x 4 marks, competency/case-based), Section E (1 x 5 marks, long answer).',
+            'Section D and E questions are often split into 2-3 sub-parts (e.g. 1+2+2 or 2+1+2 marks) -- the same way current CBSE teachers usually set these, though a single complete question shows up sometimes too. Splitting a question into parts never changes its total marks.',
+            'Science/Biology papers may include a "draw and label a diagram" style question -- a completely normal CBSE question type.',
+            'Every paper is freshly written for you -- questions are never reused, even if you see the same chapter again in a later cycle.',
+          ], 'text-cyan-400')}
+
+          {section(Clock, 'Timing', [
+            'You get 60 minutes to solve the paper, plus 15 extra minutes just to upload your answers -- 75 minutes total from the moment you tap "Start Now".',
+            'Submitting after that window is never blocked -- you can still upload late.',
+            'Late submission is shown on your result (e.g. "submitted 8 minutes after the time window") purely as information for you and your admin -- it does NOT reduce your score in any way. There is no late penalty in Revision.',
+          ], 'text-amber-400')}
+
+          {section(Download, 'Downloading and submitting', [
+            'Use "Download Paper PDF" for a clean, printable copy -- just the heading, chapter name, marking scheme, time allotted, and the questions. No answers.',
+            'Solve it on paper, then come back and submit photos of your pages (or a single PDF) -- exactly the same upload flow as Homework.',
+          ], 'text-cyan-400')}
+
+          {section(CheckCircle2, 'How your answers are checked', [
+            'Grading follows genuine CBSE board step marking: every question in Sections B-E has its own step-by-step marking scheme (method/formula, substitution, working, final answer), and each step is checked and awarded independently.',
+            'Section A (objective/MCQ) questions are all-or-nothing for their 1 mark -- there\'s no partial credit on these, since choosing an option isn\'t a multi-step working.',
+            '"Error carried forward" applies: if you make an early mistake but correctly follow the right method afterward using your own (incorrect) value, you still get credit for those later correct steps -- one mistake doesn\'t wipe out the rest of the question.',
+            'Handwriting quality and neatness are never marked down -- only the actual content of your answer matters.',
+            'Your score is always the exact sum of the steps you were awarded -- never a rough estimate.',
+          ], 'text-emerald-400')}
+
+          {section(RefreshCw, 'Improving your score', [
+            'If you didn\'t score full marks, an "Improve Score" button appears -- upload a fresh, complete attempt and it will be checked again from scratch.',
+            'Once you\'re happy with a chapter\'s result, "Get Next Chapter" moves you on to your next paper.',
+          ], 'text-cyan-400')}
+
+          <button
+            onClick={() => setShowGuidelines(false)}
+            className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition"
+          >
+            Back to Revision
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const mathsHasChapters = (setup?.mathsChapters?.length || 0) > 0;
   const scienceHasChapters = (setup?.scienceChapters?.length || 0) > 0;
   const hasAnySyllabus = mathsHasChapters || scienceHasChapters;
@@ -352,15 +466,24 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
             <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
               <BookOpen className="w-5 h-5 text-cyan-400" /> Revision
             </h2>
-            {hasAnySyllabus && (
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 type="button"
-                onClick={() => setShowSetupForm((v) => !v)}
-                className={`text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                onClick={() => setShowGuidelines(true)}
+                className={`flex items-center gap-1 text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
               >
-                {showSetupForm ? 'Hide Syllabus Editor' : 'Edit Syllabus / Exam Dates'}
+                <Info className="w-3.5 h-3.5" /> Guidelines
               </button>
-            )}
+              {hasAnySyllabus && (
+                <button
+                  type="button"
+                  onClick={() => setShowSetupForm((v) => !v)}
+                  className={`text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  {showSetupForm ? 'Hide Syllabus Editor' : 'Edit Syllabus / Exam Dates'}
+                </button>
+              )}
+            </div>
           </div>
           <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
             Set your syllabus once, then work through fresh 30-mark practice papers, one chapter at a time -- for a half-yearly, pre-board, unit test, or just for the habit of revising.
@@ -638,7 +761,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                 <Award className="w-10 h-10 text-emerald-400 mx-auto" />
                 <div>
                   <p className={`text-3xl font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{currentSubmission.aiScore ?? '--'} / {currentPaper.totalMarks}</p>
-                  <p className={`text-xs font-bold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{currentPaper.subject} -- {currentPaper.chapterName}{currentSubmission.isLate ? ' (submitted after the time window)' : ''}</p>
+                  <p className={`text-xs font-bold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{currentPaper.subject} -- {currentPaper.chapterName}</p>
+                  {currentSubmission.isLate && (
+                    <p className={`text-[11px] font-semibold mt-1.5 px-2.5 py-1 rounded-lg inline-block ${isLightMode ? 'bg-amber-50 text-amber-700' : 'bg-amber-500/10 text-amber-400'}`}>
+                      Submitted {formatLateBy(currentPaper.deadlineAt, currentSubmission.submittedAt) || 'late'} after the time window closed -- this does not reduce your score.
+                    </p>
+                  )}
                 </div>
                 {currentSubmission.aiFeedback && (
                   <div className={`text-left text-xs font-semibold whitespace-pre-line p-3 rounded-lg border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-300'}`}>
@@ -687,7 +815,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
               <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Your Paper Has Started!</h3>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
-                You have {currentPaper.timeAllottedMinutes} minutes to solve the paper, plus 15 extra minutes to upload your answers -- {currentPaper.deadlineAt ? new Date(currentPaper.deadlineAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''} is your hard cut-off. Download the PDF, solve it on paper, then come back here to submit.
+                You have {currentPaper.timeAllottedMinutes} minutes to solve the paper, plus 15 extra minutes to upload your answers -- try to submit by {currentPaper.deadlineAt ? new Date(currentPaper.deadlineAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : ''}. Download the PDF, solve it on paper, then come back here to submit. Submitting later than this is fine too -- it's shown on your result for information only and never reduces your score.
               </p>
               <button onClick={() => setShowDeadlineModal(false)} className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition">
                 Got It

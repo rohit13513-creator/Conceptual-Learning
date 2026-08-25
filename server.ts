@@ -9384,49 +9384,72 @@ function buildApp(): express.Express {
     return picked;
   }
 
-  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
-    const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
-    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}". Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). The paper MUST have exactly this fixed structure, 30 marks total:
-${sectionsText}
-Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer. Section D questions are competency/case-based -- give a short real-world scenario or data/passage, then ask 1-2 sub-questions about it, still worth 4 marks total for the whole question.
-
-For every question in Sections B, C, D, and E, write markingPoints as a genuine CBSE-board-style STEP marking scheme, exactly like the official marking scheme that would accompany this question on a real CBSE answer key: break the full solution into as many individual steps as the question's mark value (a 2-mark question gets 2 marking points, a 4-mark question gets 4, etc.), each worth exactly 1 mark, in the actual order the working proceeds -- typically: correct formula/concept/method identified, correct substitution of given values, correct intermediate simplification/steps (one point per major step for longer derivations), and the correct final answer/conclusion as its own separate point. Each marking point must be concrete and checkable (e.g. "Correctly states the quadratic formula" or "Correctly substitutes a=2, b=-5, c=3" or "Final answer: x=3, x=1/2"), not vague. For Section A (objective/MCQ or one-line factual answers), there is no step marking -- just write a single markingPoints entry with the one correct option/answer, since these are all-or-nothing for their 1 mark.`;
-
-    const tool = {
-      name: "submit_paper",
-      description: "Submit the generated revision paper.",
-      input_schema: {
-        type: "object",
-        properties: {
-          questions: {
-            type: "array",
-            description: "Exactly 13 questions in section order: 5 in A, 3 in B, 2 in C, 2 in D, 1 in E.",
-            items: {
-              type: "object",
-              properties: {
-                id: { type: "string", description: "e.g. A1, A2, B1, C1, D1, E1" },
-                sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
-                marks: { type: "integer" },
-                text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options inline where relevant." },
-                markingPoints: { type: "array", items: { type: "string" }, description: "For Section A: a single entry, the one correct option/answer (no step marking, all-or-nothing). For Sections B-E: one entry per mark, in step order (method/formula, substitution, working steps, final answer) -- a genuine CBSE-style step marking scheme, so the grader can award each step's mark independently. Grader-only, never shown to the student." },
-              },
-              required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
+  const REVISION_PAPER_TOOL = {
+    name: "submit_paper",
+    description: "Submit the generated revision paper.",
+    input_schema: {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          description: "Exactly 13 questions in section order: 5 in A, 3 in B, 2 in C, 2 in D, 1 in E.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "e.g. A1, A2, B1, C1, D1, E1" },
+              sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+              marks: { type: "integer" },
+              text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options and/or lettered sub-parts (i), (ii), (iii) inline where relevant." },
+              markingPoints: { type: "array", items: { type: "string" }, description: "For Section A: a single entry, the one correct option/answer (no step marking, all-or-nothing). For Sections B-E: one entry per mark, in step order (method/formula, substitution, working steps, final answer -- or, for a multi-part question, each sub-part's own step(s) in order) -- a genuine CBSE-style step marking scheme, so the grader can award each step's mark independently. The number of entries must always equal exactly this question's 'marks' value, however many sub-parts it has. Grader-only, never shown to the student." },
             },
+            required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
           },
         },
-        required: ["questions"],
       },
-    };
+      required: ["questions"],
+    },
+  };
+
+  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
+    const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
+    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}". Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
+${sectionsText}
+Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer.
+
+Section D (4 marks) and Section E (5 marks) questions: this is exactly how current CBSE teachers actually set these questions, and you must follow the same pattern. PREFER splitting the question into 2-3 lettered sub-parts, e.g. (i)/(ii) worth 2+2 or 1+3, or (i)/(ii)/(iii) worth 1+2+2 or 2+1+2 or 1+1+3 -- whatever split fits the content best, as long as the sub-part marks add up to exactly the question's total (4 for D, 5 for E). A single, complete, non-split question (e.g. one full derivation, one long-answer theory question, or one "draw and label a neat diagram of..." question for Science/Biology chapters) is also allowed and good to use sometimes, but multi-part is the more common, preferred style -- lean toward it more often than not. Section D should be competency/case-based (a short real-world scenario or data/passage, then sub-question(s) about it); Section E can be a multi-part numerical/derivation, a multi-part theory question, or a single substantial question, whichever suits the chapter's content best.
+
+For every question in Sections B, C, D, and E, write markingPoints as a genuine CBSE-board-style STEP marking scheme, exactly like the official marking scheme that would accompany this question on a real CBSE answer key: break the full solution into as many individual steps as the question's mark value (a 2-mark question gets 2 marking points, a 4-mark question gets 4, etc.), each worth exactly 1 mark, in the actual order the working proceeds -- typically: correct formula/concept/method identified, correct substitution of given values, correct intermediate simplification/steps (one point per major step for longer derivations), and the correct final answer/conclusion as its own separate point; for a multi-part question, this just means each sub-part contributes its own share of steps in order (e.g. a 1+2+2 split contributes 1 step for part (i), 2 for part (ii), 2 for part (iii) -- 5 total). However you divide a question, the number of marking points must always sum to exactly that question's own 'marks' value -- never more, never fewer -- so splitting into sub-parts never changes how many marks are actually available or costs the student anything extra. Each marking point must be concrete and checkable (e.g. "Correctly states the quadratic formula" or "(ii) Correctly labels the nucleus and cell membrane"), not vague. For Section A (objective/MCQ or one-line factual answers), there is no step marking -- just write a single markingPoints entry with the one correct option/answer, since these are all-or-nothing for their 1 mark.`;
 
     const result = await callClaudeTool({
       system,
       content: [{ type: "text", text: "Generate the paper now." }],
-      tool,
+      tool: REVISION_PAPER_TOOL,
       maxTokens: 6000,
     });
-    const questions = Array.isArray(result.questions) ? result.questions : [];
-    if (questions.length === 0) throw new Error("Claude did not return any questions.");
-    return questions;
+    const draft = Array.isArray(result.questions) ? result.questions : [];
+    if (draft.length === 0) throw new Error("Claude did not return any questions.");
+
+    // Second pass: recheck the just-drafted paper for correctness before it's ever shown to a
+    // student -- a math/science teacher would never hand out a paper without proofreading it
+    // first, and the first draft is where an occasional wrong final answer or ill-posed question
+    // would show up. Mirrors the same "generate, then separately self-critique" shape already used
+    // for chapter notes (finalReviewChapterNotes) rather than trusting a single-pass draft.
+    try {
+      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student. Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
+      const reviewed = await callClaudeTool({
+        system: reviewSystem,
+        content: [{ type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
+        tool: REVISION_PAPER_TOOL,
+        maxTokens: 6000,
+      });
+      const final = Array.isArray(reviewed.questions) && reviewed.questions.length > 0 ? reviewed.questions : draft;
+      return final;
+    } catch (err: any) {
+      // The review pass is a quality improvement, not a hard requirement -- if it fails for any
+      // reason, the unreviewed (but already validly-generated) draft is still a usable paper.
+      console.error("Revision paper review pass failed, using unreviewed draft:", err.message);
+      return draft;
+    }
   }
 
   function mapRevisionPaperForStudent(row: any) {
@@ -9939,7 +9962,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
     }
     await supabase.from("revision_papers").update({ status: "submitted" }).eq("id", paperId);
-    return res.json({ success: true, submission: { id: row.id, status: row.status, isLate: row.is_late } });
+    return res.json({ success: true, submission: { id: row.id, status: row.status, isLate: row.is_late, submittedAt: row.submitted_at } });
   }
 
   app.post("/api/revision/finalize-submission", async (req, res) => {
@@ -9957,7 +9980,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
     if (!merged) {
       const justCreated = await findJustCreatedRevisionSubmission(auth.email, String(paperId));
-      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late } });
+      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late, submittedAt: justCreated.submitted_at } });
       return res.status(400).json({ error: "No uploaded photos were found. Please attach at least one photo and wait for it to finish uploading before submitting." });
     }
     return finalizeRevisionSubmission(auth, String(paperId), merged, res);
@@ -9978,7 +10001,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
     if (!combined) {
       const justCreated = await findJustCreatedRevisionSubmission(auth.email, String(paperId));
-      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late } });
+      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late, submittedAt: justCreated.submitted_at } });
       return res.status(400).json({ error: "No uploaded file pieces were found. Please attach a PDF and wait for it to finish uploading before submitting." });
     }
     return finalizeRevisionSubmission(auth, String(paperId), combined, res);
@@ -9993,7 +10016,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     if (!sub || sub.student_email !== auth.email) return res.status(404).json({ error: "Submission not found." });
     await checkRevisionSubmission(String(submissionId));
     const { data: updated } = await supabase.from("revision_submissions").select("*").eq("id", submissionId).maybeSingle();
-    return res.json({ submission: updated ? { id: updated.id, status: updated.status, aiScore: updated.ai_score, aiFeedback: updated.ai_feedback, isLate: updated.is_late } : null });
+    return res.json({ submission: updated ? { id: updated.id, status: updated.status, aiScore: updated.ai_score, aiFeedback: updated.ai_feedback, isLate: updated.is_late, submittedAt: updated.submitted_at } : null });
   });
 
   app.get("/api/revision/mine", async (req, res) => {
