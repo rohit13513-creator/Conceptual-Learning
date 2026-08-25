@@ -4161,7 +4161,7 @@ export default function App() {
               <BookOpen className="w-7 h-7 shrink-0 text-cyan-400" />
               <div className="flex-1">
                 <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Revision</p>
-                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed and AI-checked.</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed, with instant feedback.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
@@ -4319,7 +4319,7 @@ export default function App() {
               <BookOpen className="w-7 h-7 shrink-0 text-cyan-400" />
               <div className="flex-1">
                 <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Revision</p>
-                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed and AI-checked.</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed, with instant feedback.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
