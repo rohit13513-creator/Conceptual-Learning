@@ -9425,20 +9425,56 @@ function buildApp(): express.Express {
     },
   };
 
-  // Looks up every admin-uploaded reference PDF on file for this class/subject (see
-  // REVISION_REFERENCE_PREFIX above -- one folder per class/subject, any number of files: one per
-  // chapter, multiple volumes, etc.) and returns them all as Claude document content blocks.
-  // classLabel is the Roman-numeral form ("VIII"/"IX"/"X") already used elsewhere in Revision;
-  // CLASS_TO_TARGET converts it to the "8th"/"9th"/"10th" storage key. Empty array if none on file.
-  async function getRevisionReferenceBookBlocks(classLabel: string, subject: "Maths" | "Science"): Promise<any[]> {
+  // How well a reference file's (renamed, human-readable) title matches the chapter name a
+  // student's own syllabus gave us -- used to attach only the relevant file(s) to a generation
+  // call instead of the whole book folder (see getRevisionReferenceBookBlocks below).
+  function chapterMatchScore(chapterName: string, fileTitle: string): number {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const a = norm(chapterName);
+    const b = norm(fileTitle);
+    if (!a || !b) return 0;
+    if (a === b) return 100;
+    if (a.includes(b) || b.includes(a)) return 80;
+    const aWords = a.split(" ").filter((w) => w.length > 2);
+    const bWords = new Set(b.split(" ").filter((w) => w.length > 2));
+    if (aWords.length === 0) return 0;
+    const overlap = aWords.filter((w) => bWords.has(w)).length;
+    return (overlap / aWords.length) * 60;
+  }
+
+  // Looks up admin-uploaded reference PDF(s) on file for this class/subject that actually look
+  // like they cover the requested chapter (see REVISION_REFERENCE_PREFIX above -- one folder per
+  // class/subject, any number of files: one per chapter, multiple volumes, etc.) and returns them
+  // as Claude document content blocks. classLabel is the Roman-numeral form ("VIII"/"IX"/"X")
+  // already used elsewhere in Revision; CLASS_TO_TARGET converts it to the "8th"/"9th"/"10th"
+  // storage key. Empty array if none on file or nothing matches well enough.
+  //
+  // Deliberately does NOT attach every file in the folder -- a real book folder can hold a dozen-
+  // plus chapter PDFs worth tens of MB combined, and attaching all of them to every single
+  // generation call (twice, once for the draft and once for the review pass) was the single
+  // biggest driver of API cost once reference books were in use. Matching by title keeps the
+  // attached material to what's actually relevant.
+  async function getRevisionReferenceBookBlocks(classLabel: string, subject: "Maths" | "Science", chapterName: string): Promise<any[]> {
     const classKey = CLASS_TO_TARGET[classLabel];
     if (!classKey) return [];
     const folder = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`;
     const { data: fileList } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(folder);
     const pdfFiles = (fileList || []).filter((f: any) => f.name.toLowerCase().endsWith(".pdf"));
     if (pdfFiles.length === 0) return [];
+
+    const scored = pdfFiles
+      .map((f: any) => ({ f, score: chapterMatchScore(chapterName, referenceBookDisplayTitle(f.name)) }))
+      .filter((x: any) => x.score >= 30)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 2);
+
+    // If nothing scored well -- e.g. files are still in their original NCERT filename form
+    // (hegp101.pdf etc.), which carries no matchable text before renaming -- fall back to
+    // attaching the whole folder only when it's small enough to stay cheap either way.
+    const toFetch = scored.length > 0 ? scored.map((x: any) => x.f) : (pdfFiles.length <= 3 ? pdfFiles : []);
+
     const blocks: any[] = [];
-    for (const f of pdfFiles) {
+    for (const f of toFetch) {
       const { data: blob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(`${folder}/${f.name}`);
       if (!blob) continue;
       const buf = Buffer.from(await blob.arrayBuffer());
@@ -9449,7 +9485,7 @@ function buildApp(): express.Express {
 
   async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
-    const referenceBlocks = await getRevisionReferenceBookBlocks(classLabel, subject);
+    const referenceBlocks = await getRevisionReferenceBookBlocks(classLabel, subject, chapterName);
     const referenceInstruction = referenceBlocks.length > 0
       ? ` The attached PDF(s) are the actual official textbook material this student's class uses for ${subject} -- possibly one file per chapter, or multiple volumes, so not every attached file is relevant to this specific chapter. They may use different chapter names, ordering, or topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find whichever attached file(s) actually cover "${chapterName}" and base every question strictly on that content, terminology, and depth as it appears there -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached material.`
       : ` No reference textbook is on file for this class/subject, so use your own best knowledge of the CBSE curriculum for this chapter -- if "${chapterName}" doesn't clearly match a chapter you know, interpret it as sensibly as possible from the name and class level given.`;
@@ -9491,6 +9527,40 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       console.error("Revision paper review pass failed, using unreviewed draft:", err.message);
       return draft;
     }
+  }
+
+  // Looks for an already-generated paper for this exact (class, subject, chapter) combination --
+  // from ANY student, not just this one -- so a whole class working through the same syllabus
+  // doesn't each pay for a fresh generation call for the same chapter. Matching is by exact
+  // (case-sensitive, as-typed) chapter name, so it only kicks in when two students' syllabi name
+  // the chapter identically; a near-miss just falls through to a normal fresh generation, never a
+  // wrong-content match. Returns null on a miss.
+  async function findReusableRevisionQuestions(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[] | null> {
+    const { data: candidates } = await supabase
+      .from("revision_papers")
+      .select("student_email, content, created_at")
+      .eq("subject", subject)
+      .eq("chapter_name", chapterName)
+      .order("created_at", { ascending: false })
+      .limit(25);
+    if (!candidates || candidates.length === 0) return null;
+
+    const emails = [...new Set(candidates.map((c: any) => c.student_email))];
+    const { data: users } = await supabase.from("users").select("email, student_class").in("email", emails);
+    const classByEmail = new Map((users || []).map((u: any) => [u.email, u.student_class]));
+
+    const match = candidates.find((c: any) => classByEmail.get(c.student_email) === classLabel);
+    const questions = match?.content?.questions;
+    return Array.isArray(questions) && questions.length > 0 ? questions : null;
+  }
+
+  // Drop-in wrapper around generateRevisionPaper that checks the reuse cache first -- same
+  // (subject, chapterName, classLabel) argument order, so both call sites below just swap the
+  // function name.
+  async function getRevisionQuestionsForTarget(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
+    const reused = await findReusableRevisionQuestions(subject, chapterName, classLabel);
+    if (reused) return reused;
+    return generateRevisionPaper(subject, chapterName, classLabel);
   }
 
   function mapRevisionPaperForStudent(row: any) {
@@ -9836,7 +9906,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
 
     try {
-      const questions = await generateRevisionPaper(target.subject, target.chapterName, classLabel);
+      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel);
       const { data: paperRow, error: insertError } = await supabase
         .from("revision_papers")
         .insert({
@@ -9883,7 +9953,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
 
     try {
-      const questions = await generateRevisionPaper(target.subject, target.chapterName, classLabel);
+      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel);
       const { data: paperRow, error: insertError } = await supabase
         .from("revision_papers")
         .insert({
@@ -10131,6 +10201,49 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // request body can carry.
   const REVISION_REFERENCE_CLASS_KEYS = ["8th", "9th", "10th"] as const;
   const REVISION_REFERENCE_SUBJECTS = ["Maths", "Science"] as const;
+
+  // Reference-book file names are "NN Chapter Title.pdf" (see the admin rename tooling) -- strip
+  // the sort-order prefix and extension to get a clean display title.
+  function referenceBookDisplayTitle(fileName: string): string {
+    return fileName.replace(/^\d+\s+/, "").replace(/\.pdf$/i, "");
+  }
+
+  // Student-facing: browse and download the reference NCERT chapter PDFs on file for the logged-in
+  // student's own class (same files the admin uploaded to ground Revision paper generation --
+  // repurposed here as a plain "download the textbook chapter" utility for students).
+  app.get("/api/revision/reference-books/mine", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const classLabel = await resolveClassLabelForRevision(auth);
+    const classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any)) {
+      return res.status(400).json({ error: "We couldn't determine your class. Please set it in the Revision syllabus setup first." });
+    }
+    const subjects: Record<string, { fileName: string; title: string }[]> = { Maths: [], Science: [] };
+    for (const subject of REVISION_REFERENCE_SUBJECTS) {
+      const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`);
+      subjects[subject] = (data || [])
+        .filter((f: any) => f.name.toLowerCase().endsWith(".pdf"))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name))
+        .map((f: any) => ({ fileName: f.name, title: referenceBookDisplayTitle(f.name) }));
+    }
+    return res.json({ classKey, subjects });
+  });
+
+  app.get("/api/revision/reference-books/download", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { classKey, subject, fileName } = req.query as { classKey?: string; subject?: string; fileName?: string };
+    if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any) || !subject || !REVISION_REFERENCE_SUBJECTS.includes(subject as any) || !fileName) {
+      return res.status(400).json({ error: "Invalid request." });
+    }
+    const { data: blob, error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}/${fileName}`);
+    if (error || !blob) return res.status(404).json({ error: "That file could not be found." });
+    const buf = Buffer.from(await blob.arrayBuffer());
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${referenceBookDisplayTitle(fileName).replace(/"/g, "")}.pdf"`);
+    return res.send(buf);
+  });
 
   app.get("/api/admin/revision/reference-books", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;

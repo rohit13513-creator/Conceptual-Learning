@@ -17,6 +17,7 @@ import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
+import { NcertDownloads } from './components/NcertDownloads';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
@@ -503,10 +504,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -3641,6 +3642,19 @@ export default function App() {
             <span>Revision</span>
           </button>
 
+          {/* Tab: Download NCERT -- chapter-wise textbook PDFs for the student's own class */}
+          <button
+            onClick={() => { changeView('ncertDownloads'); setOpenMenu(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeView === 'ncertDownloads'
+                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+            }`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download NCERT</span>
+          </button>
+
           {/* Tab: Forum */}
           <button
             onClick={() => { changeView('forum'); setOpenMenu(null); }}
@@ -4310,6 +4324,18 @@ export default function App() {
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
 
+            <button
+              onClick={() => changeView('ncertDownloads')}
+              className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-slate-50 to-slate-100 border-slate-300' : 'from-slate-800/40 to-slate-900/40 border-slate-700'}`}
+            >
+              <Download className="w-7 h-7 shrink-0 text-cyan-400" />
+              <div className="flex-1">
+                <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Download NCERT</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Chapter-wise textbook PDFs for your class, ready to download.</p>
+              </div>
+              <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
+            </button>
+
             <div className="space-y-2">
               <h2 className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Subject</h2>
               <p className={`text-xs font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Pick a subject to open its study notes.</p>
@@ -4464,6 +4490,19 @@ export default function App() {
               <div className="flex-1">
                 <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Revision</p>
                 <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed, with instant feedback.</p>
+              </div>
+              <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
+            </button>
+
+            {/* Download NCERT box */}
+            <button
+              onClick={() => changeView('ncertDownloads')}
+              className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-slate-50 to-slate-100 border-slate-300' : 'from-slate-800/40 to-slate-900/40 border-slate-700'}`}
+            >
+              <Download className="w-7 h-7 shrink-0 text-cyan-400" />
+              <div className="flex-1">
+                <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Download NCERT</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Chapter-wise textbook PDFs for your class, ready to download.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
@@ -6589,6 +6628,10 @@ export default function App() {
 
       {activeView === 'revision' && user && (
         <Revision isLightMode={isLightMode} user={{ name: user.name, email: user.email, token: user.token, role: user.role, studentClass: user.studentClass }} />
+      )}
+
+      {activeView === 'ncertDownloads' && user && (
+        <NcertDownloads isLightMode={isLightMode} user={{ email: user.email, token: user.token }} />
       )}
 
       {activeView === 'startStudying' && (() => {
