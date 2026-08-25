@@ -32,6 +32,9 @@ interface RevisionQuestion {
   sectionLabel: 'A' | 'B' | 'C' | 'D' | 'E';
   marks: number;
   text: string;
+  // The step-by-step marking scheme -- only ever present once the paper's status is 'graded' (the
+  // backend withholds it entirely while a paper is still being attempted).
+  markingPoints?: string[];
 }
 
 interface RevisionPaper {
@@ -129,6 +132,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
+
+  // Whether the per-question marking-scheme breakdown is expanded on the result screen -- reset
+  // whenever a new paper/submission comes into view so it doesn't carry over from a previous one.
+  const [showSolution, setShowSolution] = useState(false);
 
   // Chapter breakdown/picker -- a student always sees which chapter they're about to be tested on
   // and picks it themselves from their own syllabus, before anything is generated. pendingChoice
@@ -324,6 +331,16 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                 .then((r) => r.json())
                 .then((d) => { if (d?.setup) setSetup(d.setup); })
                 .catch(() => {});
+              // The paper still held in memory was fetched before grading, so it has no
+              // markingPoints yet (the backend only includes them once status is 'graded') --
+              // refetch it now so "View Solution" actually has something to show.
+              fetch('/api/revision/mine', { headers: { Authorization: `Bearer ${user.token}` } })
+                .then((r) => r.json())
+                .then((d) => {
+                  const graded = (d?.papers || []).find((p: RevisionPaper) => p.id === currentPaper.id);
+                  if (graded) setCurrentPaper(graded);
+                })
+                .catch(() => {});
             }
           }
         } catch {
@@ -343,11 +360,13 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const handleImproveScore = () => {
     setCurrentSubmission(null);
     setError(null);
+    setShowSolution(false);
   };
 
   const handleNextChapter = () => {
     setCurrentPaper(null);
     setCurrentSubmission(null);
+    setShowSolution(false);
   };
 
   if (loading) {
@@ -802,6 +821,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     </button>
                   )}
                   <button
+                    onClick={() => setShowSolution((v) => !v)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                  >
+                    {showSolution ? 'Hide Solution' : 'View Solution'}
+                  </button>
+                  <button
                     onClick={handleNextChapter}
                     disabled={generating}
                     className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-50"
@@ -809,6 +834,38 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     {generating ? 'Generating...' : 'Get Next Chapter'} <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
+                {showSolution && (
+                  <div className={`text-left space-y-4 border-t pt-4 ${isLightMode ? 'border-slate-200' : 'border-slate-800'}`}>
+                    {!currentPaper.questions[0]?.markingPoints ? (
+                      <p className={`text-xs font-semibold text-center ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading solution...</p>
+                    ) : (
+                      REVISION_SECTION_ORDER.map((label) => {
+                        const qs = currentPaper.questions.filter((q) => q.sectionLabel === label);
+                        if (qs.length === 0) return null;
+                        return (
+                          <div key={label} className="space-y-2">
+                            <h4 className={`text-[11px] font-black uppercase tracking-wide font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{SECTION_LABELS[label]}</h4>
+                            {qs.map((q) => (
+                              <div key={q.id} className={`p-3 rounded-lg border text-sm ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                                <p className={`font-semibold ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>
+                                  <span className="text-cyan-400 font-mono mr-1.5">{q.id}.</span>{q.text}
+                                </p>
+                                <ul className="mt-2 space-y-1">
+                                  {(q.markingPoints || []).map((mp, i) => (
+                                    <li key={i} className={`flex items-start gap-1.5 text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" /> {mp}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

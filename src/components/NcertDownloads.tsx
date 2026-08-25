@@ -105,17 +105,27 @@ export function NcertDownloads({ isLightMode = false, user }: NcertDownloadsProp
     }
   };
 
+  // The app shell is a fixed h-screen/overflow-hidden layout -- every view is responsible for its
+  // own scrolling via flex-1 overflow-y-auto (see Revision.tsx for the same pattern). Without this,
+  // content past the viewport height was simply clipped with no way to reach it: no scrollbar, no
+  // drag, no arrow keys, because the browser never saw anything to scroll in the first place.
+  const scrollShell = (children: React.ReactNode) => (
+    <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+      <div className="max-w-3xl mx-auto space-y-5">{children}</div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <Loader2 className={`w-8 h-8 mx-auto animate-spin ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`} />
+      <div className={`flex-1 flex items-center justify-center h-full ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+        <Loader2 className={`w-8 h-8 animate-spin ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`} />
       </div>
     );
   }
 
   if (needsClassPick) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-10 space-y-5">
+    return scrollShell(
+      <>
         <div>
           <h2 className={`text-xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
             <BookOpen className="w-5 h-5 text-cyan-400" /> Download NCERT
@@ -138,18 +148,16 @@ export function NcertDownloads({ isLightMode = false, user }: NcertDownloadsProp
             ))}
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (error) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-10">
-        <div className={cardClass(isLightMode)}>
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{error}</p>
-          </div>
+    return scrollShell(
+      <div className={cardClass(isLightMode)}>
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{error}</p>
         </div>
       </div>
     );
@@ -160,8 +168,8 @@ export function NcertDownloads({ isLightMode = false, user }: NcertDownloadsProp
     Science: { icon: FlaskConical, color: 'emerald' },
   } as const;
 
-  return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-5">
+  return scrollShell(
+    <>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className={`text-xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
@@ -225,6 +233,7 @@ export function NcertDownloads({ isLightMode = false, user }: NcertDownloadsProp
           </ul>
         </div>
       )}
-    </div>
+    </>
   );
 }
+
