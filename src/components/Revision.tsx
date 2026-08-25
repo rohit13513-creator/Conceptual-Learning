@@ -296,7 +296,15 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId } });
           if (checkResult.ok && checkResult.data.submission) {
             setCurrentSubmission(checkResult.data.submission);
-            if (checkResult.data.submission.status === 'checked') setCurrentPaper((p) => (p ? { ...p, status: 'graded' } : p));
+            if (checkResult.data.submission.status === 'checked') {
+              setCurrentPaper((p) => (p ? { ...p, status: 'graded' } : p));
+              // A graded submission just marked a chapter "done this cycle" server-side -- refetch
+              // so the syllabus summary above (chapter counts) doesn't sit stale until next reload.
+              fetch('/api/revision/setup', { headers: { Authorization: `Bearer ${user.token}` } })
+                .then((r) => r.json())
+                .then((d) => { if (d?.setup) setSetup(d.setup); })
+                .catch(() => {});
+            }
           }
         } catch {
           // Already told the student it's uploaded -- grading will be retried automatically.
