@@ -138,6 +138,16 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // whenever a new paper/submission comes into view so it doesn't carry over from a previous one.
   const [showSolution, setShowSolution] = useState(false);
 
+  // True from the moment "Improve Score" is clicked until either a new resubmission is uploaded
+  // or the student leaves for a different chapter. Needed for two reasons: (1) it distinguishes
+  // "resubmitting this same paper" from the unrelated recovery fallback that also shows when a
+  // submitted paper has no matching submission record, which would otherwise wrongly bounce the
+  // student to the chapter picker (with the very chapter they're improving now shown as done and
+  // disabled) instead of back to the upload form; (2) it's the trigger to strip the just-graded
+  // paper's markingPoints out of memory before showing it again, so the answer key a student saw
+  // on the result screen isn't still sitting in state while they re-attempt the same paper.
+  const [improvingScore, setImprovingScore] = useState(false);
+
   // Chapter breakdown/picker -- a student always sees which chapter they're about to be tested on
   // and picks it themselves from their own syllabus, before anything is generated. pendingChoice
   // holds the just-tapped chapter while the "are you ready" confirmation is open; nothing is
@@ -234,6 +244,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       setCurrentPaper({ ...paper, status: 'active', startedAt: startResult.data.startedAt, deadlineAt: startResult.data.deadlineAt });
       setCurrentSubmission(null);
       setPendingChoice(null);
+      setImprovingScore(false);
       setShowDeadlineModal(true);
     } catch (err: any) {
       setError(err.message);
@@ -317,6 +328,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       setPdfFile(null);
       setCurrentPaper((p) => (p ? { ...p, status: 'submitted' } : p));
       setCurrentSubmission({ id: submissionId, revisionPaperId: currentPaper.id, status: 'pending', aiScore: null, aiFeedback: null, isLate: !!result.data.submission?.isLate, submittedAt: result.data.submission?.submittedAt });
+      setImprovingScore(false);
 
       if (submissionId) {
         setCheckingNow(true);
@@ -362,12 +374,18 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     setCurrentSubmission(null);
     setError(null);
     setShowSolution(false);
+    setImprovingScore(true);
+    // Put the same paper back in front of the student to re-attempt, with the marking scheme/
+    // answer key they just saw on the result screen stripped back out -- they must solve it again
+    // without the answers available, exactly as if they were seeing it for the first time.
+    setCurrentPaper((p) => (p ? { ...p, status: 'submitted', questions: p.questions.map((q) => ({ ...q, markingPoints: undefined })) } : p));
   };
 
   const handleNextChapter = () => {
     setCurrentPaper(null);
     setCurrentSubmission(null);
     setShowSolution(false);
+    setImprovingScore(false);
   };
 
   if (loading) {
@@ -620,7 +638,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
         {!showSetupForm && hasAnySyllabus && (
           <>
-            {!currentPaper || currentPaper.status === 'graded' || (currentPaper.status === 'submitted' && currentSubmission?.status !== 'checked' && currentSubmission?.status !== 'pending') ? (
+            {!improvingScore && (!currentPaper || currentPaper.status === 'graded' || (currentPaper.status === 'submitted' && currentSubmission?.status !== 'checked' && currentSubmission?.status !== 'pending')) ? (
               <div className={`${cardClass(isLightMode)} space-y-4`}>
                 <div>
                   <h3 className={`text-sm font-black uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Chapter</h3>
