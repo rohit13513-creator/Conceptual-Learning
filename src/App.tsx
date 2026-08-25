@@ -4120,10 +4120,23 @@ export default function App() {
                       <p className={`text-[10px] font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                         {new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {' -- '}{p.status}
-                        {p.submission?.aiScore != null && ` -- ${p.submission.aiScore}/${p.totalMarks}`}
                         {p.submission?.isLate && ' -- late'}
                         {p.cycleNumber > 1 && ` -- cycle ${p.cycleNumber}`}
                       </p>
+                      {(p.submission?.firstAttemptScore != null || p.submission?.aiScore != null) && (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {p.submission?.firstAttemptScore != null && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${isLightMode ? 'bg-slate-200 text-slate-600' : 'bg-slate-800 text-slate-400'}`}>
+                              First attempt: {p.submission.firstAttemptScore}/{p.totalMarks}
+                            </span>
+                          )}
+                          {p.submission?.aiScore != null && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${p.submission.firstAttemptScore != null ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : (isLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-500/10 text-cyan-400')}`}>
+                              {p.submission.firstAttemptScore != null ? 'After improvement: ' : ''}{p.submission.aiScore}/{p.totalMarks}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button

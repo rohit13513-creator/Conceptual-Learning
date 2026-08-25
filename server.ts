@@ -9626,7 +9626,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   async function upsertRevisionSubmission(params: { studentEmail: string; paperId: string; filePath: string; isLate: boolean }): Promise<any> {
     const { data: existing } = await supabase
       .from("revision_submissions")
-      .select("id, file_path")
+      .select("id, file_path, ai_score, first_attempt_score")
       .eq("student_email", params.studentEmail)
       .eq("revision_paper_id", params.paperId)
       .order("submitted_at", { ascending: false })
@@ -9634,16 +9634,23 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       .maybeSingle();
 
     if (existing) {
+      const updates: Record<string, any> = {
+        file_path: params.filePath,
+        submitted_at: new Date().toISOString(),
+        is_late: params.isLate,
+        status: "pending",
+        ai_score: null,
+        ai_feedback: null,
+      };
+      // The very first graded score is captured here, permanently, the moment a student
+      // re-submits to improve it -- a second or third "Improve Score" attempt never overwrites
+      // it again, so "first attempt" in admin reports always genuinely means attempt 1.
+      if (existing.first_attempt_score == null && existing.ai_score != null) {
+        updates.first_attempt_score = existing.ai_score;
+      }
       const { data: updatedRow, error: updateError } = await supabase
         .from("revision_submissions")
-        .update({
-          file_path: params.filePath,
-          submitted_at: new Date().toISOString(),
-          is_late: params.isLate,
-          status: "pending",
-          ai_score: null,
-          ai_feedback: null,
-        })
+        .update(updates)
         .eq("id", existing.id)
         .select()
         .single();
@@ -10235,7 +10242,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     if (paperIds.length > 0) {
       const { data } = await supabase
         .from("revision_submissions")
-        .select("id, revision_paper_id, status, ai_score, is_late, submitted_at, file_path")
+        .select("id, revision_paper_id, status, ai_score, first_attempt_score, is_late, submitted_at, file_path")
         .in("revision_paper_id", paperIds);
       submissions = data || [];
     }
@@ -10250,7 +10257,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         status: p.status,
         createdAt: p.created_at,
         cycleNumber: p.cycle_number || 1,
-        submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
+        submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, firstAttemptScore: sub.first_attempt_score, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
       };
     });
     return res.json({ papers: result });
