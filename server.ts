@@ -9630,7 +9630,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   async function upsertRevisionSubmission(params: { studentEmail: string; paperId: string; filePath: string; isLate: boolean }): Promise<any> {
     const { data: existing } = await supabase
       .from("revision_submissions")
-      .select("id, file_path, ai_score, first_attempt_score")
+      .select("id, file_path, ai_score, ai_feedback, first_attempt_score, first_attempt_feedback")
       .eq("student_email", params.studentEmail)
       .eq("revision_paper_id", params.paperId)
       .order("submitted_at", { ascending: false })
@@ -9646,13 +9646,15 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         ai_score: null,
         ai_feedback: null,
       };
-      // The very first graded score is captured here, permanently, the moment a student
-      // re-submits to improve it -- a second or third "Improve Score" attempt never overwrites
-      // it again, so "first attempt" in admin reports always genuinely means attempt 1.
-      // TODO: also preserve first_attempt_feedback once that column exists (pending SQL migration
-      // handed to the admin -- see the "first attempt remarks" work).
+      // The very first graded score AND remarks are captured here, permanently, the moment a
+      // student re-submits to improve it -- a second or third "Improve Score" attempt never
+      // overwrites either again, so "first attempt" in admin reports always genuinely means
+      // attempt 1, not whichever attempt happened to be graded before the most recent one.
       if (existing.first_attempt_score == null && existing.ai_score != null) {
         updates.first_attempt_score = existing.ai_score;
+      }
+      if (existing.first_attempt_feedback == null && existing.ai_feedback != null) {
+        updates.first_attempt_feedback = existing.ai_feedback;
       }
       const { data: updatedRow, error: updateError } = await supabase
         .from("revision_submissions")
@@ -10384,8 +10386,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     if (paperIds.length > 0) {
       const { data } = await supabase
         .from("revision_submissions")
-        // TODO: add first_attempt_feedback once that column exists (pending SQL migration).
-        .select("id, revision_paper_id, status, ai_score, ai_feedback, first_attempt_score, is_late, submitted_at, file_path")
+        .select("id, revision_paper_id, status, ai_score, ai_feedback, first_attempt_score, first_attempt_feedback, is_late, submitted_at, file_path")
         .in("revision_paper_id", paperIds);
       submissions = data || [];
     }
