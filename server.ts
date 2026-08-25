@@ -10422,6 +10422,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         subject: paper.subject,
         chapterName: paper.chapter_name,
         totalMarks: paper.total_marks,
+        timeAllottedMinutes: paper.time_allotted_minutes,
         status: paper.status,
         createdAt: paper.created_at,
         cycleNumber: paper.cycle_number || 1,

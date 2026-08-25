@@ -164,6 +164,11 @@ import {
   X
 } from 'lucide-react';
 
+// Mirrors Revision.tsx's own section constants -- used only for the admin's Question Paper /
+// Answer Key PDF exports, which group by section the same way a student's own paper does.
+const REVISION_SECTION_LABELS: Record<string, string> = { A: 'Section A -- Objective', B: 'Section B -- Short Answer', C: 'Section C -- Short Answer', D: 'Section D -- Competency Based', E: 'Section E -- Long Answer' };
+const REVISION_SECTION_ORDER: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
   { id: 'plane-mirror',   label: 'Plane Mirror',   group: 'mirror' },
   { id: 'concave-mirror', label: 'Concave Mirror', group: 'mirror' },
@@ -774,8 +779,12 @@ export default function App() {
   const [revisionPaperDetail, setRevisionPaperDetail] = useState<any | null>(null);
   const [revisionPaperDetailLoading, setRevisionPaperDetailLoading] = useState(false);
   const [revisionAnswerSheetDownloading, setRevisionAnswerSheetDownloading] = useState<string | null>(null);
-  const [revisionPaperPdfDownloading, setRevisionPaperPdfDownloading] = useState(false);
-  const revisionPaperPrintRef = useRef<HTMLDivElement>(null);
+  const [revisionPaperPdfDownloading, setRevisionPaperPdfDownloading] = useState<'questions' | 'answers' | null>(null);
+  // Separate print nodes for the two PDFs -- the questions one matches the exact "normal form" a
+  // student's own download uses (same heading, same layout, no answers), so what the admin can
+  // preview here is genuinely the same file a student would get, not an admin-only variant.
+  const revisionQuestionsPrintRef = useRef<HTMLDivElement>(null);
+  const revisionAnswersPrintRef = useRef<HTMLDivElement>(null);
   const [revisionExpandedRemarks, setRevisionExpandedRemarks] = useState<Set<string>>(new Set());
 
   const openRevisionStudentDetail = async (email: string, name: string) => {
@@ -812,12 +821,13 @@ export default function App() {
     }
   };
 
-  const handleDownloadRevisionPaperPdf = () => {
+  const handleDownloadRevisionPdf = (kind: 'questions' | 'answers') => {
     if (revisionPaperPdfDownloading || !revisionPaperDetail || revisionPaperDetail.error) return;
-    const element = revisionPaperPrintRef.current;
+    const element = (kind === 'questions' ? revisionQuestionsPrintRef : revisionAnswersPrintRef).current;
     if (!element) return;
-    setRevisionPaperPdfDownloading(true);
-    const filename = `${revisionPaperDetail.subject}_${String(revisionPaperDetail.chapterName).replace(/\s+/g, '_')}_Cycle${revisionPaperDetail.cycleNumber || 1}.pdf`;
+    setRevisionPaperPdfDownloading(kind);
+    const cycleSuffix = revisionPaperDetail.cycleNumber > 1 ? `_Cycle${revisionPaperDetail.cycleNumber}` : '';
+    const filename = `${revisionPaperDetail.subject}_${String(revisionPaperDetail.chapterName).replace(/\s+/g, '_')}${cycleSuffix}_${kind === 'questions' ? 'Question_Paper' : 'Answer_Key'}.pdf`;
     const opt = {
       margin: [14, 14, 14, 14],
       filename,
@@ -827,10 +837,10 @@ export default function App() {
       pagebreak: { mode: ['css', 'legacy'] },
     };
     const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
-    if (!html2pdfFunc) { setRevisionPaperPdfDownloading(false); return; }
+    if (!html2pdfFunc) { setRevisionPaperPdfDownloading(null); return; }
     html2pdfFunc().set(opt).from(element).save()
-      .then(() => setRevisionPaperPdfDownloading(false))
-      .catch(() => setRevisionPaperPdfDownloading(false));
+      .then(() => setRevisionPaperPdfDownloading(null))
+      .catch(() => setRevisionPaperPdfDownloading(null));
   };
 
   const handleDownloadAnswerSheet = async (submissionId: string, studentName: string) => {
@@ -4288,13 +4298,20 @@ export default function App() {
                     <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{revisionPaperDetail.subject}</span>
                     <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{revisionPaperDetail.chapterName}</h3>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                     <button
-                      onClick={handleDownloadRevisionPaperPdf}
-                      disabled={revisionPaperPdfDownloading}
+                      onClick={() => handleDownloadRevisionPdf('questions')}
+                      disabled={!!revisionPaperPdfDownloading}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-cyan-500/20 transition disabled:opacity-50 cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" /> {revisionPaperPdfDownloading ? 'Preparing...' : 'Download PDF'}
+                      <Download className="w-3.5 h-3.5" /> {revisionPaperPdfDownloading === 'questions' ? 'Preparing...' : 'Question Paper PDF'}
+                    </button>
+                    <button
+                      onClick={() => handleDownloadRevisionPdf('answers')}
+                      disabled={!!revisionPaperPdfDownloading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> {revisionPaperPdfDownloading === 'answers' ? 'Preparing...' : 'Answer Key PDF'}
                     </button>
                     <button onClick={() => setRevisionPaperDetail(null)} className={`p-1 rounded-lg cursor-pointer ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-800'}`}>
                       <X className="w-4 h-4" />
@@ -4320,27 +4337,68 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* Hidden print node for the admin's own PDF copy -- unlike the student's
-                    questions-only download, this includes the marking scheme/solution too, since
-                    it's for the admin's own reference rather than something a student attempts. */}
+                {/* Hidden print nodes for the two separate PDFs. The questions one matches the
+                    exact "normal form" a student's own download uses -- same heading, same
+                    layout, no answers -- so it's genuinely the same file a student would get. The
+                    answer key is a separate document entirely, not merged into the question paper. */}
                 <div className="fixed -left-[9999px] top-0" aria-hidden="true">
-                  <div ref={revisionPaperPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
-                    <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Revision Paper (Admin Copy)</h1>
+                  <div ref={revisionQuestionsPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
+                    <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Sample Paper</h1>
+                    <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{revisionPaperDetail.subject} -- {revisionPaperDetail.chapterName}</p>
+                    <table style={{ width: '100%', fontSize: '12px', marginBottom: '16px', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '4px 0' }}><b>Time Allotted:</b> {revisionPaperDetail.timeAllottedMinutes || 60} minutes</td>
+                          <td style={{ padding: '4px 0', textAlign: 'right' }}><b>Maximum Marks:</b> {revisionPaperDetail.totalMarks}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p style={{ fontSize: '11px', marginBottom: '16px', fontStyle: 'italic' }}>
+                      Marking scheme: Section A -- 5 questions x 1 mark; Section B -- 3 questions x 2 marks; Section C -- 2 questions x 3 marks; Section D -- 2 questions x 4 marks; Section E -- 1 question x 5 marks.
+                    </p>
+                    {REVISION_SECTION_ORDER.map((label) => {
+                      const qs = (revisionPaperDetail.questions || []).filter((q: any) => q.sectionLabel === label);
+                      if (qs.length === 0) return null;
+                      return (
+                        <div key={label} style={{ marginBottom: '14px' }}>
+                          <h3 style={{ fontSize: '13px', fontWeight: 700, borderBottom: '1px solid #111', paddingBottom: '2px', marginBottom: '6px' }}>{REVISION_SECTION_LABELS[label]}</h3>
+                          {qs.map((q: any) => (
+                            <p key={q.id} style={{ fontSize: '12px', margin: '6px 0', lineHeight: 1.5 }}>
+                              <b>{q.id}.</b> {q.text} <i>[{q.marks} mark{q.marks > 1 ? 's' : ''}]</i>
+                            </p>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="fixed -left-[9999px] top-0" aria-hidden="true">
+                  <div ref={revisionAnswersPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
+                    <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Answer Key</h1>
                     <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{revisionPaperDetail.subject} -- {revisionPaperDetail.chapterName}{revisionPaperDetail.cycleNumber > 1 ? ` (Cycle ${revisionPaperDetail.cycleNumber})` : ''}</p>
-                    {(revisionPaperDetail.questions || []).map((q: any) => (
-                      <div key={q.id} style={{ marginBottom: '14px' }}>
-                        <p style={{ fontSize: '12px', margin: '6px 0', lineHeight: 1.5 }}>
-                          <b>{q.id}.</b> {q.text} <i>[{q.marks} mark{q.marks > 1 ? 's' : ''}]</i>
-                        </p>
-                        {q.markingPoints && q.markingPoints.length > 0 && (
-                          <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
-                            {q.markingPoints.map((mp: string, i: number) => (
-                              <li key={i} style={{ fontSize: '11px', lineHeight: 1.5 }}>{mp}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
+                    {REVISION_SECTION_ORDER.map((label) => {
+                      const qs = (revisionPaperDetail.questions || []).filter((q: any) => q.sectionLabel === label);
+                      if (qs.length === 0) return null;
+                      return (
+                        <div key={label} style={{ marginBottom: '14px' }}>
+                          <h3 style={{ fontSize: '13px', fontWeight: 700, borderBottom: '1px solid #111', paddingBottom: '2px', marginBottom: '6px' }}>{REVISION_SECTION_LABELS[label]}</h3>
+                          {qs.map((q: any) => (
+                            <div key={q.id} style={{ marginBottom: '10px' }}>
+                              <p style={{ fontSize: '12px', margin: '4px 0', lineHeight: 1.5 }}>
+                                <b>{q.id}.</b> [{q.marks} mark{q.marks > 1 ? 's' : ''}]
+                              </p>
+                              {q.markingPoints && q.markingPoints.length > 0 && (
+                                <ul style={{ margin: '2px 0 0 18px', padding: 0 }}>
+                                  {q.markingPoints.map((mp: string, i: number) => (
+                                    <li key={i} style={{ fontSize: '11px', lineHeight: 1.5 }}>{mp}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </>
