@@ -9489,13 +9489,23 @@ function buildApp(): express.Express {
     return blocks;
   }
 
-  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
+  // Cycle 1 is standard difficulty; every full cycle after that should be progressively harder,
+  // since a student re-testing on a chapter they've already been through once should be pushed
+  // further, not shown the same difficulty forever.
+  function revisionDifficultyInstruction(cycleNumber: number): string {
+    if (cycleNumber <= 1) return "";
+    if (cycleNumber === 2) return ` This student has already completed one full cycle through their syllabus and is now on their second pass over this chapter -- raise the difficulty moderately above a first-attempt paper: less scaffolding, harder numbers/scenarios, more multi-step reasoning, while staying strictly within the syllabus for this chapter (never introduce content outside what's actually taught in it just to make it harder).`;
+    return ` This is this student's cycle ${cycleNumber} through their syllabus on this chapter -- raise the difficulty well beyond a cycle-2 paper, and further again than the previous cycle: tougher multi-concept and competency-based questions, less hand-holding, harder numbers, while staying strictly within the syllabus for this chapter (never introduce out-of-syllabus content just to make it harder).`;
+  }
+
+  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number = 1): Promise<RevisionQuestion[]> {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
     const referenceBlocks = await getRevisionReferenceBookBlocks(classLabel, subject, chapterName);
     const referenceInstruction = referenceBlocks.length > 0
       ? ` The attached PDF(s) are the actual official textbook material this student's class uses for ${subject} -- possibly one file per chapter, or multiple volumes, so not every attached file is relevant to this specific chapter. They may use different chapter names, ordering, or topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find whichever attached file(s) actually cover "${chapterName}" and base every question strictly on that content, terminology, and depth as it appears there -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached material.`
       : ` No reference textbook is on file for this class/subject, so use your own best knowledge of the CBSE curriculum for this chapter -- if "${chapterName}" doesn't clearly match a chapter you know, interpret it as sensibly as possible from the name and class level given.`;
-    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction} NCERT chapters include supplementary/enrichment content set apart from the main examinable text -- shaded or outlined "box" callouts, "Do You Know?"/"Something to Think About"/"Additional Information" style panels, footnotes, or any passage explicitly marked "Not for Examination Purpose" per CBSE's own circulars. Never base a question on this boxed/supplementary material, even if it's interesting -- every question must come strictly from the chapter's main, examinable running text. If a reference PDF is attached, this applies to whatever is visually set apart as a box/panel on the page, not just text explicitly labelled as excluded. Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
+    const difficultyInstruction = revisionDifficultyInstruction(cycleNumber);
+    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction}${difficultyInstruction} NCERT chapters include supplementary/enrichment content set apart from the main examinable text -- shaded or outlined "box" callouts, "Do You Know?"/"Something to Think About"/"Additional Information" style panels, footnotes, or any passage explicitly marked "Not for Examination Purpose" per CBSE's own circulars. Never base a question on this boxed/supplementary material, even if it's interesting -- every question must come strictly from the chapter's main, examinable running text. If a reference PDF is attached, this applies to whatever is visually set apart as a box/panel on the page, not just text explicitly labelled as excluded. Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
 ${sectionsText}
 Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer.
 
@@ -9535,18 +9545,20 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     }
   }
 
-  // Looks for an already-generated paper for this exact (class, subject, chapter) combination --
+  // Looks for an already-generated paper for this exact (class, subject, chapter, cycle) --
   // from ANY student, not just this one -- so a whole class working through the same syllabus
   // doesn't each pay for a fresh generation call for the same chapter. Matching is by exact
-  // (case-sensitive, as-typed) chapter name, so it only kicks in when two students' syllabi name
-  // the chapter identically; a near-miss just falls through to a normal fresh generation, never a
-  // wrong-content match. Returns null on a miss.
-  async function findReusableRevisionQuestions(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[] | null> {
+  // (case-sensitive, as-typed) chapter name AND the same cycle number, so a student on their
+  // second (harder) pass through a chapter never gets served a first-pass-difficulty cached
+  // paper, or vice versa. A near-miss just falls through to a normal fresh generation, never a
+  // wrong-content or wrong-difficulty match. Returns null on a miss.
+  async function findReusableRevisionQuestions(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[] | null> {
     const { data: candidates } = await supabase
       .from("revision_papers")
-      .select("student_email, content, created_at")
+      .select("student_email, content, created_at, cycle_number")
       .eq("subject", subject)
       .eq("chapter_name", chapterName)
+      .eq("cycle_number", cycleNumber)
       .order("created_at", { ascending: false })
       .limit(25);
     if (!candidates || candidates.length === 0) return null;
@@ -9561,12 +9573,12 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   }
 
   // Drop-in wrapper around generateRevisionPaper that checks the reuse cache first -- same
-  // (subject, chapterName, classLabel) argument order, so both call sites below just swap the
-  // function name.
-  async function getRevisionQuestionsForTarget(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
-    const reused = await findReusableRevisionQuestions(subject, chapterName, classLabel);
+  // (subject, chapterName, classLabel) argument order plus cycleNumber, so both call sites below
+  // just swap the function name.
+  async function getRevisionQuestionsForTarget(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[]> {
+    const reused = await findReusableRevisionQuestions(subject, chapterName, classLabel, cycleNumber);
     if (reused) return reused;
-    return generateRevisionPaper(subject, chapterName, classLabel);
+    return generateRevisionPaper(subject, chapterName, classLabel, cycleNumber);
   }
 
   function mapRevisionPaperForStudent(row: any) {
@@ -9593,6 +9605,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       deadlineAt: row.deadline_at,
       questions: content,
       sections: REVISION_SECTION_SHAPE,
+      cycleNumber: row.cycle_number || 1,
     };
   }
 
@@ -9680,6 +9693,9 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     if ((mathsChapters.length > 0 || scienceChapters.length > 0) && mathsDone && scienceDone) {
       updates.maths_completed_chapters = [];
       updates.science_completed_chapters = [];
+      // A full cycle just finished -- the next cycle's papers should be harder than this one's,
+      // and progressively harder again each cycle after that (see generateRevisionPaper).
+      updates.cycle_number = (setup.cycle_number || 1) + 1;
     }
 
     await supabase.from("revision_setups").update(updates).eq("student_email", studentEmail);
@@ -9958,8 +9974,10 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     const classLabel = await resolveClassLabelForRevision(auth);
     if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
 
+    const cycleNumber: number = setup.cycle_number || 1;
+
     try {
-      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel);
+      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
       const { data: paperRow, error: insertError } = await supabase
         .from("revision_papers")
         .insert({
@@ -9970,6 +9988,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
           total_marks: REVISION_TOTAL_MARKS,
           time_allotted_minutes: REVISION_TIME_MINUTES,
           status: "draft",
+          cycle_number: cycleNumber,
         })
         .select()
         .single();
@@ -10208,7 +10227,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     const { email } = req.params;
     const { data: papers } = await supabase
       .from("revision_papers")
-      .select("id, subject, chapter_name, total_marks, status, created_at, started_at, deadline_at")
+      .select("id, subject, chapter_name, total_marks, status, created_at, started_at, deadline_at, cycle_number")
       .eq("student_email", email)
       .order("created_at", { ascending: false });
     const paperIds = (papers || []).map((p: any) => p.id);
@@ -10230,6 +10249,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         totalMarks: p.total_marks,
         status: p.status,
         createdAt: p.created_at,
+        cycleNumber: p.cycle_number || 1,
         submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
       };
     });
@@ -10253,6 +10273,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         totalMarks: paper.total_marks,
         status: paper.status,
         createdAt: paper.created_at,
+        cycleNumber: paper.cycle_number || 1,
         questions: paper.content?.questions || [],
       },
     });

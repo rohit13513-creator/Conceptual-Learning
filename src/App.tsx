@@ -4122,6 +4122,7 @@ export default function App() {
                         {' -- '}{p.status}
                         {p.submission?.aiScore != null && ` -- ${p.submission.aiScore}/${p.totalMarks}`}
                         {p.submission?.isLate && ' -- late'}
+                        {p.cycleNumber > 1 && ` -- cycle ${p.cycleNumber}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

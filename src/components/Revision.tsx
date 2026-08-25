@@ -48,6 +48,7 @@ interface RevisionPaper {
   deadlineAt: string | null;
   questions: RevisionQuestion[];
   sections: { label: string; count: number; marks: number; kind: string }[];
+  cycleNumber?: number;
 }
 
 interface RevisionSubmission {
@@ -681,7 +682,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               <div className={`${cardClass(isLightMode)} space-y-5`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{currentPaper.subject}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{currentPaper.subject}{currentPaper.cycleNumber && currentPaper.cycleNumber > 1 ? ` -- Cycle ${currentPaper.cycleNumber}` : ''}</span>
                     <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{currentPaper.chapterName}</h3>
                   </div>
                   {remainingMs !== null && (
