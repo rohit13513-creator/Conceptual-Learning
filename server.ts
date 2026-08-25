@@ -10214,8 +10214,18 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   app.get("/api/revision/reference-books/mine", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const classLabel = await resolveClassLabelForRevision(auth);
-    const classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    // A student's own class is always used automatically (resolved from their profile) -- the
+    // optional classKey override exists only for accounts with no class on file (chiefly the
+    // admin's own login, which has none) so browsing NCERT PDFs doesn't require first going
+    // through Revision's syllabus setup just to pick a fallback class.
+    const { classKey: requestedClassKey } = req.query as { classKey?: string };
+    let classKey: string | null = null;
+    if (requestedClassKey && REVISION_REFERENCE_CLASS_KEYS.includes(requestedClassKey as any)) {
+      classKey = requestedClassKey;
+    } else {
+      const classLabel = await resolveClassLabelForRevision(auth);
+      classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    }
     if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any)) {
       return res.status(400).json({ error: "We couldn't determine your class. Please set it in the Revision syllabus setup first." });
     }
