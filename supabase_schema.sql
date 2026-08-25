@@ -134,6 +134,58 @@ create table chapter_notes_jobs (
 );
 create index chapter_notes_jobs_status_idx on chapter_notes_jobs (status);
 
+-- 11. REVISION — student-initiated practice papers, independent of admin-posted Homework. A
+-- student sets a syllabus (typed or a photographed page) and optional exam dates for Maths and/or
+-- Science; each generated paper is a fresh, fixed-shape 30-mark CBSE-style paper for one chapter,
+-- timed, AI-graded on submission, with "Improve Score" resubmission (same shape as Homework).
+create table revision_setups (
+  student_email text primary key references users(email),
+  maths_exam_date date,                        -- null = "just revising, no exam"
+  maths_syllabus_text text,
+  maths_syllabus_image_path text,
+  maths_chapters jsonb not null default '[]',            -- parsed chapter-name list
+  maths_completed_chapters jsonb not null default '[]',  -- resets to [] once it equals maths_chapters (cycle complete)
+  science_exam_date date,
+  science_syllabus_text text,
+  science_syllabus_image_path text,
+  science_chapters jsonb not null default '[]',
+  science_completed_chapters jsonb not null default '[]',
+  fallback_class text,                         -- 8th/9th/10th; only used when the user has no student_class (admin self-test)
+  updated_at timestamptz not null default now()
+);
+
+create table revision_papers (
+  id uuid primary key default gen_random_uuid(),
+  student_email text not null references users(email),
+  subject text not null,                       -- 'Maths' | 'Science'
+  chapter_name text not null,
+  content jsonb not null,                      -- { questions: [{ id, sectionLabel, marks, text, markingPoints[] }] }
+  total_marks int not null default 30,
+  time_allotted_minutes int not null default 60,
+  status text not null default 'draft',        -- draft | active | submitted | graded
+  started_at timestamptz,
+  deadline_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table revision_submissions (
+  id uuid primary key default gen_random_uuid(),
+  revision_paper_id uuid not null references revision_papers(id),
+  student_email text not null references users(email),
+  file_path text not null,
+  submitted_at timestamptz not null default now(),
+  is_late boolean not null default false,
+  status text not null default 'pending',      -- pending | checked
+  ai_score numeric,
+  ai_feedback text,
+  admin_notes text,
+  created_at timestamptz not null default now()
+);
+
+create index idx_revision_papers_student on revision_papers(student_email);
+create index idx_revision_submissions_student on revision_submissions(student_email);
+create index idx_revision_submissions_paper on revision_submissions(revision_paper_id);
+
 -- Helpful indexes
 create index idx_homework_student on homework_submissions(student_email);
 create index idx_users_status on users(status);

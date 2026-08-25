@@ -66,6 +66,13 @@ interface HomeworkAssignment {
   createdAt: string;
 }
 
+interface RevisionQuestion {
+  id: string;
+  sectionLabel: "A" | "B" | "C" | "D" | "E";
+  marks: number;
+  text: string;
+}
+
 interface Announcement {
   id: string;
   title: string;
@@ -394,11 +401,16 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
 // go through the server in a single large multipart request (that's what was silently truncating
 // on Vercel's ~4.5MB serverless body limit -- the exact "10 photos in, only 1 saved" failure mode).
 const HOMEWORK_TEMP_PREFIX = "homework-temp";
+// Same idea, separate folder namespace, for Revision paper answer submissions (see the Revision
+// section below) -- reuses the same HOMEWORK_BUCKET and the same merge/chunk helpers, just a
+// different temp prefix so the two features' in-flight uploads never collide.
+const REVISION_TEMP_PREFIX = "revision-temp";
 
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
-// deletes the temp copies. Returns null if no photos were found for that session.
-async function mergeSessionPhotos(email: string, sessionId: string): Promise<Buffer | null> {
-  const folder = `${HOMEWORK_TEMP_PREFIX}/${email}/${sessionId}`;
+// deletes the temp copies. Returns null if no photos were found for that session. `prefix`
+// defaults to the homework temp folder; Revision submissions pass REVISION_TEMP_PREFIX instead.
+async function mergeSessionPhotos(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX): Promise<Buffer | null> {
+  const folder = `${prefix}/${email}/${sessionId}`;
   const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
   if (listError || !fileList || fileList.length === 0) return null;
 
@@ -426,8 +438,8 @@ async function mergeSessionPhotos(email: string, sessionId: string): Promise<Buf
 // Same temp-then-assemble idea as mergeSessionPhotos, but for a single large file (e.g. one big
 // PDF) split into small byte chunks client-side -- each chunk upload stays tiny regardless of the
 // total file size, so a 4-5MB+ PDF never has to cross the server in one request either.
-async function concatenateSessionChunks(email: string, sessionId: string): Promise<Buffer | null> {
-  const folder = `${HOMEWORK_TEMP_PREFIX}/${email}/${sessionId}`;
+async function concatenateSessionChunks(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX): Promise<Buffer | null> {
+  const folder = `${prefix}/${email}/${sessionId}`;
   const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
   if (listError || !fileList || fileList.length === 0) return null;
 
@@ -8242,6 +8254,28 @@ function buildApp(): express.Express {
       checked += batch.length;
       i += batch.length;
     }
+
+    // Same safety-net sweep, extended to Revision submissions -- kept in the same cron run rather
+    // than a second cron entry, since Vercel's Hobby plan caps cron frequency and this project has
+    // already been bitten once by accidentally adding a second, too-frequent cron path (see the
+    // memo'd incident on the homework cron itself).
+    if (Date.now() - startedAt < PENDING_CHECK_TIME_BUDGET_MS) {
+      const { data: pendingRevision } = await supabase
+        .from("revision_submissions")
+        .select("id")
+        .eq("status", "pending")
+        .order("submitted_at", { ascending: true })
+        .limit(200);
+      const revisionQueue = pendingRevision || [];
+      let j = 0;
+      while (j < revisionQueue.length && Date.now() - startedAt < PENDING_CHECK_TIME_BUDGET_MS) {
+        const batch = revisionQueue.slice(j, j + PENDING_CHECK_BATCH_SIZE);
+        await Promise.all(batch.map((row) => checkRevisionSubmission(row.id)));
+        checked += batch.length;
+        j += batch.length;
+      }
+    }
+
     return { checked, remaining: queue.length - checked };
   }
 
@@ -9227,6 +9261,772 @@ function buildApp(): express.Express {
 
     await supabase.from("forum_replies").delete().eq("id", id);
     return res.json({ success: true });
+  });
+
+  // ── Revision: student-initiated practice papers ──
+  // A student sets a syllabus (typed or a photographed page) and optional exam dates for Maths
+  // and/or Science; each "generate paper" call picks whichever subject is furthest behind (fewest
+  // chapters completed this cycle, tie-broken by the nearer exam date) and a chapter from it that
+  // hasn't been completed yet, then has Claude draft a fresh fixed-shape 30-mark CBSE-style paper
+  // for it. Submitting and grading reuses the exact same upload/merge/grade shape as Homework
+  // (see checkHomeworkSubmission above), just against a different table and a simpler, single
+  // fixed rubric instead of a per-question missing/incorrect/doubt/late apparatus -- a revision
+  // paper's questions and marking points are entirely known in advance (the paper the AI itself
+  // just wrote), so grading it is a straightforward per-question partial-credit comparison rather
+  // than working out which questions were even assigned.
+  const REVISION_TOTAL_MARKS = 30;
+  const REVISION_TIME_MINUTES = 60;
+  const REVISION_GRACE_MINUTES = 15;
+  // Fixed shape every paper is generated in: 5x1 (objective), 3x2, 2x3, 2x4 (competency/case-based),
+  // 1x5 -- 13 questions, 30 marks total. Kept in one place so generation and the client-facing
+  // "what to expect" text can't silently drift apart.
+  const REVISION_SECTION_SHAPE: { label: "A" | "B" | "C" | "D" | "E"; count: number; marks: number; kind: string }[] = [
+    { label: "A", count: 5, marks: 1, kind: "objective/MCQ" },
+    { label: "B", count: 3, marks: 2, kind: "short answer" },
+    { label: "C", count: 2, marks: 3, kind: "short answer" },
+    { label: "D", count: 2, marks: 4, kind: "competency/case-based" },
+    { label: "E", count: 1, marks: 5, kind: "long answer" },
+  ];
+
+  function splitSyllabusText(text: string): string[] {
+    return text
+      .split(/[\n,;]+/)
+      .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "").trim())
+      .filter((s) => s.length > 0);
+  }
+
+  async function extractChaptersFromImage(buffer: Buffer, mimeType: string): Promise<string[]> {
+    const isPdf = mimeType === "application/pdf";
+    const block = isPdf
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } }
+      : { type: "image", source: { type: "base64", media_type: mimeType || "image/jpeg", data: buffer.toString("base64") } };
+    const tool = {
+      name: "submit_chapters",
+      description: "Submit the list of chapter/topic names found in the attached syllabus image.",
+      input_schema: {
+        type: "object",
+        properties: {
+          chapters: {
+            type: "array",
+            items: { type: "string" },
+            description: "One entry per distinct chapter/topic name visible in the image, cleaned up (no page numbers, marks, dates, or list bullets), in the order they appear.",
+          },
+        },
+        required: ["chapters"],
+      },
+    };
+    const result = await callClaudeTool({
+      system: "You are reading a photographed or scanned syllabus/date-sheet page for a CBSE school student. Extract only the chapter/topic names being tested, not subject headers, dates, marks, or instructions.",
+      content: [block, { type: "text", text: "Extract the chapter list now." }],
+      tool,
+      maxTokens: 2000,
+    });
+    return Array.isArray(result.chapters) ? result.chapters.filter((c: any) => typeof c === "string" && c.trim()) : [];
+  }
+
+  function pickChapterWithinSubject(subject: "Maths" | "Science", setup: any): { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean } | null {
+    const chapters: string[] = (subject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
+    if (chapters.length === 0) return null;
+    const completed: string[] = (subject === "Maths" ? setup.maths_completed_chapters : setup.science_completed_chapters) || [];
+    let available = chapters.filter((c) => !completed.includes(c));
+    let cycleReset = false;
+    if (available.length === 0) {
+      available = chapters.slice();
+      cycleReset = true;
+    }
+    const chapterName = available[Math.floor(Math.random() * available.length)];
+    return { subject, chapterName, cycleReset };
+  }
+
+  // Picks which subject to serve next: whichever has completed fewer chapters this cycle catches
+  // up first; tied (including "both zero"), the nearer non-null exam date wins; still tied, random
+  // -- this is what keeps a student from only ever seeing the subject with the closer exam date,
+  // per the explicit "don't give only maths test, give science also" requirement.
+  function pickNextRevisionTarget(setup: any, excludeChapter?: { subject: string; chapterName: string }): { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean } | null {
+    const hasMaths = ((setup.maths_chapters || []) as string[]).length > 0;
+    const hasScience = ((setup.science_chapters || []) as string[]).length > 0;
+    if (!hasMaths && !hasScience) return null;
+
+    let subject: "Maths" | "Science";
+    if (hasMaths && !hasScience) subject = "Maths";
+    else if (hasScience && !hasMaths) subject = "Science";
+    else {
+      const mathsDone = ((setup.maths_completed_chapters || []) as string[]).length;
+      const scienceDone = ((setup.science_completed_chapters || []) as string[]).length;
+      if (mathsDone !== scienceDone) {
+        subject = mathsDone < scienceDone ? "Maths" : "Science";
+      } else if (setup.maths_exam_date && setup.science_exam_date) {
+        subject = new Date(setup.maths_exam_date).getTime() <= new Date(setup.science_exam_date).getTime() ? "Maths" : "Science";
+      } else if (setup.maths_exam_date && !setup.science_exam_date) {
+        subject = "Maths";
+      } else if (setup.science_exam_date && !setup.maths_exam_date) {
+        subject = "Science";
+      } else {
+        subject = Math.random() < 0.5 ? "Maths" : "Science";
+      }
+    }
+
+    const picked = pickChapterWithinSubject(subject, setup);
+    // If we landed on the exact chapter the student is switching away from and the other subject
+    // also has options, try the other subject once instead of re-serving the same chapter.
+    if (picked && excludeChapter && picked.subject === excludeChapter.subject && picked.chapterName === excludeChapter.chapterName) {
+      const otherSubject: "Maths" | "Science" = subject === "Maths" ? "Science" : "Maths";
+      const altChapters: string[] = (otherSubject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
+      if (altChapters.length > 0) {
+        const alt = pickChapterWithinSubject(otherSubject, setup);
+        if (alt) return alt;
+      }
+      // Only one option existed for this subject and it's the one being excluded -- re-roll within
+      // the same subject once (harmless if it comes back the same; nothing better is available).
+      const retry = pickChapterWithinSubject(subject, setup);
+      if (retry) return retry;
+    }
+    return picked;
+  }
+
+  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
+    const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
+    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}". Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). The paper MUST have exactly this fixed structure, 30 marks total:
+${sectionsText}
+Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer. Section D questions are competency/case-based -- give a short real-world scenario or data/passage, then ask 1-2 sub-questions about it, still worth 4 marks total for the whole question. For every question, also write internal marking points (what a correct answer must contain to earn each mark) -- these are for the grader only and are never shown to the student.`;
+
+    const tool = {
+      name: "submit_paper",
+      description: "Submit the generated revision paper.",
+      input_schema: {
+        type: "object",
+        properties: {
+          questions: {
+            type: "array",
+            description: "Exactly 13 questions in section order: 5 in A, 3 in B, 2 in C, 2 in D, 1 in E.",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "e.g. A1, A2, B1, C1, D1, E1" },
+                sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+                marks: { type: "integer" },
+                text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options inline where relevant." },
+                markingPoints: { type: "array", items: { type: "string" }, description: "What a correct answer must contain, broken down so partial credit up to `marks` can be awarded point by point. Grader-only, never shown to the student." },
+              },
+              required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
+            },
+          },
+        },
+        required: ["questions"],
+      },
+    };
+
+    const result = await callClaudeTool({
+      system,
+      content: [{ type: "text", text: "Generate the paper now." }],
+      tool,
+      maxTokens: 6000,
+    });
+    const questions = Array.isArray(result.questions) ? result.questions : [];
+    if (questions.length === 0) throw new Error("Claude did not return any questions.");
+    return questions;
+  }
+
+  function mapRevisionPaperForStudent(row: any) {
+    const content: RevisionQuestion[] = (row.content?.questions || []).map((q: any) => ({ id: q.id, sectionLabel: q.sectionLabel, marks: q.marks, text: q.text }));
+    return {
+      id: row.id,
+      subject: row.subject,
+      chapterName: row.chapter_name,
+      totalMarks: row.total_marks,
+      timeAllottedMinutes: row.time_allotted_minutes,
+      status: row.status,
+      startedAt: row.started_at,
+      deadlineAt: row.deadline_at,
+      questions: content,
+      sections: REVISION_SECTION_SHAPE,
+    };
+  }
+
+  async function findJustCreatedRevisionSubmission(studentEmail: string, paperId: string): Promise<any | null> {
+    const { data } = await supabase
+      .from("revision_submissions")
+      .select("*")
+      .eq("student_email", studentEmail)
+      .eq("revision_paper_id", paperId)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    const ageMs = Date.now() - new Date(data.submitted_at).getTime();
+    return ageMs >= 0 && ageMs < 3 * 60 * 1000 ? data : null;
+  }
+
+  async function upsertRevisionSubmission(params: { studentEmail: string; paperId: string; filePath: string; isLate: boolean }): Promise<any> {
+    const { data: existing } = await supabase
+      .from("revision_submissions")
+      .select("id, file_path")
+      .eq("student_email", params.studentEmail)
+      .eq("revision_paper_id", params.paperId)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      const { data: updatedRow, error: updateError } = await supabase
+        .from("revision_submissions")
+        .update({
+          file_path: params.filePath,
+          submitted_at: new Date().toISOString(),
+          is_late: params.isLate,
+          status: "pending",
+          ai_score: null,
+          ai_feedback: null,
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (updateError || !updatedRow) throw new Error(updateError?.message || "Failed to update the existing revision submission.");
+      if (existing.file_path && existing.file_path !== params.filePath) {
+        await supabase.storage.from(HOMEWORK_BUCKET).remove([existing.file_path]).catch(() => {});
+      }
+      return updatedRow;
+    }
+
+    const { data: insertedRow, error: insertError } = await supabase
+      .from("revision_submissions")
+      .insert({
+        student_email: params.studentEmail,
+        revision_paper_id: params.paperId,
+        file_path: params.filePath,
+        is_late: params.isLate,
+      })
+      .select()
+      .single();
+    if (insertError || !insertedRow) throw new Error(insertError?.message || "Failed to save the revision submission.");
+    return insertedRow;
+  }
+
+  // Marks a chapter as done for the current cycle once its paper is graded, resetting the
+  // completed-list back to empty (starting a fresh cycle) once every chapter in that subject's
+  // syllabus has been covered.
+  async function markRevisionChapterDone(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
+    const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", studentEmail).maybeSingle();
+    if (!setup) return;
+    const chaptersKey = subject === "Maths" ? "maths_chapters" : "science_chapters";
+    const completedKey = subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
+    const chapters: string[] = setup[chaptersKey] || [];
+    let completed: string[] = setup[completedKey] || [];
+    if (!completed.includes(chapterName)) completed = [...completed, chapterName];
+    if (chapters.length > 0 && completed.length >= chapters.length && chapters.every((c) => completed.includes(c))) {
+      completed = []; // full cycle done -- start fresh
+    }
+    await supabase.from("revision_setups").update({ [completedKey]: completed, updated_at: new Date().toISOString() }).eq("student_email", studentEmail);
+  }
+
+  async function checkRevisionSubmission(submissionId: string) {
+    const { data: sub } = await supabase.from("revision_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!sub) return;
+    const { data: paper } = await supabase.from("revision_papers").select("*").eq("id", sub.revision_paper_id).maybeSingle();
+    if (!paper) return;
+
+    const { data: fileBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
+    if (downloadError || !fileBlob) {
+      console.error(`Could not download revision submission file for ${submissionId}:`, downloadError?.message);
+      return;
+    }
+    const arrayBuffer = await fileBlob.arrayBuffer();
+    const base64Data = Buffer.from(arrayBuffer).toString("base64");
+    const isPdf = fileBlob.type === "application/pdf" || sub.file_path.toLowerCase().endsWith(".pdf");
+    const contentBlock = isPdf
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
+      : { type: "image", source: { type: "base64", media_type: fileBlob.type || "image/jpeg", data: base64Data } };
+
+    const questions: (RevisionQuestion & { markingPoints: string[] })[] = paper.content?.questions || [];
+    const questionsBlock = questions.map((q) => `${q.id} (${q.marks} mark${q.marks > 1 ? "s" : ""}): ${q.text}\nMarking points: ${(q.markingPoints || []).join("; ")}`).join("\n\n");
+
+    const system = `You are a strict CBSE-curriculum teacher grading a student's handwritten answers to a mock revision paper you already wrote, against your own marking points. Award partial credit generously and fairly wherever the student's answer covers some but not all of a question's marking points -- do not require a perfect answer for any marks at all. Extend the same handwriting tolerance a real teacher would: never deduct for messy handwriting or presentation on its own, only for actually wrong or missing content; when a single digit is genuinely ambiguous between two similar shapes (3/5, 1/7, 6/0, 4/9, 5/9), prefer the reading that makes the student's own working internally consistent and correct. If a question is entirely unattempted, award 0 for it -- do not guess credit that isn't there. For each question, award an integer number of marks from 0 up to that question's maximum.`;
+    const prompt = `Here is the paper's own question list and marking scheme, followed by the student's submitted answers as an attached file.\n\n${questionsBlock}`;
+
+    const gradeTool = {
+      name: "submit_revision_grade",
+      description: "Submit the grading result.",
+      input_schema: {
+        type: "object",
+        properties: {
+          perQuestion: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                questionId: { type: "string" },
+                marksAwarded: { type: "integer", minimum: 0 },
+                note: { type: "string", description: "One short sentence on what was missing/wrong, if marks were lost. Empty string if full marks." },
+              },
+              required: ["questionId", "marksAwarded", "note"],
+            },
+          },
+          overallFeedback: { type: "string", description: "2-4 sentences of overall exam-style feedback: strongest area, weakest area, one concrete tip for next time." },
+        },
+        required: ["perQuestion", "overallFeedback"],
+      },
+    };
+
+    try {
+      let data: any;
+      let succeeded = false;
+      let lastErrorMessage = "Claude did not return a usable result.";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2000));
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({
+            model: CLAUDE_MODEL,
+            system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+            thinking: { type: "adaptive" },
+            output_config: { effort: "medium" },
+            max_tokens: 8000,
+            tools: [gradeTool],
+            tool_choice: { type: "tool", name: "submit_revision_grade" },
+            messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
+          }),
+        });
+        data = await resp.json();
+        if ((resp.status === 529 || resp.status === 429) && attempt < 2) {
+          lastErrorMessage = data?.error?.message || `Anthropic returned status ${resp.status}`;
+          continue;
+        }
+        const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_revision_grade");
+        if (!resp.ok || !toolUseBlock) {
+          lastErrorMessage = data?.error?.message || "Claude did not return a usable result.";
+          break;
+        }
+        if (!Array.isArray(toolUseBlock.input?.perQuestion) && attempt < 2) {
+          lastErrorMessage = "Claude did not return per-question marks.";
+          continue;
+        }
+        succeeded = true;
+        break;
+      }
+      if (!succeeded) throw new Error(lastErrorMessage);
+
+      const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_revision_grade");
+      const parsed = toolUseBlock.input;
+      const perQuestion: { questionId: string; marksAwarded: number; note: string }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
+      const maxByQuestion = new Map(questions.map((q) => [q.id, q.marks]));
+      let totalScore = 0;
+      for (const pq of perQuestion) {
+        const max = maxByQuestion.get(pq.questionId) ?? 0;
+        totalScore += Math.max(0, Math.min(max, Math.round(pq.marksAwarded || 0)));
+      }
+      totalScore = Math.min(totalScore, REVISION_TOTAL_MARKS);
+
+      const feedbackLines = perQuestion.filter((pq) => pq.note && pq.note.trim()).map((pq) => `${pq.questionId}: ${pq.note.trim()}`);
+      const overall = sanitizePlaceholderText(parsed.overallFeedback) || "Checked.";
+      const fullFeedback = [overall, ...feedbackLines].join("\n");
+
+      await supabase.from("revision_submissions").update({ status: "checked", ai_score: totalScore, ai_feedback: fullFeedback }).eq("id", submissionId);
+      await supabase.from("revision_papers").update({ status: "graded" }).eq("id", paper.id);
+      await markRevisionChapterDone(sub.student_email, paper.subject, paper.chapter_name);
+    } catch (err: any) {
+      console.error(`Revision grading failed for submission ${submissionId}:`, err.message);
+    }
+  }
+
+  const revisionSetupUpload = homeworkUpload.fields([
+    { name: "mathsSyllabusImage", maxCount: 1 },
+    { name: "scienceSyllabusImage", maxCount: 1 },
+  ]);
+
+  app.post("/api/revision/setup", (req, res, next) => {
+    revisionSetupUpload(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the uploaded file." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const body = req.body || {};
+    const files = (req.files as any) || {};
+
+    const { data: existing } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
+
+    const update: any = { student_email: auth.email, updated_at: new Date().toISOString() };
+
+    for (const subj of ["maths", "science"] as const) {
+      const examDateField = `${subj}ExamDate`;
+      const examDateVal = body[examDateField];
+      update[`${subj}_exam_date`] = examDateVal ? String(examDateVal) : null;
+
+      const textField = `${subj}SyllabusText`;
+      const typedText: string = (body[textField] || "").toString().trim();
+      const imageFile = files[`${subj}SyllabusImage`]?.[0];
+
+      if (imageFile) {
+        try {
+          const chapters = await extractChaptersFromImage(imageFile.buffer, imageFile.mimetype);
+          if (chapters.length > 0) {
+            update[`${subj}_chapters`] = chapters;
+            update[`${subj}_syllabus_text`] = null;
+            const imgPath = `revision-syllabus/${auth.email}/${subj}-${Date.now()}.jpg`;
+            const { error: upErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(imgPath, imageFile.buffer, { contentType: imageFile.mimetype });
+            if (!upErr) update[`${subj}_syllabus_image_path`] = imgPath;
+          }
+        } catch (err: any) {
+          console.error(`Failed to extract ${subj} syllabus from image:`, err.message);
+          return res.status(500).json({ error: `Could not read the chapter list from the ${subj} syllabus photo. Please try a clearer photo or type the chapters instead.` });
+        }
+      } else if (typedText) {
+        const chapters = splitSyllabusText(typedText);
+        update[`${subj}_chapters`] = chapters;
+        update[`${subj}_syllabus_text`] = typedText;
+      } else if (existing) {
+        // Neither a new image nor new text for this subject this time -- keep whatever was there.
+        update[`${subj}_chapters`] = existing[`${subj}_chapters`];
+        update[`${subj}_syllabus_text`] = existing[`${subj}_syllabus_text`];
+        update[`${subj}_syllabus_image_path`] = existing[`${subj}_syllabus_image_path`];
+      } else {
+        update[`${subj}_chapters`] = [];
+      }
+      // Changing a subject's syllabus starts that subject's cycle over.
+      update[`${subj}_completed_chapters`] = [];
+    }
+
+    if (body.fallbackClass) update.fallback_class = String(body.fallbackClass);
+
+    const { error: upsertError } = await supabase.from("revision_setups").upsert(update, { onConflict: "student_email" });
+    if (upsertError) {
+      console.error("Error saving revision setup:", upsertError.message);
+      return res.status(500).json({ error: "Failed to save your revision setup. Please try again." });
+    }
+    return res.json({ success: true });
+  });
+
+  app.get("/api/revision/setup", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { data } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
+    if (!data) return res.json({ setup: null });
+    return res.json({
+      setup: {
+        mathsExamDate: data.maths_exam_date,
+        mathsChapters: data.maths_chapters || [],
+        mathsCompletedChapters: data.maths_completed_chapters || [],
+        scienceExamDate: data.science_exam_date,
+        scienceChapters: data.science_chapters || [],
+        scienceCompletedChapters: data.science_completed_chapters || [],
+        fallbackClass: data.fallback_class,
+      },
+    });
+  });
+
+  async function resolveClassLabelForRevision(auth: { email: string; role: string }): Promise<string | null> {
+    const { data: userRow } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
+    if (userRow?.student_class) return userRow.student_class;
+    const { data: setup } = await supabase.from("revision_setups").select("fallback_class").eq("student_email", auth.email).maybeSingle();
+    return setup?.fallback_class ? (CLASS_TO_TARGET[setup.fallback_class] ? setup.fallback_class : TARGET_TO_LABEL[setup.fallback_class] || null) : null;
+  }
+
+  app.post("/api/revision/generate-paper", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
+    if (!setup) return res.status(400).json({ error: "Please set up your syllabus first." });
+
+    const target = pickNextRevisionTarget(setup);
+    if (!target) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
+
+    const classLabel = await resolveClassLabelForRevision(auth);
+    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+
+    if (target.cycleReset) {
+      const completedKey = target.subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
+      await supabase.from("revision_setups").update({ [completedKey]: [] }).eq("student_email", auth.email);
+    }
+
+    try {
+      const questions = await generateRevisionPaper(target.subject, target.chapterName, classLabel);
+      const { data: paperRow, error: insertError } = await supabase
+        .from("revision_papers")
+        .insert({
+          student_email: auth.email,
+          subject: target.subject,
+          chapter_name: target.chapterName,
+          content: { questions },
+          total_marks: REVISION_TOTAL_MARKS,
+          time_allotted_minutes: REVISION_TIME_MINUTES,
+          status: "draft",
+        })
+        .select()
+        .single();
+      if (insertError || !paperRow) throw new Error(insertError?.message || "Failed to save the generated paper.");
+      return res.json({ paper: mapRevisionPaperForStudent(paperRow) });
+    } catch (err: any) {
+      console.error("Error generating revision paper:", err.message);
+      return res.status(500).json({ error: "Failed to generate a paper right now. Please try again in a moment." });
+    }
+  });
+
+  app.post("/api/revision/switch-chapter", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { currentPaperId } = req.body;
+    const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
+    if (!setup) return res.status(400).json({ error: "Please set up your syllabus first." });
+
+    let exclude: { subject: string; chapterName: string } | undefined;
+    if (currentPaperId) {
+      const { data: currentPaper } = await supabase.from("revision_papers").select("subject, chapter_name").eq("id", currentPaperId).eq("student_email", auth.email).maybeSingle();
+      if (currentPaper) exclude = { subject: currentPaper.subject, chapterName: currentPaper.chapter_name };
+    }
+
+    const target = pickNextRevisionTarget(setup, exclude);
+    if (!target) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
+
+    const classLabel = await resolveClassLabelForRevision(auth);
+    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+
+    if (target.cycleReset) {
+      const completedKey = target.subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
+      await supabase.from("revision_setups").update({ [completedKey]: [] }).eq("student_email", auth.email);
+    }
+
+    try {
+      const questions = await generateRevisionPaper(target.subject, target.chapterName, classLabel);
+      const { data: paperRow, error: insertError } = await supabase
+        .from("revision_papers")
+        .insert({
+          student_email: auth.email,
+          subject: target.subject,
+          chapter_name: target.chapterName,
+          content: { questions },
+          total_marks: REVISION_TOTAL_MARKS,
+          time_allotted_minutes: REVISION_TIME_MINUTES,
+          status: "draft",
+        })
+        .select()
+        .single();
+      if (insertError || !paperRow) throw new Error(insertError?.message || "Failed to save the generated paper.");
+      return res.json({ paper: mapRevisionPaperForStudent(paperRow) });
+    } catch (err: any) {
+      console.error("Error switching revision chapter:", err.message);
+      return res.status(500).json({ error: "Failed to generate a paper right now. Please try again in a moment." });
+    }
+  });
+
+  app.post("/api/revision/start/:paperId", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { paperId } = req.params;
+    const { data: paper } = await supabase.from("revision_papers").select("*").eq("id", paperId).eq("student_email", auth.email).maybeSingle();
+    if (!paper) return res.status(404).json({ error: "That paper could not be found." });
+    if (paper.status === "active" && paper.deadline_at) {
+      return res.json({ startedAt: paper.started_at, deadlineAt: paper.deadline_at }); // already started -- return the existing window, don't restart the clock
+    }
+    const startedAt = new Date();
+    const deadlineAt = new Date(startedAt.getTime() + (REVISION_TIME_MINUTES + REVISION_GRACE_MINUTES) * 60 * 1000);
+    const { error: updateError } = await supabase
+      .from("revision_papers")
+      .update({ status: "active", started_at: startedAt.toISOString(), deadline_at: deadlineAt.toISOString() })
+      .eq("id", paperId);
+    if (updateError) return res.status(500).json({ error: "Failed to start the paper. Please try again." });
+    return res.json({ startedAt: startedAt.toISOString(), deadlineAt: deadlineAt.toISOString() });
+  });
+
+  app.post("/api/revision/upload-photo", (req, res, next) => {
+    homeworkUpload.single("photo")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process the photo." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, order } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No photo was received." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (req.file.mimetype === "application/pdf") {
+      return res.status(400).json({ error: "This endpoint only accepts photos. Upload a PDF separately as a single file." });
+    }
+    const orderNum = parseInt(order, 10) || 0;
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const tempPath = `${REVISION_TEMP_PREFIX}/${auth.email}/${safeSessionId}/${String(orderNum).padStart(3, "0")}-${Date.now()}.jpg`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(tempPath, req.file.buffer, { contentType: req.file.mimetype });
+    if (uploadError) {
+      console.error("Temp revision photo upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload this photo. Please try again." });
+    }
+    return res.json({ success: true, tempPath });
+  });
+
+  app.delete("/api/revision/upload-photo", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { tempPath } = req.body;
+    if (!tempPath || typeof tempPath !== "string" || !tempPath.startsWith(`${REVISION_TEMP_PREFIX}/${auth.email}/`)) {
+      return res.status(400).json({ error: "Invalid photo reference." });
+    }
+    const { error: removeError } = await supabase.storage.from(HOMEWORK_BUCKET).remove([tempPath]);
+    if (removeError) return res.status(500).json({ error: "Failed to remove this photo." });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/revision/upload-chunk", (req, res, next) => {
+    chunkUpload.single("chunk")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process this chunk." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, order } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No data was received." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    const orderNum = parseInt(order, 10) || 0;
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const tempPath = `${REVISION_TEMP_PREFIX}/${auth.email}/${safeSessionId}/${String(orderNum).padStart(4, "0")}-${Date.now()}.part`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(tempPath, req.file.buffer, { contentType: "application/octet-stream" });
+    if (uploadError) {
+      console.error("Temp revision chunk upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload this piece of the file. Please try again." });
+    }
+    return res.json({ success: true, tempPath });
+  });
+
+  async function finalizeRevisionSubmission(auth: { email: string }, paperId: string, fileBuffer: Buffer, res: express.Response) {
+    const { data: paper } = await supabase.from("revision_papers").select("id, deadline_at").eq("id", paperId).eq("student_email", auth.email).maybeSingle();
+    if (!paper) return res.status(400).json({ error: "That revision paper no longer exists. Please refresh and try again." });
+
+    const filePath = `${auth.email}/revision-${Date.now()}-submission.pdf`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, fileBuffer, { contentType: "application/pdf" });
+    if (uploadError) {
+      console.error("Revision submission file upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to save your submission. Please try again." });
+    }
+
+    const isLate = !!paper.deadline_at && Date.now() > new Date(paper.deadline_at).getTime();
+    let row: any;
+    try {
+      row = await upsertRevisionSubmission({ studentEmail: auth.email, paperId, filePath, isLate });
+    } catch (err: any) {
+      console.error("Error saving revision submission record:", err.message);
+      return res.status(500).json({ error: "File uploaded but failed to save the submission record." });
+    }
+    await supabase.from("revision_papers").update({ status: "submitted" }).eq("id", paperId);
+    return res.json({ success: true, submission: { id: row.id, status: row.status, isLate: row.is_late } });
+  }
+
+  app.post("/api/revision/finalize-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, paperId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!paperId) return res.status(400).json({ error: "Missing revision paper reference." });
+    let merged: Buffer | null;
+    try {
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+    } catch (mergeErr: any) {
+      console.error("Error merging revision session photos:", mergeErr.message);
+      return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
+    }
+    if (!merged) {
+      const justCreated = await findJustCreatedRevisionSubmission(auth.email, String(paperId));
+      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late } });
+      return res.status(400).json({ error: "No uploaded photos were found. Please attach at least one photo and wait for it to finish uploading before submitting." });
+    }
+    return finalizeRevisionSubmission(auth, String(paperId), merged, res);
+  });
+
+  app.post("/api/revision/finalize-pdf-submission", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { sessionId, paperId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    if (!paperId) return res.status(400).json({ error: "Missing revision paper reference." });
+    let combined: Buffer | null;
+    try {
+      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+    } catch (concatErr: any) {
+      console.error("Error reassembling revision PDF chunks:", concatErr.message);
+      return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
+    }
+    if (!combined) {
+      const justCreated = await findJustCreatedRevisionSubmission(auth.email, String(paperId));
+      if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late } });
+      return res.status(400).json({ error: "No uploaded file pieces were found. Please attach a PDF and wait for it to finish uploading before submitting." });
+    }
+    return finalizeRevisionSubmission(auth, String(paperId), combined, res);
+  });
+
+  app.post("/api/revision/check-mine", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { submissionId } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+    const { data: sub } = await supabase.from("revision_submissions").select("student_email").eq("id", submissionId).maybeSingle();
+    if (!sub || sub.student_email !== auth.email) return res.status(404).json({ error: "Submission not found." });
+    await checkRevisionSubmission(String(submissionId));
+    const { data: updated } = await supabase.from("revision_submissions").select("*").eq("id", submissionId).maybeSingle();
+    return res.json({ submission: updated ? { id: updated.id, status: updated.status, aiScore: updated.ai_score, aiFeedback: updated.ai_feedback, isLate: updated.is_late } : null });
+  });
+
+  app.get("/api/revision/mine", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { data: papers } = await supabase.from("revision_papers").select("*").eq("student_email", auth.email).order("created_at", { ascending: false }).limit(20);
+    const { data: submissions } = await supabase.from("revision_submissions").select("*").eq("student_email", auth.email).order("submitted_at", { ascending: false }).limit(20);
+    return res.json({
+      papers: (papers || []).map(mapRevisionPaperForStudent),
+      submissions: (submissions || []).map((s: any) => ({ id: s.id, revisionPaperId: s.revision_paper_id, status: s.status, aiScore: s.ai_score, aiFeedback: s.ai_feedback, isLate: s.is_late, submittedAt: s.submitted_at })),
+    });
+  });
+
+  // Admin engagement/performance report -- mirrors /api/admin/homework/missing + /report: for a
+  // chosen date range, every approved student's revision activity (attempted count, avg score,
+  // last attempt, on-time/late split) plus a same-IST-calendar-day "did nothing today" flag.
+  app.get("/api/admin/revision/report", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { fromDate, toDate } = req.query as { fromDate?: string; toDate?: string };
+    if (!fromDate || !toDate) return res.status(400).json({ error: "Please choose both a from date and a to date." });
+
+    const { data: userRows } = await supabase.from("users").select("email, name, student_class, role, status");
+    const roster = (userRows || []).filter((u: any) => u.role === "student" && u.status === "approved");
+
+    const { data: paperRows } = await supabase
+      .from("revision_papers")
+      .select("id, student_email, subject, chapter_name, status, created_at")
+      .gte("created_at", `${fromDate}T00:00:00Z`)
+      .lte("created_at", `${toDate}T23:59:59Z`);
+
+    const paperIds = (paperRows || []).map((p: any) => p.id);
+    let submissionRows: any[] = [];
+    if (paperIds.length > 0) {
+      const { data } = await supabase.from("revision_submissions").select("revision_paper_id, student_email, ai_score, is_late, submitted_at").in("revision_paper_id", paperIds);
+      submissionRows = data || [];
+    }
+    const submissionByPaper = new Map(submissionRows.map((s: any) => [s.revision_paper_id, s]));
+
+    // "Today" here means the IST calendar day the report is being viewed on, matching the same
+    // 00:00-24:00 IST cycle language used for homework's own day-boundary logic.
+    const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+    const report = roster.map((u: any) => {
+      const myPapers = (paperRows || []).filter((p: any) => p.student_email === u.email);
+      const scored = myPapers.map((p: any) => submissionByPaper.get(p.id)).filter((s: any) => s && typeof s.ai_score === "number");
+      const avgScore = scored.length > 0 ? Math.round((scored.reduce((sum: number, s: any) => sum + s.ai_score, 0) / scored.length) * 10) / 10 : null;
+      const lateCount = scored.filter((s: any) => s.is_late).length;
+      const attemptDatesIST = myPapers.map((p: any) => new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+      const didNothingToday = !attemptDatesIST.includes(todayIST);
+      const lastAttempt = myPapers.length > 0 ? myPapers.reduce((latest: any, p: any) => (new Date(p.created_at) > new Date(latest.created_at) ? p : latest)).created_at : null;
+      return {
+        email: u.email,
+        name: u.name,
+        studentClass: u.student_class,
+        papersAttempted: myPapers.length,
+        papersGraded: scored.length,
+        avgScore,
+        lateCount,
+        lastAttempt,
+        didNothingToday,
+      };
+    });
+
+    return res.json({ report, fromDate, toDate, todayIST });
   });
 
   // ── ADMIN PROTECTED ENDPOINTS ──

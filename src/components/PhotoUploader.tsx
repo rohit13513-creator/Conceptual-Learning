@@ -20,6 +20,9 @@ interface PhotoUploaderProps {
   onChange: (tempPaths: string[], isUploading: boolean) => void;
   disabled?: boolean;
   accent?: 'cyan' | 'amber';
+  // Which endpoint each photo is POSTed to (and DELETEd from) -- defaults to the homework upload
+  // route; Revision reuses this same component pointed at its own parallel endpoints instead.
+  endpoint?: string;
 }
 
 // Shrinks a photo client-side before it ever leaves the device -- keeps each individual upload
@@ -51,7 +54,7 @@ async function compressPhoto(file: File, maxDimension = 1600, quality = 0.75): P
 // Renders a live-updating grid of attached photos -- each one uploads to the server the moment
 // it's picked (one small request per photo, never all of them bundled into one giant request),
 // so the student/admin can see exactly which pages made it and retry just the ones that didn't.
-export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, isLightMode, onChange, disabled, accent = 'cyan' }) => {
+export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, isLightMode, onChange, disabled, accent = 'cyan', endpoint = '/api/homework/upload-photo' }) => {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const nextOrderRef = useRef(0);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +77,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
       // Retries automatically on a dropped connection (waiting for the browser to come back
       // online between attempts) rather than failing the whole photo outright.
       const result = await uploadWithRetry({
-        url: '/api/homework/upload-photo',
+        url: endpoint,
         token,
         formData,
         onProgress: (fraction) => setPhotos((prev) => prev.map((p) => (p.id === item.id ? { ...p, progress: Math.round(fraction * 100) } : p))),
@@ -138,7 +141,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
     const item = photos.find((p) => p.id === id);
     if (!item || item.status === 'uploading') return;
     if (item.status === 'done' && item.tempPath) {
-      fetch('/api/homework/upload-photo', {
+      fetch(endpoint, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ tempPath: item.tempPath }),

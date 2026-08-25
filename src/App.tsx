@@ -16,6 +16,7 @@ import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
+import { Revision } from './components/Revision';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
@@ -502,10 +503,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -688,6 +689,33 @@ export default function App() {
   const [manualGradeError, setManualGradeError] = useState<string | null>(null);
   // Class performance / ranking report -- date range + class picked by the admin, showing every
   // student's day-by-day score (with late flags) and total across the range, highest first.
+  // Assess Revision -- the admin engagement/performance report for the self-serve Revision feature.
+  const [revisionReportFromDate, setRevisionReportFromDate] = useState('');
+  const [revisionReportToDate, setRevisionReportToDate] = useState('');
+  const [revisionReportLoading, setRevisionReportLoading] = useState(false);
+  const [revisionReportError, setRevisionReportError] = useState<string | null>(null);
+  const [revisionReportData, setRevisionReportData] = useState<{ report: any[]; fromDate: string; toDate: string; todayIST: string } | null>(null);
+
+  const handleGenerateRevisionReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setRevisionReportLoading(true);
+    setRevisionReportError(null);
+    try {
+      const params = new URLSearchParams({ fromDate: revisionReportFromDate, toDate: revisionReportToDate });
+      const resp = await fetch(`/api/admin/revision/report?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to generate the revision report.');
+      setRevisionReportData(data);
+    } catch (err: any) {
+      setRevisionReportError(err.message);
+    } finally {
+      setRevisionReportLoading(false);
+    }
+  };
+
   const [showPerformanceReport, setShowPerformanceReport] = useState(false);
   const [reportFromDate, setReportFromDate] = useState('');
   const [reportToDate, setReportToDate] = useState('');
@@ -3494,6 +3522,19 @@ export default function App() {
             </button>
           )}
 
+          {/* Tab: Revision -- available to every student (online and offline) and to admin, unlike Homework */}
+          <button
+            onClick={() => { changeView('revision'); setOpenMenu(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeView === 'revision'
+                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Revision</span>
+          </button>
+
           {/* Tab: Forum */}
           <button
             onClick={() => { changeView('forum'); setOpenMenu(null); }}
@@ -4112,6 +4153,19 @@ export default function App() {
               </button>
             </div>
 
+            {/* Revision box -- available to every student regardless of online/offline */}
+            <button
+              onClick={() => changeView('revision')}
+              className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-cyan-50 to-blue-50 border-cyan-300' : 'from-cyan-500/10 to-blue-600/10 border-cyan-500/30'}`}
+            >
+              <BookOpen className="w-7 h-7 shrink-0 text-cyan-400" />
+              <div className="flex-1">
+                <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Revision</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed and AI-checked.</p>
+              </div>
+              <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
+            </button>
+
             <div className="space-y-2">
               <h2 className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Subject</h2>
               <p className={`text-xs font-medium ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Pick a subject to open its study notes.</p>
@@ -4256,6 +4310,19 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Revision box -- separate from admin-posted Homework, student-initiated on their own syllabus */}
+            <button
+              onClick={() => changeView('revision')}
+              className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-cyan-50 to-blue-50 border-cyan-300' : 'from-cyan-500/10 to-blue-600/10 border-cyan-500/30'}`}
+            >
+              <BookOpen className="w-7 h-7 shrink-0 text-cyan-400" />
+              <div className="flex-1">
+                <p className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Revision</p>
+                <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed and AI-checked.</p>
+              </div>
+              <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
+            </button>
 
             {/* Upload Homework box */}
             <div id="homework-upload-form" className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
@@ -6376,6 +6443,10 @@ export default function App() {
         </div>
       )}
 
+      {activeView === 'revision' && user && (
+        <Revision isLightMode={isLightMode} user={{ name: user.name, email: user.email, token: user.token, role: user.role, studentClass: user.studentClass }} />
+      )}
+
       {activeView === 'startStudying' && (() => {
         const effectiveClass: '8th' | '9th' | '10th' | null = !isClassExempt
           ? (studentTrack === '8th' || studentTrack === '9th' || studentTrack === '10th' ? studentTrack : null)
@@ -8037,6 +8108,96 @@ export default function App() {
                   ))
                 )}
               </div>
+            </div>
+
+            {/* Assess Revision -- per-student engagement/performance report for the self-serve Revision feature */}
+            <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div>
+                <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
+                  <BookOpen className="w-4 h-4 text-cyan-400" /> Assess Revision
+                </h3>
+                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Who's using Revision daily, and how they're scoring -- "Missed Today" is based on the same 00:00-24:00 IST day used everywhere else in this app.</p>
+              </div>
+
+              {revisionReportError && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{revisionReportError}</div>
+              )}
+
+              <form onSubmit={handleGenerateRevisionReport} className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:items-end">
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>From Date</label>
+                  <input
+                    type="date"
+                    value={revisionReportFromDate}
+                    onChange={(e) => setRevisionReportFromDate(e.target.value)}
+                    required
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>To Date</label>
+                  <input
+                    type="date"
+                    value={revisionReportToDate}
+                    onChange={(e) => setRevisionReportToDate(e.target.value)}
+                    required
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={revisionReportLoading}
+                  className="py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {revisionReportLoading ? 'Generating...' : 'Generate'}
+                </button>
+              </form>
+
+              {revisionReportData && (
+                revisionReportData.report.length === 0 ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">No approved students found.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
+                      <thead>
+                        <tr className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                          <th className="py-2 pr-3">Student</th>
+                          <th className="py-2 pr-3">Class</th>
+                          <th className="py-2 pr-3">Attempted</th>
+                          <th className="py-2 pr-3">Graded</th>
+                          <th className="py-2 pr-3">Avg Score</th>
+                          <th className="py-2 pr-3">Late</th>
+                          <th className="py-2 pr-3">Last Attempt</th>
+                          <th className="py-2 pr-3">Missed Today</th>
+                        </tr>
+                      </thead>
+                      <tbody className={isLightMode ? 'divide-y divide-slate-200' : 'divide-y divide-slate-800'}>
+                        {revisionReportData.report
+                          .slice()
+                          .sort((a: any, b: any) => (a.didNothingToday === b.didNothingToday ? 0 : a.didNothingToday ? -1 : 1))
+                          .map((r: any) => (
+                            <tr key={r.email} className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>
+                              <td className="py-2 pr-3 font-bold">{r.name}</td>
+                              <td className="py-2 pr-3 font-mono">{r.studentClass}</td>
+                              <td className="py-2 pr-3">{r.papersAttempted}</td>
+                              <td className="py-2 pr-3">{r.papersGraded}</td>
+                              <td className="py-2 pr-3">{r.avgScore !== null ? `${r.avgScore}/30` : '--'}</td>
+                              <td className="py-2 pr-3">{r.lateCount}</td>
+                              <td className="py-2 pr-3 font-mono">{r.lastAttempt ? new Date(r.lastAttempt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}</td>
+                              <td className="py-2 pr-3">
+                                {r.didNothingToday ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">Yes</span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">No</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              )}
             </div>
 
             {/* Pending Forum Posts */}
