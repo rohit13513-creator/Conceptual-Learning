@@ -9339,25 +9339,26 @@ function buildApp(): express.Express {
     return Array.isArray(result.chapters) ? result.chapters.filter((c: any) => typeof c === "string" && c.trim()) : [];
   }
 
-  function pickChapterWithinSubject(subject: "Maths" | "Science", setup: any): { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean } | null {
+  // Never resets anything itself -- a subject simply has nothing available once its own chapters
+  // are all completed (null), even if the other subject is still mid-cycle. The only place a fresh
+  // cycle actually begins is markRevisionChapterDone, which resets BOTH subjects together the
+  // instant the whole syllabus is done, not just one subject in isolation.
+  function pickChapterWithinSubject(subject: "Maths" | "Science", setup: any): { subject: "Maths" | "Science"; chapterName: string } | null {
     const chapters: string[] = (subject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
     if (chapters.length === 0) return null;
     const completed: string[] = (subject === "Maths" ? setup.maths_completed_chapters : setup.science_completed_chapters) || [];
-    let available = chapters.filter((c) => !completed.includes(c));
-    let cycleReset = false;
-    if (available.length === 0) {
-      available = chapters.slice();
-      cycleReset = true;
-    }
+    const available = chapters.filter((c) => !completed.includes(c));
+    if (available.length === 0) return null;
     const chapterName = available[Math.floor(Math.random() * available.length)];
-    return { subject, chapterName, cycleReset };
+    return { subject, chapterName };
   }
 
   // Picks which subject to serve next: whichever has completed fewer chapters this cycle catches
   // up first; tied (including "both zero"), the nearer non-null exam date wins; still tied, random
   // -- this is what keeps a student from only ever seeing the subject with the closer exam date,
-  // per the explicit "don't give only maths test, give science also" requirement.
-  function pickNextRevisionTarget(setup: any, excludeChapter?: { subject: string; chapterName: string }): { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean } | null {
+  // per the explicit "don't give only maths test, give science also" requirement. Only used as a
+  // fallback when the student hasn't picked an explicit chapter themselves (see generate-paper).
+  function pickNextRevisionTarget(setup: any, excludeChapter?: { subject: string; chapterName: string }): { subject: "Maths" | "Science"; chapterName: string } | null {
     const hasMaths = ((setup.maths_chapters || []) as string[]).length > 0;
     const hasScience = ((setup.science_chapters || []) as string[]).length > 0;
     if (!hasMaths && !hasScience) return null;
@@ -9381,19 +9382,24 @@ function buildApp(): express.Express {
       }
     }
 
-    const picked = pickChapterWithinSubject(subject, setup);
+    let picked = pickChapterWithinSubject(subject, setup);
+    if (!picked) {
+      // Preferred subject has nothing left available (e.g. it finished while the other subject
+      // still has pending chapters) -- fall back to whichever subject actually has something.
+      const otherSubject: "Maths" | "Science" = subject === "Maths" ? "Science" : "Maths";
+      picked = pickChapterWithinSubject(otherSubject, setup);
+    }
+    if (!picked) return null;
+
     // If we landed on the exact chapter the student is switching away from and the other subject
     // also has options, try the other subject once instead of re-serving the same chapter.
-    if (picked && excludeChapter && picked.subject === excludeChapter.subject && picked.chapterName === excludeChapter.chapterName) {
-      const otherSubject: "Maths" | "Science" = subject === "Maths" ? "Science" : "Maths";
-      const altChapters: string[] = (otherSubject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
-      if (altChapters.length > 0) {
-        const alt = pickChapterWithinSubject(otherSubject, setup);
-        if (alt) return alt;
-      }
-      // Only one option existed for this subject and it's the one being excluded -- re-roll within
-      // the same subject once (harmless if it comes back the same; nothing better is available).
-      const retry = pickChapterWithinSubject(subject, setup);
+    if (excludeChapter && picked.subject === excludeChapter.subject && picked.chapterName === excludeChapter.chapterName) {
+      const otherSubject: "Maths" | "Science" = picked.subject === "Maths" ? "Science" : "Maths";
+      const alt = pickChapterWithinSubject(otherSubject, setup);
+      if (alt) return alt;
+      // Only one option existed and it's the one being excluded -- re-roll within the same subject
+      // once (harmless if it comes back the same; nothing better is available).
+      const retry = pickChapterWithinSubject(picked.subject, setup);
       if (retry) return retry;
     }
     return picked;
@@ -9644,15 +9650,28 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   async function markRevisionChapterDone(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", studentEmail).maybeSingle();
     if (!setup) return;
-    const chaptersKey = subject === "Maths" ? "maths_chapters" : "science_chapters";
     const completedKey = subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
-    const chapters: string[] = setup[chaptersKey] || [];
     let completed: string[] = setup[completedKey] || [];
     if (!completed.includes(chapterName)) completed = [...completed, chapterName];
-    if (chapters.length > 0 && completed.length >= chapters.length && chapters.every((c) => completed.includes(c))) {
-      completed = []; // full cycle done -- start fresh
+
+    const updates: Record<string, any> = { [completedKey]: completed, updated_at: new Date().toISOString() };
+
+    // Only start a fresh cycle once EVERY chapter across the WHOLE syllabus (both subjects) has
+    // been completed -- resetting per-subject the moment just that one subject finishes would let
+    // its chapters repeat while the other subject's syllabus hasn't even been started yet, which
+    // defeats the entire point of "don't repeat a chapter until the full syllabus cycle is done."
+    const mathsChapters: string[] = setup.maths_chapters || [];
+    const scienceChapters: string[] = setup.science_chapters || [];
+    const mathsCompleted: string[] = subject === "Maths" ? completed : (setup.maths_completed_chapters || []);
+    const scienceCompleted: string[] = subject === "Science" ? completed : (setup.science_completed_chapters || []);
+    const mathsDone = mathsChapters.length === 0 || mathsChapters.every((c) => mathsCompleted.includes(c));
+    const scienceDone = scienceChapters.length === 0 || scienceChapters.every((c) => scienceCompleted.includes(c));
+    if ((mathsChapters.length > 0 || scienceChapters.length > 0) && mathsDone && scienceDone) {
+      updates.maths_completed_chapters = [];
+      updates.science_completed_chapters = [];
     }
-    await supabase.from("revision_setups").update({ [completedKey]: completed, updated_at: new Date().toISOString() }).eq("student_email", studentEmail);
+
+    await supabase.from("revision_setups").update(updates).eq("student_email", studentEmail);
   }
 
   async function checkRevisionSubmission(submissionId: string) {
@@ -9901,7 +9920,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
 
     const { subject: requestedSubject, chapterName: requestedChapterName } = req.body as { subject?: string; chapterName?: string };
 
-    let target: { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean };
+    let target: { subject: "Maths" | "Science"; chapterName: string };
     if (requestedSubject && requestedChapterName) {
       if (requestedSubject !== "Maths" && requestedSubject !== "Science") {
         return res.status(400).json({ error: "Invalid subject." });
@@ -9911,14 +9930,14 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       if (!chapters.includes(requestedChapterName)) {
         return res.status(400).json({ error: "That chapter isn't in your syllabus. Please refresh and pick again." });
       }
-      // Same "all done -> fresh cycle" rule as the auto-picker (pickChapterWithinSubject): only
-      // block picking an already-completed chapter when the cycle genuinely isn't over yet.
-      const available = chapters.filter((c) => !completed.includes(c));
-      const cycleReset = available.length === 0;
-      if (!cycleReset && completed.includes(requestedChapterName)) {
+      // A chapter shown as "completed" is only ever actually stale here in a race (two tabs, a
+      // slow refresh) -- a genuine full-syllabus cycle reset already clears both completed lists
+      // proactively in markRevisionChapterDone the instant it happens, so this list is always
+      // current by the time a real pick reaches here.
+      if (completed.includes(requestedChapterName)) {
         return res.status(400).json({ error: "You've already completed that chapter this cycle. Pick one that's still pending." });
       }
-      target = { subject: requestedSubject, chapterName: requestedChapterName, cycleReset };
+      target = { subject: requestedSubject, chapterName: requestedChapterName };
     } else {
       const picked = pickNextRevisionTarget(setup);
       if (!picked) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
@@ -9927,11 +9946,6 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
 
     const classLabel = await resolveClassLabelForRevision(auth);
     if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
-
-    if (target.cycleReset) {
-      const completedKey = target.subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
-      await supabase.from("revision_setups").update({ [completedKey]: [] }).eq("student_email", auth.email);
-    }
 
     try {
       const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel);
