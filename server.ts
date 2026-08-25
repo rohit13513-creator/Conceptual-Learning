@@ -10200,6 +10200,80 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     return res.json({ report, fromDate, toDate, todayIST });
   });
 
+  // Every paper a given student has attempted, newest first, with its submission (if any) -- lets
+  // the admin see exactly which chapters a student has been tested on and drill into any one of
+  // them (the paper itself, and the student's actual uploaded answer sheet).
+  app.get("/api/admin/revision/student/:email/papers", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { email } = req.params;
+    const { data: papers } = await supabase
+      .from("revision_papers")
+      .select("id, subject, chapter_name, total_marks, status, created_at, started_at, deadline_at")
+      .eq("student_email", email)
+      .order("created_at", { ascending: false });
+    const paperIds = (papers || []).map((p: any) => p.id);
+    let submissions: any[] = [];
+    if (paperIds.length > 0) {
+      const { data } = await supabase
+        .from("revision_submissions")
+        .select("id, revision_paper_id, status, ai_score, is_late, submitted_at, file_path")
+        .in("revision_paper_id", paperIds);
+      submissions = data || [];
+    }
+    const submissionByPaper = new Map(submissions.map((s: any) => [s.revision_paper_id, s]));
+    const result = (papers || []).map((p: any) => {
+      const sub = submissionByPaper.get(p.id);
+      return {
+        id: p.id,
+        subject: p.subject,
+        chapterName: p.chapter_name,
+        totalMarks: p.total_marks,
+        status: p.status,
+        createdAt: p.created_at,
+        submission: sub ? { id: sub.id, status: sub.status, aiScore: sub.ai_score, isLate: sub.is_late, submittedAt: sub.submitted_at, hasFile: !!sub.file_path } : null,
+      };
+    });
+    return res.json({ papers: result });
+  });
+
+  // Full paper content (including the marking scheme/answer key) for admin review -- unlike the
+  // student-facing mapRevisionPaperForStudent, this is available regardless of the paper's status,
+  // since the admin isn't the one taking the test.
+  app.get("/api/admin/revision/paper/:paperId", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { paperId } = req.params;
+    const { data: paper } = await supabase.from("revision_papers").select("*").eq("id", paperId).maybeSingle();
+    if (!paper) return res.status(404).json({ error: "That paper could not be found." });
+    return res.json({
+      paper: {
+        id: paper.id,
+        studentEmail: paper.student_email,
+        subject: paper.subject,
+        chapterName: paper.chapter_name,
+        totalMarks: paper.total_marks,
+        status: paper.status,
+        createdAt: paper.created_at,
+        questions: paper.content?.questions || [],
+      },
+    });
+  });
+
+  // Streams a student's actual uploaded answer-sheet file for the admin to review directly --
+  // same HOMEWORK_BUCKET/file_path revision submissions already use.
+  app.get("/api/admin/revision/submission/:submissionId/download", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId } = req.params;
+    const { data: sub } = await supabase.from("revision_submissions").select("file_path, student_email").eq("id", submissionId).maybeSingle();
+    if (!sub?.file_path) return res.status(404).json({ error: "That submission could not be found." });
+    const { data: blob, error } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
+    if (error || !blob) return res.status(404).json({ error: "That file could not be found." });
+    const buf = Buffer.from(await blob.arrayBuffer());
+    const isPdf = sub.file_path.toLowerCase().endsWith(".pdf") || blob.type === "application/pdf";
+    res.setHeader("Content-Type", isPdf ? "application/pdf" : (blob.type || "application/octet-stream"));
+    res.setHeader("Content-Disposition", `attachment; filename="${sub.student_email.replace(/[^a-zA-Z0-9.\-]/g, "_")}-answer-sheet.${isPdf ? "pdf" : "jpg"}"`);
+    return res.send(buf);
+  });
+
   // Reference textbooks used to ground Revision paper generation (see REVISION_REFERENCE_PREFIX
   // above). Any number of PDFs per (class, subject) -- one per chapter, multiple volumes, etc.
   // Uploads go through chunk-then-finalize (see the comment on REVISION_REFERENCE_TEMP_PREFIX)

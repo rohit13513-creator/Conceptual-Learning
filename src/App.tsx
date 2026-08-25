@@ -160,7 +160,8 @@ import {
   Construction,
   MessageSquare,
   Image as ImageIcon,
-  UserX
+  UserX,
+  X
 } from 'lucide-react';
 
 const TYPES: { id: OpticsType; label: string; group: 'mirror' | 'lens' }[] = [
@@ -714,6 +715,108 @@ export default function App() {
       setRevisionReportError(err.message);
     } finally {
       setRevisionReportLoading(false);
+    }
+  };
+
+  // Sortable Assess Revision columns -- defaults to the same "students who missed today first"
+  // ordering the table always used, but any column header can now take over.
+  const [revisionReportSort, setRevisionReportSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'missedToday', dir: 'desc' });
+  const handleRevisionReportSort = (key: string) => {
+    setRevisionReportSort((prev) => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
+  };
+  const sortedRevisionReport = useMemo(() => {
+    const rows = revisionReportData?.report || [];
+    const { key, dir } = revisionReportSort;
+    const mul = dir === 'asc' ? 1 : -1;
+    const val = (r: any): any => {
+      switch (key) {
+        case 'name': return r.name || '';
+        case 'studentClass': return r.studentClass || '';
+        case 'papersAttempted': return r.papersAttempted;
+        case 'papersGraded': return r.papersGraded;
+        case 'avgScore': return r.avgScore ?? -1;
+        case 'lateCount': return r.lateCount;
+        case 'lastAttempt': return r.lastAttempt ? new Date(r.lastAttempt).getTime() : -1;
+        case 'missedToday': return r.didNothingToday ? 1 : 0;
+        default: return '';
+      }
+    };
+    return rows.slice().sort((a: any, b: any) => {
+      const av = val(a), bv = val(b);
+      if (av < bv) return -1 * mul;
+      if (av > bv) return 1 * mul;
+      return 0;
+    });
+  }, [revisionReportData, revisionReportSort]);
+
+  // Per-student drill-down: which chapters they've attempted, each paper's own questions/answer
+  // key, and their actual uploaded answer sheet -- opened by clicking a row in the report.
+  const [revisionStudentDetail, setRevisionStudentDetail] = useState<{ email: string; name: string } | null>(null);
+  const [revisionStudentPapers, setRevisionStudentPapers] = useState<any[] | null>(null);
+  const [revisionStudentPapersLoading, setRevisionStudentPapersLoading] = useState(false);
+  const [revisionStudentPapersError, setRevisionStudentPapersError] = useState<string | null>(null);
+  const [revisionPaperDetail, setRevisionPaperDetail] = useState<any | null>(null);
+  const [revisionPaperDetailLoading, setRevisionPaperDetailLoading] = useState(false);
+  const [revisionAnswerSheetDownloading, setRevisionAnswerSheetDownloading] = useState<string | null>(null);
+
+  const openRevisionStudentDetail = async (email: string, name: string) => {
+    if (!user) return;
+    setRevisionStudentDetail({ email, name });
+    setRevisionStudentPapers(null);
+    setRevisionStudentPapersError(null);
+    setRevisionStudentPapersLoading(true);
+    try {
+      const resp = await fetch(`/api/admin/revision/student/${encodeURIComponent(email)}/papers`, { headers: { Authorization: `Bearer ${user.token}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to load this student\'s papers.');
+      setRevisionStudentPapers(data.papers || []);
+    } catch (err: any) {
+      setRevisionStudentPapersError(err.message);
+    } finally {
+      setRevisionStudentPapersLoading(false);
+    }
+  };
+
+  const openRevisionPaperDetail = async (paperId: string) => {
+    if (!user) return;
+    setRevisionPaperDetail(null);
+    setRevisionPaperDetailLoading(true);
+    try {
+      const resp = await fetch(`/api/admin/revision/paper/${paperId}`, { headers: { Authorization: `Bearer ${user.token}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to load this paper.');
+      setRevisionPaperDetail(data.paper);
+    } catch (err: any) {
+      setRevisionPaperDetail({ error: err.message });
+    } finally {
+      setRevisionPaperDetailLoading(false);
+    }
+  };
+
+  const handleDownloadAnswerSheet = async (submissionId: string, studentName: string) => {
+    if (!user) return;
+    setRevisionAnswerSheetDownloading(submissionId);
+    try {
+      const resp = await fetch(`/api/admin/revision/submission/${submissionId}/download`, { headers: { Authorization: `Bearer ${user.token}` } });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to download this answer sheet.');
+      }
+      const blob = await resp.blob();
+      const contentType = resp.headers.get('content-type') || '';
+      const ext = contentType.includes('pdf') ? 'pdf' : 'jpg';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${studentName.replace(/[^a-zA-Z0-9.\-]/g, '_')}-answer-sheet.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setRevisionStudentPapersError(err.message);
+    } finally {
+      setRevisionAnswerSheetDownloading(null);
     }
   };
 
@@ -3983,6 +4086,110 @@ export default function App() {
                 {deletingRefBook ? 'Removing...' : 'Remove'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {revisionStudentDetail && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setRevisionStudentDetail(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{revisionStudentDetail.name}'s Revision Papers</h3>
+              <button onClick={() => setRevisionStudentDetail(null)} className={`p-1 rounded-lg cursor-pointer ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-800'}`}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {revisionStudentPapersError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{revisionStudentPapersError}</div>
+            )}
+
+            {revisionStudentPapersLoading ? (
+              <p className="text-center py-6 text-xs font-semibold text-slate-500">Loading...</p>
+            ) : revisionStudentPapers && revisionStudentPapers.length === 0 ? (
+              <p className="text-center py-6 text-xs font-semibold text-slate-500">No revision papers yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {(revisionStudentPapers || []).map((p: any) => (
+                  <div key={p.id} className={`p-3 rounded-xl border flex items-center justify-between gap-3 flex-wrap ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                    <div>
+                      <p className={`text-xs font-black ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>{p.subject} -- {p.chapterName}</p>
+                      <p className={`text-[10px] font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {' -- '}{p.status}
+                        {p.submission?.aiScore != null && ` -- ${p.submission.aiScore}/${p.totalMarks}`}
+                        {p.submission?.isLate && ' -- late'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => openRevisionPaperDetail(p.id)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                      >
+                        View Paper
+                      </button>
+                      {p.submission?.hasFile && (
+                        <button
+                          onClick={() => handleDownloadAnswerSheet(p.submission.id, revisionStudentDetail.name)}
+                          disabled={revisionAnswerSheetDownloading === p.submission.id}
+                          className="px-2.5 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer hover:bg-cyan-500/20 transition disabled:opacity-50"
+                        >
+                          {revisionAnswerSheetDownloading === p.submission.id ? 'Downloading...' : 'Answer Sheet'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(revisionPaperDetailLoading || revisionPaperDetail) && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setRevisionPaperDetail(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            {revisionPaperDetailLoading ? (
+              <p className="text-center py-6 text-xs font-semibold text-slate-500">Loading paper...</p>
+            ) : revisionPaperDetail?.error ? (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{revisionPaperDetail.error}</div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{revisionPaperDetail.subject}</span>
+                    <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{revisionPaperDetail.chapterName}</h3>
+                  </div>
+                  <button onClick={() => setRevisionPaperDetail(null)} className={`p-1 rounded-lg cursor-pointer shrink-0 ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-slate-800'}`}>
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {(revisionPaperDetail.questions || []).map((q: any) => (
+                    <div key={q.id} className={`p-3 rounded-lg border text-sm ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                      <p className={`font-semibold ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>
+                        <span className="text-cyan-400 font-mono mr-1.5">{q.id}.</span>{q.text} <span className={`text-[10px] font-mono ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>[{q.marks} mark{q.marks > 1 ? 's' : ''}]</span>
+                      </p>
+                      {q.markingPoints && q.markingPoints.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {q.markingPoints.map((mp: string, i: number) => (
+                            <li key={i} className={`flex items-start gap-1.5 text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" /> {mp}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -8348,40 +8555,57 @@ export default function App() {
                     <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
                       <thead>
                         <tr className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                          <th className="py-2 pr-3">Student</th>
-                          <th className="py-2 pr-3">Class</th>
-                          <th className="py-2 pr-3">Attempted</th>
-                          <th className="py-2 pr-3">Graded</th>
-                          <th className="py-2 pr-3">Avg Score</th>
-                          <th className="py-2 pr-3">Late</th>
-                          <th className="py-2 pr-3">Last Attempt</th>
-                          <th className="py-2 pr-3">Missed Today</th>
+                          {([
+                            { key: 'name', label: 'Student' },
+                            { key: 'studentClass', label: 'Class' },
+                            { key: 'papersAttempted', label: 'Attempted' },
+                            { key: 'papersGraded', label: 'Graded' },
+                            { key: 'avgScore', label: 'Avg Score' },
+                            { key: 'lateCount', label: 'Late' },
+                            { key: 'lastAttempt', label: 'Last Attempt' },
+                            { key: 'missedToday', label: 'Missed Today' },
+                          ] as const).map((col) => (
+                            <th key={col.key} className="py-2 pr-3">
+                              <button
+                                type="button"
+                                onClick={() => handleRevisionReportSort(col.key)}
+                                className={`flex items-center gap-0.5 cursor-pointer ${isLightMode ? 'hover:text-slate-800' : 'hover:text-slate-200'}`}
+                              >
+                                {col.label}
+                                {revisionReportSort.key === col.key && (
+                                  <ChevronDown className={`w-3 h-3 transition-transform ${revisionReportSort.dir === 'asc' ? 'rotate-180' : ''}`} />
+                                )}
+                              </button>
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody className={isLightMode ? 'divide-y divide-slate-200' : 'divide-y divide-slate-800'}>
-                        {revisionReportData.report
-                          .slice()
-                          .sort((a: any, b: any) => (a.didNothingToday === b.didNothingToday ? 0 : a.didNothingToday ? -1 : 1))
-                          .map((r: any) => (
-                            <tr key={r.email} className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>
-                              <td className="py-2 pr-3 font-bold">{r.name}</td>
-                              <td className="py-2 pr-3 font-mono">{r.studentClass}</td>
-                              <td className="py-2 pr-3">{r.papersAttempted}</td>
-                              <td className="py-2 pr-3">{r.papersGraded}</td>
-                              <td className="py-2 pr-3">{r.avgScore !== null ? `${r.avgScore}/30` : '--'}</td>
-                              <td className="py-2 pr-3">{r.lateCount}</td>
-                              <td className="py-2 pr-3 font-mono">{r.lastAttempt ? new Date(r.lastAttempt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}</td>
-                              <td className="py-2 pr-3">
-                                {r.didNothingToday ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">Yes</span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">No</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                        {sortedRevisionReport.map((r: any) => (
+                          <tr
+                            key={r.email}
+                            onClick={() => openRevisionStudentDetail(r.email, r.name)}
+                            className={`cursor-pointer transition ${isLightMode ? 'text-slate-700 hover:bg-slate-50' : 'text-slate-300 hover:bg-slate-900/60'}`}
+                          >
+                            <td className="py-2 pr-3 font-bold">{r.name}</td>
+                            <td className="py-2 pr-3 font-mono">{r.studentClass}</td>
+                            <td className="py-2 pr-3">{r.papersAttempted}</td>
+                            <td className="py-2 pr-3">{r.papersGraded}</td>
+                            <td className="py-2 pr-3">{r.avgScore !== null ? `${r.avgScore}/30` : '--'}</td>
+                            <td className="py-2 pr-3">{r.lateCount}</td>
+                            <td className="py-2 pr-3 font-mono">{r.lastAttempt ? new Date(r.lastAttempt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '--'}</td>
+                            <td className="py-2 pr-3">
+                              {r.didNothingToday ? (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-500/10 text-red-400 border border-red-500/20">Yes</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">No</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                    <p className={`text-[10px] font-semibold mt-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Click a column header to sort. Click a student to see their individual papers and answer sheets.</p>
                   </div>
                 )
               )}
