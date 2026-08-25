@@ -790,20 +790,32 @@ export default function App() {
     }
   }, [activeView, fetchReferenceBooks]);
 
-  const handleDeleteReferenceBook = async (classKey: string, subject: 'Maths' | 'Science', fileName?: string) => {
-    if (!user) return;
-    setReferenceBookError(null);
+  // Confirm-before-delete for reference books -- these are admin-uploaded source material a
+  // mis-click shouldn't silently wipe, so removal always goes through this dialog (mirrors the
+  // homework-submission delete-confirm pattern elsewhere in this file) rather than deleting on
+  // the first click. `fileName` omitted means "clear every file for this class/subject".
+  const [deleteConfirmRefBook, setDeleteConfirmRefBook] = useState<{ classKey: string; subject: 'Maths' | 'Science'; fileName?: string; label: string } | null>(null);
+  const [deletingRefBook, setDeletingRefBook] = useState(false);
+  const [deleteRefBookError, setDeleteRefBookError] = useState<string | null>(null);
+
+  const confirmDeleteReferenceBook = async () => {
+    if (!deleteConfirmRefBook || !user) return;
+    setDeletingRefBook(true);
+    setDeleteRefBookError(null);
     try {
       const resp = await fetch('/api/admin/revision/reference-books', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classKey, subject, fileName }),
+        body: JSON.stringify({ classKey: deleteConfirmRefBook.classKey, subject: deleteConfirmRefBook.subject, fileName: deleteConfirmRefBook.fileName }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to remove the reference book.');
       await fetchReferenceBooks();
+      setDeleteConfirmRefBook(null);
     } catch (err: any) {
-      setReferenceBookError(err.message);
+      setDeleteRefBookError(err.message);
+    } finally {
+      setDeletingRefBook(false);
     }
   };
 
@@ -3914,6 +3926,44 @@ export default function App() {
                 className="flex-1 py-2.5 bg-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl hover:bg-red-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {deletingSubmission ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmRefBook && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !deletingRefBook && setDeleteConfirmRefBook(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 text-center ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isLightMode ? 'bg-red-100' : 'bg-red-500/10'}`}>
+              <Trash2 className="w-8 h-8 text-red-400" />
+            </div>
+            <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{deleteConfirmRefBook.fileName ? 'Remove this file?' : 'Remove all files?'}</h3>
+            <p className={`text-xs font-semibold break-words ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+              {deleteConfirmRefBook.label}. This cannot be undone -- you can always upload it again afterward.
+            </p>
+            {deleteRefBookError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-left">{deleteRefBookError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmRefBook(null)}
+                disabled={deletingRefBook}
+                className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteReferenceBook}
+                disabled={deletingRefBook}
+                className="flex-1 py-2.5 bg-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl hover:bg-red-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletingRefBook ? 'Removing...' : 'Remove'}
               </button>
             </div>
           </div>
@@ -8319,7 +8369,7 @@ export default function App() {
                           <span className={`text-xs font-black ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>Class {classKey} -- {subject}</span>
                           {files.length > 0 && (
                             <button
-                              onClick={() => handleDeleteReferenceBook(classKey, subject)}
+                              onClick={() => setDeleteConfirmRefBook({ classKey, subject, label: `all ${files.length} file${files.length === 1 ? '' : 's'} for Class ${classKey} -- ${subject}` })}
                               className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300"
                               title="Remove all files for this class/subject"
                             >
@@ -8333,7 +8383,7 @@ export default function App() {
                               <li key={f.fileName} className={`flex items-center justify-between gap-2 text-[10px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>
                                 <span className="truncate" title={f.fileName}>{f.fileName}</span>
                                 <button
-                                  onClick={() => handleDeleteReferenceBook(classKey, subject, f.fileName)}
+                                  onClick={() => setDeleteConfirmRefBook({ classKey, subject, fileName: f.fileName, label: f.fileName })}
                                   className="text-red-400 hover:text-red-300 shrink-0"
                                   title="Remove this file"
                                 >
