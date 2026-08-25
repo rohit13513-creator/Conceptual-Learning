@@ -10229,6 +10229,51 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // Every paper a given student has attempted, newest first, with its submission (if any) -- lets
   // the admin see exactly which chapters a student has been tested on and drill into any one of
   // them (the paper itself, and the student's actual uploaded answer sheet).
+  // Every distinct (class, subject, chapter, cycle) combination that's ever been generated, with
+  // how many students share that content and a sample paper to view -- lets the admin browse what
+  // Revision has actually written for each chapter across cycle 1, cycle 2, cycle 3, etc., rather
+  // than only being able to look things up per student. Papers aren't literally shared rows (each
+  // student's pick gets its own revision_papers row even when the content was reused -- see
+  // getRevisionQuestionsForTarget), so this groups them after the fact for browsing.
+  app.get("/api/admin/revision/papers-library", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { data: papers } = await supabase
+      .from("revision_papers")
+      .select("id, student_email, subject, chapter_name, cycle_number, created_at")
+      .order("created_at", { ascending: true });
+    if (!papers || papers.length === 0) return res.json({ groups: [] });
+
+    const emails = [...new Set(papers.map((p: any) => p.student_email))];
+    const { data: users } = await supabase.from("users").select("email, student_class").in("email", emails);
+    const classByEmail = new Map((users || []).map((u: any) => [u.email, u.student_class]));
+
+    const groups = new Map<string, { classKey: string; subject: string; chapterName: string; cycleNumber: number; studentEmails: Set<string>; samplePaperId: string; firstCreatedAt: string }>();
+    for (const p of papers as any[]) {
+      const studentClass = classByEmail.get(p.student_email);
+      const classKey = (studentClass && CLASS_TO_TARGET[studentClass]) || "Unknown";
+      const cycleNumber = p.cycle_number || 1;
+      const key = `${classKey}|${p.subject}|${p.chapter_name}|${cycleNumber}`;
+      if (!groups.has(key)) {
+        groups.set(key, { classKey, subject: p.subject, chapterName: p.chapter_name, cycleNumber, studentEmails: new Set(), samplePaperId: p.id, firstCreatedAt: p.created_at });
+      }
+      groups.get(key)!.studentEmails.add(p.student_email);
+    }
+
+    const result = [...groups.values()]
+      .map((g) => ({
+        classKey: g.classKey,
+        subject: g.subject,
+        chapterName: g.chapterName,
+        cycleNumber: g.cycleNumber,
+        studentCount: g.studentEmails.size,
+        samplePaperId: g.samplePaperId,
+        firstCreatedAt: g.firstCreatedAt,
+      }))
+      .sort((a, b) => a.classKey.localeCompare(b.classKey) || a.subject.localeCompare(b.subject) || a.chapterName.localeCompare(b.chapterName) || a.cycleNumber - b.cycleNumber);
+
+    return res.json({ groups: result });
+  });
+
   app.get("/api/admin/revision/student/:email/papers", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
     const { email } = req.params;

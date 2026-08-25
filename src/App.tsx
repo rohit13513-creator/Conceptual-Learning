@@ -724,7 +724,13 @@ export default function App() {
   const handleRevisionReportSort = (key: string) => {
     setRevisionReportSort((prev) => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
   };
-  const sortedRevisionReport = useMemo(() => {
+  // Filters -- class, a single named student, and attempt status -- so a specific student (or
+  // "who hasn't touched Revision at all") can be picked out of the full roster directly, the same
+  // way the Homework Class Performance Report already lets the admin narrow down.
+  const [revisionReportClassFilter, setRevisionReportClassFilter] = useState<'' | 'VIII' | 'IX' | 'X'>('');
+  const [revisionReportStudentFilter, setRevisionReportStudentFilter] = useState('');
+  const [revisionReportStatusFilter, setRevisionReportStatusFilter] = useState<'' | 'attempted' | 'never' | 'missedToday'>('');
+  const filteredSortedRevisionReport = useMemo(() => {
     const rows = revisionReportData?.report || [];
     const { key, dir } = revisionReportSort;
     const mul = dir === 'asc' ? 1 : -1;
@@ -741,13 +747,23 @@ export default function App() {
         default: return '';
       }
     };
-    return rows.slice().sort((a: any, b: any) => {
-      const av = val(a), bv = val(b);
-      if (av < bv) return -1 * mul;
-      if (av > bv) return 1 * mul;
-      return 0;
-    });
-  }, [revisionReportData, revisionReportSort]);
+    return rows
+      .filter((r: any) => !revisionReportClassFilter || r.studentClass === revisionReportClassFilter)
+      .filter((r: any) => !revisionReportStudentFilter || r.email === revisionReportStudentFilter)
+      .filter((r: any) => {
+        if (revisionReportStatusFilter === 'attempted') return r.papersAttempted > 0;
+        if (revisionReportStatusFilter === 'never') return r.papersAttempted === 0;
+        if (revisionReportStatusFilter === 'missedToday') return r.didNothingToday;
+        return true;
+      })
+      .slice()
+      .sort((a: any, b: any) => {
+        const av = val(a), bv = val(b);
+        if (av < bv) return -1 * mul;
+        if (av > bv) return 1 * mul;
+        return 0;
+      });
+  }, [revisionReportData, revisionReportSort, revisionReportClassFilter, revisionReportStudentFilter, revisionReportStatusFilter]);
 
   // Per-student drill-down: which chapters they've attempted, each paper's own questions/answer
   // key, and their actual uploaded answer sheet -- opened by clicking a row in the report.
@@ -819,6 +835,40 @@ export default function App() {
       setRevisionAnswerSheetDownloading(null);
     }
   };
+
+  // Revision Papers Library -- every distinct (class, subject, chapter, cycle) combination ever
+  // generated, so the admin can see what's been written for a chapter across cycle 1, cycle 2,
+  // cycle 3 etc. without going through a specific student. "View Paper" reuses the same
+  // openRevisionPaperDetail modal as the per-student drill-down.
+  const [revisionLibraryGroups, setRevisionLibraryGroups] = useState<any[] | null>(null);
+  const [revisionLibraryLoading, setRevisionLibraryLoading] = useState(false);
+  const [revisionLibraryError, setRevisionLibraryError] = useState<string | null>(null);
+  const [revisionLibraryClassFilter, setRevisionLibraryClassFilter] = useState('');
+  const [revisionLibrarySubjectFilter, setRevisionLibrarySubjectFilter] = useState('');
+  const [revisionLibraryChapterFilter, setRevisionLibraryChapterFilter] = useState('');
+
+  const fetchRevisionLibrary = async () => {
+    if (!user) return;
+    setRevisionLibraryLoading(true);
+    setRevisionLibraryError(null);
+    try {
+      const resp = await fetch('/api/admin/revision/papers-library', { headers: { Authorization: `Bearer ${user.token}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to load the papers library.');
+      setRevisionLibraryGroups(data.groups || []);
+    } catch (err: any) {
+      setRevisionLibraryError(err.message);
+    } finally {
+      setRevisionLibraryLoading(false);
+    }
+  };
+
+  const filteredRevisionLibraryGroups = useMemo(() => {
+    return (revisionLibraryGroups || [])
+      .filter((g) => !revisionLibraryClassFilter || g.classKey === revisionLibraryClassFilter)
+      .filter((g) => !revisionLibrarySubjectFilter || g.subject === revisionLibrarySubjectFilter)
+      .filter((g) => !revisionLibraryChapterFilter || g.chapterName.toLowerCase().includes(revisionLibraryChapterFilter.toLowerCase()));
+  }, [revisionLibraryGroups, revisionLibraryClassFilter, revisionLibrarySubjectFilter, revisionLibraryChapterFilter]);
 
   // Reference textbooks (NCERT PDFs) that ground Revision paper generation for a given
   // class/subject -- lets the admin keep these current (e.g. the 2026 book changes for Class 8/9)
@@ -8565,7 +8615,57 @@ export default function App() {
                 revisionReportData.report.length === 0 ? (
                   <p className="text-center py-4 text-xs font-semibold text-slate-500">No approved students found.</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={revisionReportClassFilter}
+                        onChange={(e) => setRevisionReportClassFilter(e.target.value as any)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="">All Classes</option>
+                        <option value="VIII">Class VIII</option>
+                        <option value="IX">Class IX</option>
+                        <option value="X">Class X</option>
+                      </select>
+                      <select
+                        value={revisionReportStudentFilter}
+                        onChange={(e) => setRevisionReportStudentFilter(e.target.value)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="">All Students</option>
+                        {revisionReportData.report
+                          .slice()
+                          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                          .map((r: any) => (
+                            <option key={r.email} value={r.email}>{r.name}</option>
+                          ))}
+                      </select>
+                      <select
+                        value={revisionReportStatusFilter}
+                        onChange={(e) => setRevisionReportStatusFilter(e.target.value as any)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="">All Attempt Statuses</option>
+                        <option value="attempted">Attempted at Least Once</option>
+                        <option value="never">Never Attempted</option>
+                        <option value="missedToday">Missed Today</option>
+                      </select>
+                      {(revisionReportClassFilter || revisionReportStudentFilter || revisionReportStatusFilter) && (
+                        <button
+                          type="button"
+                          onClick={() => { setRevisionReportClassFilter(''); setRevisionReportStudentFilter(''); setRevisionReportStatusFilter(''); }}
+                          className={`text-[10px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+                        >
+                          Clear Filters
+                        </button>
+                      )}
+                      <span className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{filteredSortedRevisionReport.length} of {revisionReportData.report.length} students</span>
+                    </div>
+
+                    {filteredSortedRevisionReport.length === 0 ? (
+                      <p className="text-center py-4 text-xs font-semibold text-slate-500">No students match these filters.</p>
+                    ) : (
+                    <div className="overflow-x-auto">
                     <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
                       <thead>
                         <tr className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -8595,7 +8695,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className={isLightMode ? 'divide-y divide-slate-200' : 'divide-y divide-slate-800'}>
-                        {sortedRevisionReport.map((r: any) => (
+                        {filteredSortedRevisionReport.map((r: any) => (
                           <tr
                             key={r.email}
                             onClick={() => openRevisionStudentDetail(r.email, r.name)}
@@ -8620,6 +8720,107 @@ export default function App() {
                       </tbody>
                     </table>
                     <p className={`text-[10px] font-semibold mt-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Click a column header to sort. Click a student to see their individual papers and answer sheets.</p>
+                    </div>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Revision Papers Library -- browse every distinct (class, subject, chapter, cycle)
+                combination that's ever been generated, independent of any one student. */}
+            <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
+                    <FileText className="w-4 h-4 text-cyan-400" /> Revision Papers Library
+                  </h3>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Every chapter Revision has written a paper for, across cycle 1, 2, 3 and on -- independent of any one student.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchRevisionLibrary}
+                  disabled={revisionLibraryLoading}
+                  className="py-2 px-4 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                  {revisionLibraryLoading ? 'Loading...' : revisionLibraryGroups ? 'Refresh' : 'Load Library'}
+                </button>
+              </div>
+
+              {revisionLibraryError && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{revisionLibraryError}</div>
+              )}
+
+              {revisionLibraryGroups && (
+                revisionLibraryGroups.length === 0 ? (
+                  <p className="text-center py-4 text-xs font-semibold text-slate-500">No revision papers have been generated yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={revisionLibraryClassFilter}
+                        onChange={(e) => setRevisionLibraryClassFilter(e.target.value)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="">All Classes</option>
+                        <option value="8th">Class 8th</option>
+                        <option value="9th">Class 9th</option>
+                        <option value="10th">Class 10th</option>
+                      </select>
+                      <select
+                        value={revisionLibrarySubjectFilter}
+                        onChange={(e) => setRevisionLibrarySubjectFilter(e.target.value)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      >
+                        <option value="">All Subjects</option>
+                        <option value="Maths">Maths</option>
+                        <option value="Science">Science</option>
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Search chapter..."
+                        value={revisionLibraryChapterFilter}
+                        onChange={(e) => setRevisionLibraryChapterFilter(e.target.value)}
+                        className={`text-[10px] font-bold rounded-lg py-1.5 px-2 border focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                      />
+                      <span className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{filteredRevisionLibraryGroups.length} of {revisionLibraryGroups.length}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className={`w-full text-left text-xs divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
+                        <thead>
+                          <tr className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                            <th className="py-2 pr-3">Class</th>
+                            <th className="py-2 pr-3">Subject</th>
+                            <th className="py-2 pr-3">Chapter</th>
+                            <th className="py-2 pr-3">Cycle</th>
+                            <th className="py-2 pr-3">Students</th>
+                            <th className="py-2 pr-3">First Generated</th>
+                            <th className="py-2 pr-3"></th>
+                          </tr>
+                        </thead>
+                        <tbody className={isLightMode ? 'divide-y divide-slate-200' : 'divide-y divide-slate-800'}>
+                          {filteredRevisionLibraryGroups.map((g: any) => (
+                            <tr key={`${g.classKey}-${g.subject}-${g.chapterName}-${g.cycleNumber}`} className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>
+                              <td className="py-2 pr-3 font-mono">{g.classKey}</td>
+                              <td className="py-2 pr-3">{g.subject}</td>
+                              <td className="py-2 pr-3 font-bold">{g.chapterName}</td>
+                              <td className="py-2 pr-3">{g.cycleNumber}</td>
+                              <td className="py-2 pr-3">{g.studentCount}</td>
+                              <td className="py-2 pr-3 font-mono">{new Date(g.firstCreatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                              <td className="py-2 pr-3">
+                                <button
+                                  type="button"
+                                  onClick={() => openRevisionPaperDetail(g.samplePaperId)}
+                                  className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                                >
+                                  View Paper
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )
               )}
