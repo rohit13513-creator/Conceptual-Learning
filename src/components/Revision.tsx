@@ -130,6 +130,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
 
+  // Chapter breakdown/picker -- a student always sees which chapter they're about to be tested on
+  // and picks it themselves from their own syllabus, before anything is generated. pendingChoice
+  // holds the just-tapped chapter while the "are you ready" confirmation is open; nothing is
+  // generated until that's confirmed.
+  const [pendingChoice, setPendingChoice] = useState<{ subject: 'Maths' | 'Science'; chapterName: string } | null>(null);
+
   // Submission upload
   const [uploadMode, setUploadMode] = useState<'photos' | 'pdf'>('photos');
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -203,29 +209,24 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     }
   };
 
-  const handleGeneratePaper = async () => {
+  // Generates the confirmed chapter's paper and immediately starts its timer in one go -- by the
+  // time a student has picked a chapter and confirmed they're ready, there's no reason to make
+  // them tap "Start Now" separately afterward. handleStartNow below is kept only to resume a paper
+  // that was left in 'draft' (generated but not started) by an interrupted request.
+  const handleConfirmChapterChoice = async () => {
+    if (!pendingChoice) return;
     setGenerating(true);
     setError(null);
     try {
-      const result = await fetchJsonWithRetry({ url: '/api/revision/generate-paper', token: user.token, body: {} });
-      if (!result.ok) throw new Error(result.data.error || 'Failed to generate a paper right now.');
-      setCurrentPaper(result.data.paper);
+      const genResult = await fetchJsonWithRetry({ url: '/api/revision/generate-paper', token: user.token, body: { subject: pendingChoice.subject, chapterName: pendingChoice.chapterName } });
+      if (!genResult.ok) throw new Error(genResult.data.error || 'Failed to generate a paper right now.');
+      const paper: RevisionPaper = genResult.data.paper;
+      const startResult = await fetchJsonWithRetry({ url: `/api/revision/start/${paper.id}`, token: user.token, body: {} });
+      if (!startResult.ok) throw new Error(startResult.data.error || 'Failed to start the paper.');
+      setCurrentPaper({ ...paper, status: 'active', startedAt: startResult.data.startedAt, deadlineAt: startResult.data.deadlineAt });
       setCurrentSubmission(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSwitchChapter = async () => {
-    setGenerating(true);
-    setError(null);
-    try {
-      const result = await fetchJsonWithRetry({ url: '/api/revision/switch-chapter', token: user.token, body: { currentPaperId: currentPaper?.id } });
-      if (!result.ok) throw new Error(result.data.error || 'Failed to switch chapters.');
-      setCurrentPaper(result.data.paper);
-      setCurrentSubmission(null);
+      setPendingChoice(null);
+      setShowDeadlineModal(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -347,7 +348,6 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const handleNextChapter = () => {
     setCurrentPaper(null);
     setCurrentSubmission(null);
-    handleGeneratePaper();
   };
 
   if (loading) {
@@ -405,10 +405,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           ], 'text-cyan-400')}
 
           {section(RefreshCw, 'How your paper is picked', [
-            'Each time you get a new paper, Revision picks whichever subject is furthest behind in this cycle (fewest chapters completed so far); if both are equal, the subject with the nearer exam date goes first. You will always get both subjects over time -- it never sticks to just one.',
-            'Within that subject, a chapter you haven\'t completed yet is picked (randomly, so you don\'t always see the same order).',
-            'You can hit "Switch Chapter" as many times as you like before starting -- switching never counts as using up a chapter.',
-            'Once you submit and a chapter\'s paper is graded, that chapter won\'t come up again until every chapter in that subject\'s syllabus has been covered -- then the cycle starts fresh with new questions.',
+            'You choose the chapter yourself: every chapter from your own syllabus (Maths and Science) is listed, and you pick exactly which one you want to be tested on next -- nothing is generated until you choose.',
+            'Chapters you\'ve already completed this cycle are shown but can\'t be picked again -- once every chapter in a subject is done, that subject\'s list resets and everything becomes pickable again, with fresh questions.',
+            'You\'ll be asked to confirm you\'re ready before anything is generated, since the 60-minute timer starts the moment your paper is created -- so only confirm when you\'re actually about to sit down and attempt it.',
           ], 'text-cyan-400')}
 
           {section(Award, 'The paper itself', [
@@ -602,15 +601,36 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
         {!showSetupForm && hasAnySyllabus && (
           <>
             {!currentPaper || currentPaper.status === 'graded' || (currentPaper.status === 'submitted' && currentSubmission?.status !== 'checked' && currentSubmission?.status !== 'pending') ? (
-              <div className={`${cardClass(isLightMode)} text-center space-y-3`}>
-                <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Ready for your next practice paper?</p>
-                <button
-                  onClick={handleGeneratePaper}
-                  disabled={generating}
-                  className="px-5 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer hover:from-cyan-350 hover:to-blue-450 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {generating ? 'Generating...' : 'Get My Revision Paper'}
-                </button>
+              <div className={`${cardClass(isLightMode)} space-y-4`}>
+                <div>
+                  <h3 className={`text-sm font-black uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Chapter</h3>
+                  <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Pick which chapter from your own syllabus you want to be tested on next -- nothing is generated until you confirm.</p>
+                </div>
+                {([
+                  { subject: 'Maths' as const, chapters: setup!.mathsChapters, completed: setup!.mathsCompletedChapters },
+                  { subject: 'Science' as const, chapters: setup!.scienceChapters, completed: setup!.scienceCompletedChapters },
+                ]).filter((s) => s.chapters.length > 0).map((s) => (
+                  <div key={s.subject} className="space-y-2">
+                    <h4 className={`text-[11px] font-black uppercase tracking-wide font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{s.subject}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {s.chapters.map((chapterName) => {
+                        const done = s.completed.includes(chapterName);
+                        return (
+                          <button
+                            key={chapterName}
+                            type="button"
+                            onClick={() => !done && setPendingChoice({ subject: s.subject, chapterName })}
+                            disabled={done || generating}
+                            className={`text-left p-3 rounded-lg border text-xs font-semibold transition ${done ? (isLightMode ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed') : (isLightMode ? 'bg-slate-50 border-slate-200 text-slate-800 hover:border-cyan-500 cursor-pointer' : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-cyan-500 cursor-pointer')}`}
+                          >
+                            {chapterName}
+                            {done && <span className="block text-[9px] font-black uppercase tracking-wide mt-1 text-emerald-500">Done this cycle</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : null}
 
@@ -629,11 +649,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     Start Now <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={handleSwitchChapter}
-                    disabled={generating}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition disabled:opacity-50 ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                    onClick={handleNextChapter}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} /> Switch Chapter
+                    <RefreshCw className="w-3.5 h-3.5" /> Choose a Different Chapter
                   </button>
                 </div>
               </div>
@@ -804,6 +823,44 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
         {!showSetupForm && !hasAnySyllabus && (
           <div className={`${cardClass(isLightMode)} text-center`}>
             <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Add your syllabus above to get your first revision paper.</p>
+          </div>
+        )}
+
+        {pendingChoice && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !generating && setPendingChoice(null)}>
+            <div onClick={(e) => e.stopPropagation()} className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 text-center ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}>
+              <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isLightMode ? 'bg-cyan-100' : 'bg-cyan-500/10'}`}>
+                <BookOpen className="w-8 h-8 text-cyan-400" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{pendingChoice.subject}</span>
+                <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{pendingChoice.chapterName}</h3>
+              </div>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+                Only generate this paper when you're fully prepared to attempt the test right now. Once it's generated, you'll have 60 minutes to complete it, plus 15 extra minutes after that to upload your answers -- the timer starts immediately.
+              </p>
+              {error && (
+                <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-left">{error}</div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingChoice(null)}
+                  disabled={generating}
+                  className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+                >
+                  Not Yet
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmChapterChoice}
+                  disabled={generating}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generating ? 'Generating...' : "I'm Ready"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

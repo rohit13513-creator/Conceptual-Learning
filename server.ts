@@ -9888,14 +9888,42 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     return setup?.fallback_class ? (CLASS_TO_TARGET[setup.fallback_class] ? setup.fallback_class : TARGET_TO_LABEL[setup.fallback_class] || null) : null;
   }
 
+  // Generates a paper for either an explicit (subject, chapterName) the student picked from their
+  // own syllabus breakdown, or -- when neither is given -- the auto-picked target (kept as a
+  // fallback for robustness, though the current frontend always sends an explicit choice: students
+  // see the full chapter breakdown and choose deliberately, rather than a paper being generated
+  // for an unannounced chapter before they've agreed to start).
   app.post("/api/revision/generate-paper", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
     if (!setup) return res.status(400).json({ error: "Please set up your syllabus first." });
 
-    const target = pickNextRevisionTarget(setup);
-    if (!target) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
+    const { subject: requestedSubject, chapterName: requestedChapterName } = req.body as { subject?: string; chapterName?: string };
+
+    let target: { subject: "Maths" | "Science"; chapterName: string; cycleReset: boolean };
+    if (requestedSubject && requestedChapterName) {
+      if (requestedSubject !== "Maths" && requestedSubject !== "Science") {
+        return res.status(400).json({ error: "Invalid subject." });
+      }
+      const chapters: string[] = (requestedSubject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
+      const completed: string[] = (requestedSubject === "Maths" ? setup.maths_completed_chapters : setup.science_completed_chapters) || [];
+      if (!chapters.includes(requestedChapterName)) {
+        return res.status(400).json({ error: "That chapter isn't in your syllabus. Please refresh and pick again." });
+      }
+      // Same "all done -> fresh cycle" rule as the auto-picker (pickChapterWithinSubject): only
+      // block picking an already-completed chapter when the cycle genuinely isn't over yet.
+      const available = chapters.filter((c) => !completed.includes(c));
+      const cycleReset = available.length === 0;
+      if (!cycleReset && completed.includes(requestedChapterName)) {
+        return res.status(400).json({ error: "You've already completed that chapter this cycle. Pick one that's still pending." });
+      }
+      target = { subject: requestedSubject, chapterName: requestedChapterName, cycleReset };
+    } else {
+      const picked = pickNextRevisionTarget(setup);
+      if (!picked) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
+      target = picked;
+    }
 
     const classLabel = await resolveClassLabelForRevision(auth);
     if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
@@ -9924,53 +9952,6 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       return res.json({ paper: mapRevisionPaperForStudent(paperRow) });
     } catch (err: any) {
       console.error("Error generating revision paper:", err.message);
-      return res.status(500).json({ error: "Failed to generate a paper right now. Please try again in a moment." });
-    }
-  });
-
-  app.post("/api/revision/switch-chapter", async (req, res) => {
-    const auth = requireAuth(req, res);
-    if (!auth) return;
-    const { currentPaperId } = req.body;
-    const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
-    if (!setup) return res.status(400).json({ error: "Please set up your syllabus first." });
-
-    let exclude: { subject: string; chapterName: string } | undefined;
-    if (currentPaperId) {
-      const { data: currentPaper } = await supabase.from("revision_papers").select("subject, chapter_name").eq("id", currentPaperId).eq("student_email", auth.email).maybeSingle();
-      if (currentPaper) exclude = { subject: currentPaper.subject, chapterName: currentPaper.chapter_name };
-    }
-
-    const target = pickNextRevisionTarget(setup, exclude);
-    if (!target) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
-
-    const classLabel = await resolveClassLabelForRevision(auth);
-    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
-
-    if (target.cycleReset) {
-      const completedKey = target.subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
-      await supabase.from("revision_setups").update({ [completedKey]: [] }).eq("student_email", auth.email);
-    }
-
-    try {
-      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel);
-      const { data: paperRow, error: insertError } = await supabase
-        .from("revision_papers")
-        .insert({
-          student_email: auth.email,
-          subject: target.subject,
-          chapter_name: target.chapterName,
-          content: { questions },
-          total_marks: REVISION_TOTAL_MARKS,
-          time_allotted_minutes: REVISION_TIME_MINUTES,
-          status: "draft",
-        })
-        .select()
-        .single();
-      if (insertError || !paperRow) throw new Error(insertError?.message || "Failed to save the generated paper.");
-      return res.json({ paper: mapRevisionPaperForStudent(paperRow) });
-    } catch (err: any) {
-      console.error("Error switching revision chapter:", err.message);
       return res.status(500).json({ error: "Failed to generate a paper right now. Please try again in a moment." });
     }
   });
