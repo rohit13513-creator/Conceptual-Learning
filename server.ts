@@ -9388,7 +9388,9 @@ function buildApp(): express.Express {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
     const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}". Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). The paper MUST have exactly this fixed structure, 30 marks total:
 ${sectionsText}
-Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer. Section D questions are competency/case-based -- give a short real-world scenario or data/passage, then ask 1-2 sub-questions about it, still worth 4 marks total for the whole question. For every question, also write internal marking points (what a correct answer must contain to earn each mark) -- these are for the grader only and are never shown to the student.`;
+Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer. Section D questions are competency/case-based -- give a short real-world scenario or data/passage, then ask 1-2 sub-questions about it, still worth 4 marks total for the whole question.
+
+For every question in Sections B, C, D, and E, write markingPoints as a genuine CBSE-board-style STEP marking scheme, exactly like the official marking scheme that would accompany this question on a real CBSE answer key: break the full solution into as many individual steps as the question's mark value (a 2-mark question gets 2 marking points, a 4-mark question gets 4, etc.), each worth exactly 1 mark, in the actual order the working proceeds -- typically: correct formula/concept/method identified, correct substitution of given values, correct intermediate simplification/steps (one point per major step for longer derivations), and the correct final answer/conclusion as its own separate point. Each marking point must be concrete and checkable (e.g. "Correctly states the quadratic formula" or "Correctly substitutes a=2, b=-5, c=3" or "Final answer: x=3, x=1/2"), not vague. For Section A (objective/MCQ or one-line factual answers), there is no step marking -- just write a single markingPoints entry with the one correct option/answer, since these are all-or-nothing for their 1 mark.`;
 
     const tool = {
       name: "submit_paper",
@@ -9406,7 +9408,7 @@ Section A questions are objective -- either a 4-option MCQ (write the options in
                 sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
                 marks: { type: "integer" },
                 text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options inline where relevant." },
-                markingPoints: { type: "array", items: { type: "string" }, description: "What a correct answer must contain, broken down so partial credit up to `marks` can be awarded point by point. Grader-only, never shown to the student." },
+                markingPoints: { type: "array", items: { type: "string" }, description: "For Section A: a single entry, the one correct option/answer (no step marking, all-or-nothing). For Sections B-E: one entry per mark, in step order (method/formula, substitution, working steps, final answer) -- a genuine CBSE-style step marking scheme, so the grader can award each step's mark independently. Grader-only, never shown to the student." },
               },
               required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
             },
@@ -9538,10 +9540,23 @@ Section A questions are objective -- either a 4-option MCQ (write the options in
       : { type: "image", source: { type: "base64", media_type: fileBlob.type || "image/jpeg", data: base64Data } };
 
     const questions: (RevisionQuestion & { markingPoints: string[] })[] = paper.content?.questions || [];
-    const questionsBlock = questions.map((q) => `${q.id} (${q.marks} mark${q.marks > 1 ? "s" : ""}): ${q.text}\nMarking points: ${(q.markingPoints || []).join("; ")}`).join("\n\n");
+    const questionsBlock = questions
+      .map((q) => {
+        const steps = (q.markingPoints || []).map((mp, i) => `  Step ${i + 1} (1 mark): ${mp}`).join("\n");
+        return `${q.id} (${q.marks} mark${q.marks > 1 ? "s" : ""}): ${q.text}\nStep marking scheme:\n${steps}`;
+      })
+      .join("\n\n");
 
-    const system = `You are a strict CBSE-curriculum teacher grading a student's handwritten answers to a mock revision paper you already wrote, against your own marking points. Award partial credit generously and fairly wherever the student's answer covers some but not all of a question's marking points -- do not require a perfect answer for any marks at all. Extend the same handwriting tolerance a real teacher would: never deduct for messy handwriting or presentation on its own, only for actually wrong or missing content; when a single digit is genuinely ambiguous between two similar shapes (3/5, 1/7, 6/0, 4/9, 5/9), prefer the reading that makes the student's own working internally consistent and correct. If a question is entirely unattempted, award 0 for it -- do not guess credit that isn't there. For each question, award an integer number of marks from 0 up to that question's maximum.`;
-    const prompt = `Here is the paper's own question list and marking scheme, followed by the student's submitted answers as an attached file.\n\n${questionsBlock}`;
+    // CBSE step marking, made a real mechanic rather than a prompt instruction to hope the model
+    // follows correctly: the model judges each step of the paper's own marking scheme true/false
+    // independently (stepResults, same order as the question's markingPoints -- Section A/MCQ
+    // questions have exactly one step, so they are naturally all-or-nothing with zero extra
+    // special-casing), and the actual mark for each question is deterministically the count of
+    // true steps, exactly mirroring how a real CBSE examiner ticks off a marking scheme -- never
+    // a single holistic number the model picks itself (same "never trust the model's own
+    // arithmetic" principle as homework grading's deterministic score, see checkHomeworkSubmission).
+    const system = `You are a strict CBSE-board examiner grading a student's handwritten answers to a mock paper you already wrote, using genuine CBSE step-marking: for every question in Sections B-E, each step of the marking scheme below is worth exactly 1 mark, awarded independently of the other steps in that same question. Apply the standard CBSE "error carried forward" (ECF) principle: if an early step has a mistake, still award every later step whose method is correctly applied to the student's own (incorrect) value from that point on -- do not zero out an entire question just because one early step was wrong. Section A questions have only ONE step in their marking scheme (the single correct option/answer) -- these are all-or-nothing for their 1 mark, with no partial credit, since choosing an option is not a multi-step working. For every step, judge strictly against what the marking scheme step actually requires, but extend the same handwriting tolerance a real teacher would: never mark a step wrong for messy handwriting or presentation alone; when a single digit is genuinely ambiguous between two similar shapes (3/5, 1/7, 6/0, 4/9, 5/9), prefer the reading that makes the student's own working internally consistent and correct. A step that is entirely missing (not attempted at all) is not met. If a whole question is entirely unattempted, mark every one of its steps as not met.`;
+    const prompt = `Here is the paper's own question list and step-wise marking scheme, followed by the student's submitted answers as an attached file. For each question, evaluate every numbered step in order.\n\n${questionsBlock}`;
 
     const gradeTool = {
       name: "submit_revision_grade",
@@ -9555,10 +9570,20 @@ Section A questions are objective -- either a 4-option MCQ (write the options in
               type: "object",
               properties: {
                 questionId: { type: "string" },
-                marksAwarded: { type: "integer", minimum: 0 },
-                note: { type: "string", description: "One short sentence on what was missing/wrong, if marks were lost. Empty string if full marks." },
+                stepResults: {
+                  type: "array",
+                  description: "One entry per step of this question's marking scheme, in the same order, judged independently (apply error-carried-forward: a step can still be met even if an earlier step in the same question was not).",
+                  items: {
+                    type: "object",
+                    properties: {
+                      met: { type: "boolean", description: "True if the student's answer satisfies this specific step of the marking scheme." },
+                      note: { type: "string", description: "Empty string if met. If not met, one short phrase on what was wrong or missing for this step." },
+                    },
+                    required: ["met", "note"],
+                  },
+                },
               },
-              required: ["questionId", "marksAwarded", "note"],
+              required: ["questionId", "stepResults"],
             },
           },
           overallFeedback: { type: "string", description: "2-4 sentences of overall exam-style feedback: strongest area, weakest area, one concrete tip for next time." },
@@ -9598,7 +9623,7 @@ Section A questions are objective -- either a 4-option MCQ (write the options in
           break;
         }
         if (!Array.isArray(toolUseBlock.input?.perQuestion) && attempt < 2) {
-          lastErrorMessage = "Claude did not return per-question marks.";
+          lastErrorMessage = "Claude did not return per-question step results.";
           continue;
         }
         succeeded = true;
@@ -9608,16 +9633,22 @@ Section A questions are objective -- either a 4-option MCQ (write the options in
 
       const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_revision_grade");
       const parsed = toolUseBlock.input;
-      const perQuestion: { questionId: string; marksAwarded: number; note: string }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
+      const perQuestion: { questionId: string; stepResults?: { met: boolean; note: string }[] }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
       const maxByQuestion = new Map(questions.map((q) => [q.id, q.marks]));
       let totalScore = 0;
+      const feedbackLines: string[] = [];
       for (const pq of perQuestion) {
         const max = maxByQuestion.get(pq.questionId) ?? 0;
-        totalScore += Math.max(0, Math.min(max, Math.round(pq.marksAwarded || 0)));
+        const steps = Array.isArray(pq.stepResults) ? pq.stepResults : [];
+        // Deterministic per-question mark: count of steps the model marked met, never a number the
+        // model picks itself -- capped at that question's own max in case of a miscounted response.
+        const marksAwarded = Math.min(max, steps.filter((s) => s.met).length);
+        totalScore += marksAwarded;
+        const missedNotes = steps.filter((s) => !s.met && s.note && s.note.trim()).map((s) => s.note.trim());
+        if (missedNotes.length > 0) feedbackLines.push(`${pq.questionId} (${marksAwarded}/${max}): ${missedNotes.join("; ")}`);
       }
       totalScore = Math.min(totalScore, REVISION_TOTAL_MARKS);
 
-      const feedbackLines = perQuestion.filter((pq) => pq.note && pq.note.trim()).map((pq) => `${pq.questionId}: ${pq.note.trim()}`);
       const overall = sanitizePlaceholderText(parsed.overallFeedback) || "Checked.";
       const fullFeedback = [overall, ...feedbackLines].join("\n");
 
