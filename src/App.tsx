@@ -716,48 +716,71 @@ export default function App() {
     }
   };
 
-  // Reference textbooks (full NCERT PDFs) that ground Revision paper generation for a given
+  // Reference textbooks (NCERT PDFs) that ground Revision paper generation for a given
   // class/subject -- lets the admin keep these current (e.g. the 2026 book changes for Class 8/9)
-  // without needing a developer in the loop. One file per (class, subject); re-uploading replaces it.
-  const [referenceBooks, setReferenceBooks] = useState<{ fileName: string; sizeBytes: number | null; updatedAt: string | null }[]>([]);
-  const [referenceBooksLoading, setReferenceBooksLoading] = useState(false);
+  // without needing a developer in the loop. Any number of files per (class, subject): one per
+  // chapter, multiple volumes, etc. -- upload several PDFs at once, or a single zip of them.
+  const [referenceBooks, setReferenceBooks] = useState<{ slotKey: string; fileName: string; sizeBytes: number | null; updatedAt: string | null }[]>([]);
   const [referenceBookUploadKey, setReferenceBookUploadKey] = useState<string | null>(null);
+  const [referenceBookUploadStatus, setReferenceBookUploadStatus] = useState<string | null>(null);
   const [referenceBookError, setReferenceBookError] = useState<string | null>(null);
 
   const fetchReferenceBooks = useCallback(async () => {
     if (!user) return;
-    setReferenceBooksLoading(true);
     try {
       const resp = await fetch('/api/admin/revision/reference-books', { headers: { Authorization: `Bearer ${user.token}` } });
       const data = await resp.json();
       if (resp.ok) setReferenceBooks(data.files || []);
-    } finally {
-      setReferenceBooksLoading(false);
-    }
+    } catch { /* silent -- the panel just shows whatever it last had */ }
   }, [user]);
 
-  const handleUploadReferenceBook = async (classKey: string, subject: 'Maths' | 'Science', file: File) => {
-    if (!user) return;
+  // Uploads one file (a chapter PDF, a whole-book PDF, or a zip of many) via the same
+  // chunk-then-finalize flow used for revision submissions, since a real textbook or a zip of a
+  // whole book's chapters is far past what a single Vercel request body can carry.
+  const uploadOneReferenceFile = async (classKey: string, subject: 'Maths' | 'Science', file: File): Promise<string> => {
+    if (!user) throw new Error('Not signed in.');
+    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const CHUNK_SIZE = 3 * 1024 * 1024;
+    let order = 0;
+    for (let start = 0; start < file.size; start += CHUNK_SIZE) {
+      const chunk = file.slice(start, start + CHUNK_SIZE);
+      const chunkForm = new FormData();
+      chunkForm.append('sessionId', sessionId);
+      chunkForm.append('order', String(order));
+      chunkForm.append('chunk', chunk, 'chunk.part');
+      const chunkResult = await uploadWithRetry({ url: '/api/admin/revision/reference-books/upload-chunk', token: user.token, formData: chunkForm });
+      if (!chunkResult.ok) throw new Error(chunkResult.data?.error || `Failed to upload ${file.name}.`);
+      order += 1;
+    }
+    // An empty file (0 bytes) would loop zero times above and leave nothing to finalize -- not a
+    // real scenario for a textbook PDF, so not handled specially.
+    const result = await fetchJsonWithRetry({ url: '/api/admin/revision/reference-books/finalize', token: user.token, body: { classKey, subject, sessionId, fileName: file.name, isZip } });
+    if (!result.ok) throw new Error(result.data?.error || `Failed to save ${file.name}.`);
+    return file.name;
+  };
+
+  const handleUploadReferenceBooks = async (classKey: string, subject: 'Maths' | 'Science', files: FileList) => {
+    if (!user || files.length === 0) return;
     const slotKey = `${classKey}-${subject}`;
     setReferenceBookError(null);
     setReferenceBookUploadKey(slotKey);
     try {
-      const formData = new FormData();
-      formData.append('classKey', classKey);
-      formData.append('subject', subject);
-      formData.append('file', file);
-      const resp = await fetch('/api/admin/revision/reference-books', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${user.token}` },
-        body: formData,
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to upload the reference book.');
+      const fileArray = Array.from(files);
+      const failures: string[] = [];
+      for (let i = 0; i < fileArray.length; i++) {
+        setReferenceBookUploadStatus(fileArray.length > 1 ? `Uploading ${i + 1} of ${fileArray.length}...` : 'Uploading...');
+        try {
+          await uploadOneReferenceFile(classKey, subject, fileArray[i]);
+        } catch (err: any) {
+          failures.push(`${fileArray[i].name}: ${err.message}`);
+        }
+      }
+      if (failures.length > 0) setReferenceBookError(failures.join(' / '));
       await fetchReferenceBooks();
-    } catch (err: any) {
-      setReferenceBookError(err.message);
     } finally {
       setReferenceBookUploadKey(null);
+      setReferenceBookUploadStatus(null);
     }
   };
 
@@ -767,13 +790,14 @@ export default function App() {
     }
   }, [activeView, fetchReferenceBooks]);
 
-  const handleDeleteReferenceBook = async (fileName: string) => {
+  const handleDeleteReferenceBook = async (classKey: string, subject: 'Maths' | 'Science', fileName?: string) => {
     if (!user) return;
     setReferenceBookError(null);
     try {
-      const resp = await fetch(`/api/admin/revision/reference-books/${encodeURIComponent(fileName)}`, {
+      const resp = await fetch('/api/admin/revision/reference-books', {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classKey, subject, fileName }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to remove the reference book.');
@@ -8267,15 +8291,16 @@ export default function App() {
               )}
             </div>
 
-            {/* Revision Reference Books -- optional full-textbook PDFs that ground paper generation
-                for a class/subject (e.g. the 2026 new NCERT books for Class 8/9). Upload once per
-                (class, subject); Revision falls back to general knowledge when none is on file. */}
+            {/* Revision Reference Books -- optional NCERT PDFs that ground paper generation for a
+                class/subject (e.g. the 2026 new NCERT books for Class 8/9). Any number of files
+                per (class, subject) -- select several chapter PDFs at once, or a single zip of
+                them. Revision falls back to general knowledge when none is on file. */}
             <div className={`border rounded-2xl p-5 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <div>
                 <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
                   <FileText className="w-4 h-4 text-cyan-400" /> Revision Reference Books
                 </h3>
-                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Upload the actual NCERT textbook PDF for a class and subject to ground Revision's questions in it -- useful when the syllabus changes (e.g. the new Class 8/9 books). Optional: without one, Revision uses its own curriculum knowledge as before.</p>
+                <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Upload the actual NCERT textbook PDFs for a class and subject to ground Revision's questions in them -- useful when the syllabus changes (e.g. the new Class 8/9 books). Select multiple chapter PDFs at once, or a single .zip containing them all. Optional: without any file, Revision uses its own curriculum knowledge as before.</p>
               </div>
 
               {referenceBookError && (
@@ -8286,36 +8311,50 @@ export default function App() {
                 {(['8th', '9th', '10th'] as const).flatMap((classKey) =>
                   (['Maths', 'Science'] as const).map((subject) => {
                     const slotKey = `${classKey}-${subject}`;
-                    const existing = referenceBooks.find((f) => f.fileName === `${slotKey}.pdf`);
+                    const files = referenceBooks.filter((f) => f.slotKey === slotKey);
                     const uploading = referenceBookUploadKey === slotKey;
                     return (
                       <div key={slotKey} className={`border rounded-xl p-3 space-y-2 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/60'}`}>
                         <div className="flex items-center justify-between">
                           <span className={`text-xs font-black ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>Class {classKey} -- {subject}</span>
-                          {existing && (
+                          {files.length > 0 && (
                             <button
-                              onClick={() => handleDeleteReferenceBook(existing.fileName)}
-                              className="text-red-400 hover:text-red-300"
-                              title="Remove this reference book"
+                              onClick={() => handleDeleteReferenceBook(classKey, subject)}
+                              className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300"
+                              title="Remove all files for this class/subject"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              Clear all
                             </button>
                           )}
                         </div>
-                        {existing ? (
-                          <p className={`text-[10px] font-semibold ${isLightMode ? 'text-emerald-600' : 'text-emerald-400'}`}>On file{existing.updatedAt ? ` -- updated ${new Date(existing.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}</p>
+                        {files.length > 0 ? (
+                          <ul className="space-y-1 max-h-32 overflow-y-auto">
+                            {files.map((f) => (
+                              <li key={f.fileName} className={`flex items-center justify-between gap-2 text-[10px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>
+                                <span className="truncate" title={f.fileName}>{f.fileName}</span>
+                                <button
+                                  onClick={() => handleDeleteReferenceBook(classKey, subject, f.fileName)}
+                                  className="text-red-400 hover:text-red-300 shrink-0"
+                                  title="Remove this file"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
                         ) : (
-                          <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No file on file -- uses general knowledge</p>
+                          <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No files on file -- uses general knowledge</p>
                         )}
                         <label className={`flex items-center justify-center gap-1.5 border border-dashed rounded-lg py-2 text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${uploading ? 'opacity-50 pointer-events-none' : ''} ${isLightMode ? 'border-slate-300 text-slate-500 hover:border-cyan-500 hover:text-cyan-600' : 'border-slate-700 text-slate-400 hover:border-cyan-500 hover:text-cyan-400'}`}>
-                          <Upload className="w-3 h-3" /> {uploading ? 'Uploading...' : existing ? 'Replace PDF' : 'Upload PDF'}
+                          <Upload className="w-3 h-3" /> {uploading ? (referenceBookUploadStatus || 'Uploading...') : 'Add PDFs or a .zip'}
                           <input
                             type="file"
-                            accept="application/pdf"
+                            accept="application/pdf,.zip,application/zip"
+                            multiple
                             className="hidden"
                             onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadReferenceBook(classKey, subject, f);
+                              const fileList = e.target.files;
+                              if (fileList && fileList.length > 0) handleUploadReferenceBooks(classKey, subject, fileList);
                               e.target.value = '';
                             }}
                           />

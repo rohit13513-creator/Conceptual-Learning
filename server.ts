@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
+import AdmZip from "adm-zip";
 
 interface DeviceSession {
   deviceId: string;
@@ -405,22 +406,20 @@ const HOMEWORK_TEMP_PREFIX = "homework-temp";
 // section below) -- reuses the same HOMEWORK_BUCKET and the same merge/chunk helpers, just a
 // different temp prefix so the two features' in-flight uploads never collide.
 const REVISION_TEMP_PREFIX = "revision-temp";
-// Admin-uploaded full NCERT textbook PDFs used to ground Revision paper generation for classes
-// whose syllabus/books changed for 2026 (new Class 8 "Ganita Prakash"/"Curiosity" and Class 9
-// "Ganita Manjari"/"Exploration" books) -- stored in the existing chapter-notes bucket under a
-// fixed, predictable path per (class, subject) so lookup never needs a DB table: whichever
-// chapter name a student's own syllabus gives us, generation just needs to search within
-// whichever book is on file for their class. No file on file for a class/subject just falls back
-// to the model's own knowledge, exactly as it did before this existed.
+// Admin-uploaded NCERT textbook PDFs used to ground Revision paper generation for classes whose
+// syllabus/books changed for 2026 (new Class 8 "Ganita Prakash"/"Curiosity" and Class 9 "Ganita
+// Manjari"/"Exploration" books) -- stored in the existing chapter-notes bucket, one FOLDER per
+// (class, subject) holding any number of files (one per chapter, multiple volumes, etc.), so
+// lookup never needs a DB table: whichever chapter name a student's own syllabus gives us,
+// generation just searches within whatever's on file for their class. No files on file for a
+// class/subject just falls back to the model's own knowledge, exactly as before this existed.
+//
+// Uploads go through the same chunk-then-finalize flow as homework/revision submissions (see
+// REVISION_TEMP_PREFIX above) rather than a single multipart request -- Vercel serverless
+// functions cap a request body around 4.5MB, far below a real textbook PDF or a zip of a whole
+// book's chapters, so a direct single-shot upload would silently fail past that size.
 const REVISION_REFERENCE_PREFIX = "revision-reference-books";
-const revisionReferenceUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 40 * 1024 * 1024 }, // full textbooks run much larger than a single chapter PDF
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === "application/pdf") cb(null, true);
-    else cb(new Error("Only PDF files are allowed."));
-  },
-});
+const REVISION_REFERENCE_TEMP_PREFIX = "revision-reference-temp";
 
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
 // deletes the temp copies. Returns null if no photos were found for that session. `prefix`
@@ -9426,25 +9425,33 @@ function buildApp(): express.Express {
     },
   };
 
-  // Looks up an admin-uploaded full textbook PDF for this class/subject (see
-  // REVISION_REFERENCE_PREFIX above) and returns it as a Claude document content block, or null
-  // if none is on file. classLabel is the Roman-numeral form ("VIII"/"IX"/"X") already used
-  // elsewhere in Revision; CLASS_TO_TARGET converts it to the "8th"/"9th"/"10th" storage key.
-  async function getRevisionReferenceBookBlock(classLabel: string, subject: "Maths" | "Science"): Promise<any | null> {
+  // Looks up every admin-uploaded reference PDF on file for this class/subject (see
+  // REVISION_REFERENCE_PREFIX above -- one folder per class/subject, any number of files: one per
+  // chapter, multiple volumes, etc.) and returns them all as Claude document content blocks.
+  // classLabel is the Roman-numeral form ("VIII"/"IX"/"X") already used elsewhere in Revision;
+  // CLASS_TO_TARGET converts it to the "8th"/"9th"/"10th" storage key. Empty array if none on file.
+  async function getRevisionReferenceBookBlocks(classLabel: string, subject: "Maths" | "Science"): Promise<any[]> {
     const classKey = CLASS_TO_TARGET[classLabel];
-    if (!classKey) return null;
-    const path = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}.pdf`;
-    const { data: blob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(path);
-    if (!blob) return null;
-    const buf = Buffer.from(await blob.arrayBuffer());
-    return { type: "document", source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") } };
+    if (!classKey) return [];
+    const folder = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`;
+    const { data: fileList } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(folder);
+    const pdfFiles = (fileList || []).filter((f: any) => f.name.toLowerCase().endsWith(".pdf"));
+    if (pdfFiles.length === 0) return [];
+    const blocks: any[] = [];
+    for (const f of pdfFiles) {
+      const { data: blob } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).download(`${folder}/${f.name}`);
+      if (!blob) continue;
+      const buf = Buffer.from(await blob.arrayBuffer());
+      blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") } });
+    }
+    return blocks;
   }
 
   async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string): Promise<RevisionQuestion[]> {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
-    const referenceBlock = await getRevisionReferenceBookBlock(classLabel, subject);
-    const referenceInstruction = referenceBlock
-      ? ` The attached PDF is the actual official textbook this student's class uses for ${subject} -- it may use different chapter names, ordering, or a different topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find the specific chapter or topic matching "${chapterName}" within this attached book and base every question strictly on that chapter's actual content, terminology, and depth as it appears in the book -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached book.`
+    const referenceBlocks = await getRevisionReferenceBookBlocks(classLabel, subject);
+    const referenceInstruction = referenceBlocks.length > 0
+      ? ` The attached PDF(s) are the actual official textbook material this student's class uses for ${subject} -- possibly one file per chapter, or multiple volumes, so not every attached file is relevant to this specific chapter. They may use different chapter names, ordering, or topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find whichever attached file(s) actually cover "${chapterName}" and base every question strictly on that content, terminology, and depth as it appears there -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached material.`
       : ` No reference textbook is on file for this class/subject, so use your own best knowledge of the CBSE curriculum for this chapter -- if "${chapterName}" doesn't clearly match a chapter you know, interpret it as sensibly as possible from the name and class level given.`;
     const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction} Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
 ${sectionsText}
@@ -9456,7 +9463,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
 
     const result = await callClaudeTool({
       system,
-      content: referenceBlock ? [referenceBlock, { type: "text", text: "Generate the paper now." }] : [{ type: "text", text: "Generate the paper now." }],
+      content: [...referenceBlocks, { type: "text", text: "Generate the paper now." }],
       tool: REVISION_PAPER_TOOL,
       maxTokens: 6000,
     });
@@ -9469,12 +9476,10 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     // would show up. Mirrors the same "generate, then separately self-critique" shape already used
     // for chapter notes (finalReviewChapterNotes) rather than trusting a single-pass draft.
     try {
-      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student.${referenceBlock ? " The attached PDF is the actual official textbook for this class/subject -- cross-check every question against its real content, terminology, and depth, and fix anything that doesn't actually match what's in the book." : ""} Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
+      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student.${referenceBlocks.length > 0 ? " The attached PDF(s) are the actual official textbook material for this class/subject -- cross-check every question against its real content, terminology, and depth, and fix anything that doesn't actually match what's in there." : ""} Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
       const reviewed = await callClaudeTool({
         system: reviewSystem,
-        content: referenceBlock
-          ? [referenceBlock, { type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }]
-          : [{ type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
+        content: [...referenceBlocks, { type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
         tool: REVISION_PAPER_TOOL,
         maxTokens: 6000,
       });
@@ -10120,45 +10125,112 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   });
 
   // Reference textbooks used to ground Revision paper generation (see REVISION_REFERENCE_PREFIX
-  // above). One PDF per (class, subject) -- uploading again for the same pair overwrites it.
+  // above). Any number of PDFs per (class, subject) -- one per chapter, multiple volumes, etc.
+  // Uploads go through chunk-then-finalize (see the comment on REVISION_REFERENCE_TEMP_PREFIX)
+  // since a real textbook PDF or a zip of a whole book's chapters is far past what a single Vercel
+  // request body can carry.
+  const REVISION_REFERENCE_CLASS_KEYS = ["8th", "9th", "10th"] as const;
+  const REVISION_REFERENCE_SUBJECTS = ["Maths", "Science"] as const;
+
   app.get("/api/admin/revision/reference-books", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
-    const { data, error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(REVISION_REFERENCE_PREFIX);
-    if (error) return res.status(500).json({ error: error.message });
-    const files = (data || []).filter((f: any) => f.name.endsWith(".pdf")).map((f: any) => ({
-      fileName: f.name,
-      sizeBytes: f.metadata?.size || null,
-      updatedAt: f.updated_at || f.created_at || null,
-    }));
+    const files: { slotKey: string; fileName: string; sizeBytes: number | null; updatedAt: string | null }[] = [];
+    for (const classKey of REVISION_REFERENCE_CLASS_KEYS) {
+      for (const subject of REVISION_REFERENCE_SUBJECTS) {
+        const slotKey = `${classKey}-${subject}`;
+        const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${slotKey}`);
+        for (const f of (data || [])) {
+          if (!f.name.toLowerCase().endsWith(".pdf")) continue;
+          files.push({ slotKey, fileName: f.name, sizeBytes: f.metadata?.size || null, updatedAt: f.updated_at || f.created_at || null });
+        }
+      }
+    }
     return res.json({ files });
   });
 
-  app.post("/api/admin/revision/reference-books", (req, res, next) => {
-    revisionReferenceUpload.single("file")(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+  app.post("/api/admin/revision/reference-books/upload-chunk", (req, res, next) => {
+    chunkUpload.single("chunk")(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.message || "Failed to process this chunk." });
       next();
     });
   }, async (req, res) => {
-    if (!checkAdminAuth(req, res)) return;
-    const { classKey, subject } = req.body as { classKey?: string; subject?: string };
-    if (!classKey || !subject || (subject !== "Maths" && subject !== "Science")) {
-      return res.status(400).json({ error: "classKey (e.g. 8th/9th/10th) and subject ('Maths' or 'Science') are required." });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!ADMIN_EMAILS.includes(auth.email)) return res.status(403).json({ error: "Forbidden: Admin privileges required to execute this operation." });
+    const { sessionId, order } = req.body;
+    if (!req.file) return res.status(400).json({ error: "No data was received." });
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+    const orderNum = parseInt(order, 10) || 0;
+    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const tempPath = `${REVISION_REFERENCE_TEMP_PREFIX}/${auth.email}/${safeSessionId}/${String(orderNum).padStart(4, "0")}-${Date.now()}.part`;
+    const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(tempPath, req.file.buffer, { contentType: "application/octet-stream" });
+    if (uploadError) {
+      console.error("Temp reference-book chunk upload error:", uploadError.message);
+      return res.status(500).json({ error: "Failed to upload this piece of the file. Please try again." });
     }
-    const file = req.file as Express.Multer.File | undefined;
-    if (!file) return res.status(400).json({ error: "A PDF file is required." });
-
-    const path = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}.pdf`;
-    const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(path, file.buffer, { contentType: "application/pdf", upsert: true });
-    if (error) return res.status(500).json({ error: `Could not upload the reference book: ${error.message}` });
-    return res.json({ success: true, fileName: `${classKey}-${subject}.pdf` });
+    return res.json({ success: true });
   });
 
-  app.delete("/api/admin/revision/reference-books/:fileName", async (req, res) => {
+  app.post("/api/admin/revision/reference-books/finalize", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
-    const { fileName } = req.params;
-    if (!/^[a-zA-Z0-9]+-(Maths|Science)\.pdf$/.test(fileName)) return res.status(400).json({ error: "Invalid file name." });
-    const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).remove([`${REVISION_REFERENCE_PREFIX}/${fileName}`]);
-    if (error) return res.status(500).json({ error: error.message });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { classKey, subject, sessionId, fileName, isZip } = req.body as { classKey?: string; subject?: string; sessionId?: string; fileName?: string; isZip?: boolean };
+    if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any) || !subject || !REVISION_REFERENCE_SUBJECTS.includes(subject as any)) {
+      return res.status(400).json({ error: "Invalid class or subject." });
+    }
+    if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
+
+    const buffer = await concatenateSessionChunks(auth.email, String(sessionId), REVISION_REFERENCE_TEMP_PREFIX);
+    if (!buffer) return res.status(400).json({ error: "No uploaded data found for this session. Please try uploading again." });
+
+    const folder = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`;
+    const uploaded: string[] = [];
+
+    if (isZip) {
+      let zip: AdmZip;
+      try {
+        zip = new AdmZip(buffer);
+      } catch {
+        return res.status(400).json({ error: "That file isn't a valid zip archive." });
+      }
+      const entries = zip.getEntries().filter((e) => !e.isDirectory && e.entryName.toLowerCase().endsWith(".pdf") && !e.entryName.startsWith("__MACOSX"));
+      if (entries.length === 0) return res.status(400).json({ error: "No PDF files were found inside that zip." });
+      for (const entry of entries) {
+        const baseName = entry.entryName.split("/").pop() || entry.entryName;
+        const safeName = baseName.replace(/[^a-zA-Z0-9.\-]/g, "_");
+        const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(`${folder}/${safeName}`, entry.getData(), { contentType: "application/pdf", upsert: true });
+        if (!error) uploaded.push(safeName);
+      }
+      if (uploaded.length === 0) return res.status(500).json({ error: "Could not upload any of the PDFs found in that zip." });
+    } else {
+      const safeName = (fileName || "reference.pdf").replace(/[^a-zA-Z0-9.\-]/g, "_");
+      const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).upload(`${folder}/${safeName}`, buffer, { contentType: "application/pdf", upsert: true });
+      if (error) return res.status(500).json({ error: `Could not upload the reference PDF: ${error.message}` });
+      uploaded.push(safeName);
+    }
+
+    return res.json({ success: true, uploadedCount: uploaded.length, fileNames: uploaded });
+  });
+
+  app.delete("/api/admin/revision/reference-books", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { classKey, subject, fileName } = req.body as { classKey?: string; subject?: string; fileName?: string };
+    if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any) || !subject || !REVISION_REFERENCE_SUBJECTS.includes(subject as any)) {
+      return res.status(400).json({ error: "Invalid class or subject." });
+    }
+    const folder = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`;
+    if (fileName) {
+      const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).remove([`${folder}/${fileName}`]);
+      if (error) return res.status(500).json({ error: error.message });
+    } else {
+      const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(folder);
+      const paths = (data || []).map((f: any) => `${folder}/${f.name}`);
+      if (paths.length > 0) {
+        const { error } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).remove(paths);
+        if (error) return res.status(500).json({ error: error.message });
+      }
+    }
     return res.json({ success: true });
   });
 
