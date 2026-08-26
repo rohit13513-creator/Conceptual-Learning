@@ -9750,7 +9750,11 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     // true steps, exactly mirroring how a real CBSE examiner ticks off a marking scheme -- never
     // a single holistic number the model picks itself (same "never trust the model's own
     // arithmetic" principle as homework grading's deterministic score, see checkHomeworkSubmission).
-    const system = `You are a strict CBSE-board examiner grading a student's handwritten answers to a mock paper you already wrote, using genuine CBSE step-marking: for every question in Sections B-E, each step of the marking scheme below is worth exactly 1 mark, awarded independently of the other steps in that same question. Apply the standard CBSE "error carried forward" (ECF) principle: if an early step has a mistake, still award every later step whose method is correctly applied to the student's own (incorrect) value from that point on -- do not zero out an entire question just because one early step was wrong. Section A questions have only ONE step in their marking scheme (the single correct option/answer) -- these are all-or-nothing for their 1 mark, with no partial credit, since choosing an option is not a multi-step working. For every step, judge strictly against what the marking scheme step actually requires, but extend the same handwriting tolerance a real teacher would: never mark a step wrong for messy handwriting or presentation alone; when a single digit is genuinely ambiguous between two similar shapes (3/5, 1/7, 6/0, 4/9, 5/9), prefer the reading that makes the student's own working internally consistent and correct. A step that is entirely missing (not attempted at all) is not met. If a whole question is entirely unattempted, mark every one of its steps as not met. ${REVISION_SUBSCRIPT_INSTRUCTION}`;
+    const system = `You are a strict CBSE-board examiner grading a student's handwritten answers to a mock paper you already wrote, using genuine CBSE step-marking: for every question in Sections B-E, each step of the marking scheme below is worth exactly 1 mark, awarded independently of the other steps in that same question. Apply the standard CBSE "error carried forward" (ECF) principle: if an early step has a mistake, still award every later step whose method is correctly applied to the student's own (incorrect) value from that point on -- do not zero out an entire question just because one early step was wrong. Section A questions have only ONE step in their marking scheme (the single correct option/answer) -- these are all-or-nothing for their 1 mark, with no partial credit, since choosing an option is not a multi-step working. For every step, judge strictly against what the marking scheme step actually requires, but extend the same handwriting tolerance a real teacher would: never mark a step wrong for messy handwriting or presentation alone; when a single digit is genuinely ambiguous between two similar shapes (3/5, 1/7, 6/0, 4/9, 5/9), prefer the reading that makes the student's own working internally consistent and correct. A step that is entirely missing (not attempted at all) is not met. If a whole question is entirely unattempted, mark every one of its steps as not met.
+
+Students often submit their answers as several photographed pages combined into one file. A question's working very often starts on one page and its concluding line, final boxed answer, or last computational step is the very first thing on the NEXT page -- this is completely normal handwriting layout, not a sign the question was left incomplete or unattempted. NEVER mark a step as not met, or a question as unattempted, just because the page where the question begins looks like it ends abruptly -- always check whether the very next page opens with that question's continuation before deciding anything is missing. This is exactly what the required pageByPageNotes field exists for: fill it in for every single page first, before judging any step.
+
+${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const prompt = `Here is the paper's own question list and step-wise marking scheme, followed by the student's submitted answers as an attached file. For each question, evaluate every numbered step in order.\n\n${questionsBlock}`;
 
     const gradeTool = {
@@ -9759,6 +9763,16 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       input_schema: {
         type: "object",
         properties: {
+          // Listed FIRST on purpose, same reasoning as homework grading's pageByPageNotes field:
+          // a prose instruction alone ("check the next page") was not reliable on its own -- forcing
+          // the model to write out what's on each page before it can commit to any step's met/not-met
+          // judgment means it can no longer decide a question looks incomplete without having already
+          // looked at, and written down, what opens the next page.
+          pageByPageNotes: {
+            type: "array",
+            items: { type: "string" },
+            description: "One entry per page of the student's submission, in the order pages appear, BEFORE judging any step. Each entry: which question ID(s) appear or continue on that page, and -- critically -- whether the page OPENS with a continuation of a question whose working started on the previous page (e.g. a final algebraic step, a boxed final answer, or a concluding sentence as the very first thing on the page). This must be filled in for every page before any step is judged not met or a question judged unattempted.",
+          },
           perQuestion: {
             type: "array",
             items: {
@@ -9772,7 +9786,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
                     type: "object",
                     properties: {
                       met: { type: "boolean", description: "True if the student's answer satisfies this specific step of the marking scheme." },
-                      note: { type: "string", description: "Empty string if met. If not met, one short phrase on what was wrong or missing for this step. Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
+                      note: { type: "string", description: "Empty string if met. If not met, one short, SIMPLE sentence a student can immediately understand describing exactly what was wrong or missing for this step -- plain language over exam jargon (e.g. 'You didn't write the final answer for k' rather than 'concluding value unstated'). Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
                     },
                     required: ["met", "note"],
                   },
@@ -9781,9 +9795,9 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
               required: ["questionId", "stepResults"],
             },
           },
-          overallFeedback: { type: "string", description: "2-4 sentences of overall exam-style feedback: strongest area, weakest area, one concrete tip for next time. Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
+          overallFeedback: { type: "string", description: "1-2 short, simple sentences a student can understand at a glance: strongest area and one concrete tip for next time. The per-question marks and reasons are shown separately, so do not repeat question-specific detail here. Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
         },
-        required: ["perQuestion", "overallFeedback"],
+        required: ["pageByPageNotes", "perQuestion", "overallFeedback"],
       },
     };
 
@@ -9831,16 +9845,24 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       const perQuestion: { questionId: string; stepResults?: { met: boolean; note: string }[] }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
       const maxByQuestion = new Map(questions.map((q) => [q.id, q.marks]));
       let totalScore = 0;
+      // Every question gets its own line, always -- not just the ones with lost marks. Students
+      // repeatedly told the admin they couldn't tell why marks were deducted because full-marks
+      // questions were silently omitted from the old feedback text, leaving only prose about a few
+      // questions; a complete question-by-question tally (marks awarded, and a plain-language reason
+      // only when marks were actually lost) is what was explicitly asked for.
+      const perQuestionOrder = questions.map((q) => q.id);
+      const resultById = new Map(perQuestion.map((pq) => [pq.questionId, pq]));
       const feedbackLines: string[] = [];
-      for (const pq of perQuestion) {
-        const max = maxByQuestion.get(pq.questionId) ?? 0;
-        const steps = Array.isArray(pq.stepResults) ? pq.stepResults : [];
+      for (const questionId of perQuestionOrder) {
+        const pq = resultById.get(questionId);
+        const max = maxByQuestion.get(questionId) ?? 0;
+        const steps = Array.isArray(pq?.stepResults) ? pq!.stepResults : [];
         // Deterministic per-question mark: count of steps the model marked met, never a number the
         // model picks itself -- capped at that question's own max in case of a miscounted response.
         const marksAwarded = Math.min(max, steps.filter((s) => s.met).length);
         totalScore += marksAwarded;
         const missedNotes = steps.filter((s) => !s.met && s.note && s.note.trim()).map((s) => s.note.trim());
-        if (missedNotes.length > 0) feedbackLines.push(`${pq.questionId} (${marksAwarded}/${max}): ${missedNotes.join("; ")}`);
+        feedbackLines.push(missedNotes.length > 0 ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}` : `${questionId}: ${marksAwarded}/${max}`);
       }
       totalScore = Math.min(totalScore, REVISION_TOTAL_MARKS);
 

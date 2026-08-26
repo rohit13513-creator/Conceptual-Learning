@@ -106,6 +106,33 @@ function formatLateBy(deadlineAt: string | null | undefined, submittedAt: string
   return `${h} hour${h === 1 ? '' : 's'}${m > 0 ? ` ${m} minute${m === 1 ? '' : 's'}` : ''}`;
 }
 
+interface RevisionFeedbackRow {
+  questionId: string;
+  awarded: number;
+  max: number;
+  reason: string;
+}
+
+// aiFeedback is stored as one plain-text blob: an overall summary line, then one "id: x/y" or
+// "id: x/y -- reason" line per question (server.ts checkRevisionSubmission). Splitting it back out
+// here lets every question render as its own clearly separated row instead of one dense paragraph --
+// directly what students asked for ("always show result question wise").
+function parseRevisionFeedback(raw: string): { overall: string; rows: RevisionFeedbackRow[] } {
+  const lines = raw.split('\n');
+  const rows: RevisionFeedbackRow[] = [];
+  const overallLines: string[] = [];
+  const rowPattern = /^([A-Za-z]\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
+  for (const line of lines) {
+    const match = rowPattern.exec(line.trim());
+    if (match) {
+      rows.push({ questionId: match[1], awarded: Number(match[2]), max: Number(match[3]), reason: match[4] || '' });
+    } else if (line.trim()) {
+      overallLines.push(line.trim());
+    }
+  }
+  return { overall: overallLines.join(' '), rows };
+}
+
 export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [loading, setLoading] = useState(true);
   const [setup, setSetup] = useState<RevisionSetup | null>(null);
@@ -187,7 +214,13 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       ]);
       const loadedSetup: RevisionSetup | null = setupResp?.setup || null;
       setSetup(loadedSetup);
-      if (!loadedSetup) setShowSetupForm(true);
+      // Auto-open the setup form whenever there's no syllabus to show yet -- not just when the
+      // setup row itself is missing. A student can save an exam date without ever picking a
+      // chapter (row exists, both chapter lists empty); without this check they'd land on a
+      // dead-end summary screen with no chapters and no way back into the editor (see the button
+      // visibility fix below for the other half of this).
+      const loadedHasChapters = (loadedSetup?.mathsChapters?.length || 0) > 0 || (loadedSetup?.scienceChapters?.length || 0) > 0;
+      if (!loadedHasChapters) setShowSetupForm(true);
       const papers: RevisionPaper[] = mineResp?.papers || [];
       const submissions: RevisionSubmission[] = mineResp?.submissions || [];
       if (papers.length > 0) {
@@ -564,15 +597,17 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               >
                 <Info className="w-3.5 h-3.5" /> Guidelines
               </button>
-              {hasAnySyllabus && (
-                <button
-                  type="button"
-                  onClick={() => setShowSetupForm((v) => !v)}
-                  className={`text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
-                >
-                  {showSetupForm ? 'Hide Syllabus Editor' : 'Edit Syllabus / Exam Dates'}
-                </button>
-              )}
+              {/* Always available as an escape hatch, not just when a syllabus is already saved --
+                  otherwise a student who saves an exam date without picking any chapters (setup
+                  row exists, chapter lists empty) has no button anywhere to get back into the
+                  editor at all, only a dead-end "add your syllabus above" message. */}
+              <button
+                type="button"
+                onClick={() => setShowSetupForm((v) => !v)}
+                className={`text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+              >
+                {showSetupForm ? 'Hide Syllabus Editor' : hasAnySyllabus ? 'Edit Syllabus / Exam Dates' : 'Add Syllabus'}
+              </button>
             </div>
           </div>
           <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -909,11 +944,36 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     </p>
                   )}
                 </div>
-                {currentSubmission.aiFeedback && (
-                  <div className={`text-left text-xs font-semibold whitespace-pre-line p-3 rounded-lg border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-300'}`}>
-                    {currentSubmission.aiFeedback}
-                  </div>
-                )}
+                {currentSubmission.aiFeedback && (() => {
+                  const { overall, rows } = parseRevisionFeedback(currentSubmission.aiFeedback);
+                  return (
+                    <div className="text-left space-y-3">
+                      {overall && (
+                        <p className={`text-xs font-semibold p-3 rounded-lg border ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-950 border-slate-800 text-slate-300'}`}>
+                          {overall}
+                        </p>
+                      )}
+                      {rows.length > 0 && (
+                        <div className={`rounded-lg border divide-y overflow-hidden ${isLightMode ? 'border-slate-200 divide-slate-200' : 'border-slate-800 divide-slate-800'}`}>
+                          {rows.map((row) => {
+                            const full = row.awarded === row.max;
+                            return (
+                              <div key={row.questionId} className={`flex items-start gap-3 px-3 py-2 ${isLightMode ? 'bg-white' : 'bg-slate-950'}`}>
+                                <span className={`shrink-0 text-[11px] font-black font-mono w-8 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{row.questionId}</span>
+                                <span className={`shrink-0 text-[11px] font-black font-mono ${full ? (isLightMode ? 'text-emerald-600' : 'text-emerald-400') : (isLightMode ? 'text-amber-600' : 'text-amber-400')}`}>
+                                  {row.awarded}/{row.max}
+                                </span>
+                                {row.reason && (
+                                  <span className={`text-[11px] font-semibold text-left ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{row.reason}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-wrap gap-2 justify-center">
                   {(currentSubmission.aiScore ?? 0) < currentPaper.totalMarks && (
                     <button
