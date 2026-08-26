@@ -9718,6 +9718,27 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     await supabase.from("revision_setups").update(updates).eq("student_email", studentEmail);
   }
 
+  // Parses the "A1: 2/2 -- reason" per-question lines checkRevisionSubmission itself writes back
+  // out of a stored feedback string. Used only to protect an "Improve Score" resubmission from
+  // losing marks a student already earned -- unlike Homework's Improve (which only re-grades the
+  // specific questions that were previously wrong, so an already-correct answer can structurally
+  // never be marked down again), Revision re-grades the WHOLE paper fresh on every attempt, and an
+  // independent grading run has no guarantee of reproducing the exact same read on a question it
+  // already got right once. Real students hit this: the same correct working, graded fresh a
+  // second time, occasionally came back lower than before purely from grading-run variance, not
+  // from anything they did differently -- see checkRevisionSubmission's use of this below.
+  function parseRevisionFeedbackForFloor(feedback: string | null | undefined): Map<string, { marks: number; line: string }> {
+    const map = new Map<string, { marks: number; line: string }>();
+    if (!feedback) return map;
+    const rowPattern = /^([A-Za-z]\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
+    for (const rawLine of feedback.split("\n")) {
+      const line = rawLine.trim();
+      const match = rowPattern.exec(line);
+      if (match) map.set(match[1], { marks: Number(match[2]), line });
+    }
+    return map;
+  }
+
   async function checkRevisionSubmission(submissionId: string) {
     const { data: sub } = await supabase.from("revision_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!sub) return;
@@ -9858,6 +9879,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       // only when marks were actually lost) is what was explicitly asked for.
       const perQuestionOrder = questions.map((q) => q.id);
       const resultById = new Map(perQuestion.map((pq) => [pq.questionId, pq]));
+      // Only set on an "Improve Score" resubmission (see upsertRevisionSubmission) -- empty on a
+      // genuine first check, so the floor below is a no-op there.
+      const priorFloor = sub.first_attempt_score != null ? parseRevisionFeedbackForFloor(sub.first_attempt_feedback) : new Map<string, { marks: number; line: string }>();
       const feedbackLines: string[] = [];
       for (const questionId of perQuestionOrder) {
         const pq = resultById.get(questionId);
@@ -9866,11 +9890,26 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         // Deterministic per-question mark: count of steps the model marked met, never a number the
         // model picks itself -- capped at that question's own max in case of a miscounted response.
         const marksAwarded = Math.min(max, steps.filter((s) => s.met).length);
-        totalScore += marksAwarded;
         const missedNotes = steps.filter((s) => !s.met && s.note && s.note.trim()).map((s) => s.note.trim());
-        feedbackLines.push(missedNotes.length > 0 ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}` : `${questionId}: ${marksAwarded}/${max}`);
+        const newLine = missedNotes.length > 0 ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}` : `${questionId}: ${marksAwarded}/${max}`;
+        // Never let this specific question's mark regress from what the first attempt already
+        // earned -- keep the earlier line (marks and reason) if it scored higher than this fresh
+        // regrade, since the student never resubmitted a worse answer for it, the fresh grading
+        // run just read it differently this time.
+        const prior = priorFloor.get(questionId);
+        if (prior && prior.marks > marksAwarded) {
+          totalScore += prior.marks;
+          feedbackLines.push(prior.line);
+        } else {
+          totalScore += marksAwarded;
+          feedbackLines.push(newLine);
+        }
       }
       totalScore = Math.min(totalScore, REVISION_TOTAL_MARKS);
+      // Backstop for a first attempt graded before this per-question feedback format existed (so
+      // the line-by-line floor above found nothing to compare against) -- the total shown must
+      // still never drop below what was already earned.
+      if (sub.first_attempt_score != null) totalScore = Math.max(totalScore, sub.first_attempt_score);
 
       const overall = sanitizePlaceholderText(parsed.overallFeedback) || "Checked.";
       const fullFeedback = [overall, ...feedbackLines].join("\n");
