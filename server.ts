@@ -10212,6 +10212,24 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
 
     const cycleNumber: number = setup.cycle_number || 1;
 
+    // A duplicate request for the exact same (student, subject, chapter) -- a fast double-tap
+    // beating the frontend's own guard, a network retry racing the original call, two tabs -- must
+    // never trigger a second real Claude generation call. Reusing any already-generated paper here
+    // is a pure DB read with no race window relative to the Claude call itself, so this closes the
+    // gap the frontend guard and the cross-student content cache below can't fully close alone.
+    const { data: existingPaper } = await supabase
+      .from("revision_papers")
+      .select("*")
+      .eq("student_email", auth.email)
+      .eq("subject", target.subject)
+      .eq("chapter_name", target.chapterName)
+      .eq("cycle_number", cycleNumber)
+      .in("status", ["draft", "active"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingPaper) return res.json({ paper: mapRevisionPaperForStudent(existingPaper) });
+
     try {
       const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
       const { data: paperRow, error: insertError } = await supabase

@@ -140,6 +140,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [currentPaper, setCurrentPaper] = useState<RevisionPaper | null>(null);
   const [currentSubmission, setCurrentSubmission] = useState<RevisionSubmission | null>(null);
   const [generating, setGenerating] = useState(false);
+  // A ref alongside the `generating` state: React state updates aren't visible until the next
+  // render, so a fast double-tap on "I'm Ready" can fire handleConfirmChapterChoice twice before
+  // the button actually disables -- each call generates a paper via a real Claude call, so a race
+  // here directly costs API spend, not just a UI glitch. The ref is set synchronously, closing
+  // that gap regardless of render timing.
+  const generatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   // Setup form fields
@@ -327,7 +333,8 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // them tap "Start Now" separately afterward. handleStartNow below is kept only to resume a paper
   // that was left in 'draft' (generated but not started) by an interrupted request.
   const handleConfirmChapterChoice = async () => {
-    if (!pendingChoice) return;
+    if (!pendingChoice || generatingRef.current) return;
+    generatingRef.current = true;
     setGenerating(true);
     setError(null);
     try {
@@ -344,6 +351,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     } catch (err: any) {
       setError(err.message);
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
   };
