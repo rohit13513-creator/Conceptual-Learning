@@ -9872,9 +9872,20 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     return setup?.fallback_class || null;
   }
 
+  // Some reference-book folders hold files that aren't actual chapters -- "Practice Set 1/2" in
+  // 8th-Maths, for instance, is a set of extra problems spanning the whole book, not a syllabus
+  // topic of its own. Those stay in storage (still useful to download via Download NCERT) but
+  // never show up as something a student can pick as a syllabus/test chapter.
+  function isRealChapterTitle(title: string): boolean {
+    return !/^practice\s*sets?\b/i.test(title.trim());
+  }
+
   async function getKnownNcertChapters(classKey: string, subject: "Maths" | "Science"): Promise<string[]> {
     const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`);
-    return (data || []).filter((f: any) => f.name.toLowerCase().endsWith(".pdf")).map((f: any) => referenceBookDisplayTitle(f.name));
+    return (data || [])
+      .filter((f: any) => f.name.toLowerCase().endsWith(".pdf"))
+      .map((f: any) => referenceBookDisplayTitle(f.name))
+      .filter(isRealChapterTitle);
   }
 
   // Class 8 is the one class where a real mix of old and new NCERT is still genuinely in use in

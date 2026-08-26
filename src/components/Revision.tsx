@@ -13,7 +13,6 @@ import {
   ChevronRight,
   AlertTriangle,
   Award,
-  ImagePlus,
   Info,
   ArrowLeft,
   ListChecks,
@@ -117,16 +116,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Setup form fields
-  const [mathsMode, setMathsMode] = useState<'select' | 'text' | 'image'>('select');
-  const [mathsText, setMathsText] = useState('');
-  const [mathsImage, setMathsImage] = useState<File | null>(null);
   const [mathsSelectedChapters, setMathsSelectedChapters] = useState<string[]>([]);
   const [mathsDropdownPick, setMathsDropdownPick] = useState('');
   const [mathsNoExam, setMathsNoExam] = useState(false);
   const [mathsExamDate, setMathsExamDate] = useState('');
-  const [scienceMode, setScienceMode] = useState<'select' | 'text' | 'image'>('select');
-  const [scienceText, setScienceText] = useState('');
-  const [scienceImage, setScienceImage] = useState<File | null>(null);
   const [scienceSelectedChapters, setScienceSelectedChapters] = useState<string[]>([]);
   const [scienceDropdownPick, setScienceDropdownPick] = useState('');
   const [scienceNoExam, setScienceNoExam] = useState(false);
@@ -271,13 +264,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     setError(null);
     try {
       const form = new FormData();
-      if (mathsMode === 'select') form.append('mathsSyllabusChapters', JSON.stringify(mathsSelectedChapters));
-      else if (mathsMode === 'text') form.append('mathsSyllabusText', mathsText);
-      else if (mathsImage) form.append('mathsSyllabusImage', mathsImage);
+      form.append('mathsSyllabusChapters', JSON.stringify(mathsSelectedChapters));
       form.append('mathsExamDate', mathsNoExam ? '' : mathsExamDate);
-      if (scienceMode === 'select') form.append('scienceSyllabusChapters', JSON.stringify(scienceSelectedChapters));
-      else if (scienceMode === 'text') form.append('scienceSyllabusText', scienceText);
-      else if (scienceImage) form.append('scienceSyllabusImage', scienceImage);
+      form.append('scienceSyllabusChapters', JSON.stringify(scienceSelectedChapters));
       form.append('scienceExamDate', scienceNoExam ? '' : scienceExamDate);
       if (fallbackClass) form.append('fallbackClass', fallbackClass);
       const result = await uploadWithRetry({ url: '/api/revision/setup', token: user.token, formData: form });
@@ -501,7 +490,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           ], 'text-cyan-400')}
 
           {section(Calendar, 'Setting your syllabus', [
-            'Set your syllabus for Maths and/or Science by typing chapter names (one per line) or uploading a photo of your syllabus/date-sheet page -- either works.',
+            'Set your syllabus for Maths and/or Science by picking chapters from the dropdown list and hitting "Add", one at a time -- if you\'re in Class 8, pick Old or New NCERT first so the right chapter list shows up.',
             'For each subject, you can give an exam date, or tick "No exam -- just revising" if you\'re not preparing for a specific exam.',
             'You can edit your syllabus or exam dates at any time using "Edit Syllabus / Exam Dates" above.',
           ], 'text-cyan-400')}
@@ -649,8 +638,8 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
             )}
 
             {([
-              { key: 'maths', label: 'Maths', mode: mathsMode, setMode: setMathsMode, text: mathsText, setText: setMathsText, image: mathsImage, setImage: setMathsImage, selected: mathsSelectedChapters, setSelected: setMathsSelectedChapters, dropdownPick: mathsDropdownPick, setDropdownPick: setMathsDropdownPick, noExam: mathsNoExam, setNoExam: setMathsNoExam, examDate: mathsExamDate, setExamDate: setMathsExamDate },
-              { key: 'science', label: 'Science', mode: scienceMode, setMode: setScienceMode, text: scienceText, setText: setScienceText, image: scienceImage, setImage: setScienceImage, selected: scienceSelectedChapters, setSelected: setScienceSelectedChapters, dropdownPick: scienceDropdownPick, setDropdownPick: setScienceDropdownPick, noExam: scienceNoExam, setNoExam: setScienceNoExam, examDate: scienceExamDate, setExamDate: setScienceExamDate },
+              { key: 'maths', label: 'Maths', selected: mathsSelectedChapters, setSelected: setMathsSelectedChapters, dropdownPick: mathsDropdownPick, setDropdownPick: setMathsDropdownPick, noExam: mathsNoExam, setNoExam: setMathsNoExam, examDate: mathsExamDate, setExamDate: setMathsExamDate },
+              { key: 'science', label: 'Science', selected: scienceSelectedChapters, setSelected: setScienceSelectedChapters, dropdownPick: scienceDropdownPick, setDropdownPick: setScienceDropdownPick, noExam: scienceNoExam, setNoExam: setScienceNoExam, examDate: scienceExamDate, setExamDate: setScienceExamDate },
             ] as const).map((s) => {
               const availableOptions = chapterOptions[s.label].filter((c) => !s.selected.includes(c));
               return (
@@ -659,71 +648,46 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
                 <div className="space-y-1.5">
                   <label className={labelClass(isLightMode)}>Syllabus (chapter names)</label>
-                  <div className="flex gap-1.5 mb-1.5">
-                    <button type="button" onClick={() => s.setMode('select')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'select' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Select From List</button>
-                    <button type="button" onClick={() => s.setMode('text')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'text' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Type Chapters</button>
-                    <button type="button" onClick={() => s.setMode('image')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'image' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Upload Photo</button>
+                  <div className="space-y-2">
+                    {chapterOptionsError && (
+                      <p className={`text-[10px] font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-400'}`}>{chapterOptionsError}</p>
+                    )}
+                    <div className="flex gap-1.5">
+                      <select
+                        value={s.dropdownPick}
+                        onChange={(e) => s.setDropdownPick(e.target.value)}
+                        disabled={chapterOptionsLoading || availableOptions.length === 0}
+                        className={`${inputClass(isLightMode)} disabled:opacity-50`}
+                      >
+                        <option value="">{chapterOptionsLoading ? 'Loading chapters...' : availableOptions.length === 0 ? 'No more chapters to add' : 'Choose a chapter...'}</option>
+                        {availableOptions.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => { if (s.dropdownPick) { s.setSelected([...s.selected, s.dropdownPick]); s.setDropdownPick(''); } }}
+                        disabled={!s.dropdownPick}
+                        className="px-4 py-2 bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl cursor-pointer hover:bg-cyan-400 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {s.selected.length > 0 ? (
+                      <ul className="space-y-1">
+                        {s.selected.map((c) => (
+                          <li key={c} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${isLightMode ? 'bg-white border border-slate-200 text-slate-700' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>
+                            {c}
+                            <button type="button" onClick={() => s.setSelected(s.selected.filter((x) => x !== c))} className="text-red-400 hover:text-red-300 cursor-pointer shrink-0">
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No chapters added yet.</p>
+                    )}
                   </div>
-                  {s.mode === 'select' ? (
-                    <div className="space-y-2">
-                      {chapterOptionsError && (
-                        <p className={`text-[10px] font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-400'}`}>{chapterOptionsError}</p>
-                      )}
-                      <div className="flex gap-1.5">
-                        <select
-                          value={s.dropdownPick}
-                          onChange={(e) => s.setDropdownPick(e.target.value)}
-                          disabled={chapterOptionsLoading || availableOptions.length === 0}
-                          className={`${inputClass(isLightMode)} disabled:opacity-50`}
-                        >
-                          <option value="">{chapterOptionsLoading ? 'Loading chapters...' : availableOptions.length === 0 ? 'No more chapters to add' : 'Choose a chapter...'}</option>
-                          {availableOptions.map((c) => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => { if (s.dropdownPick) { s.setSelected([...s.selected, s.dropdownPick]); s.setDropdownPick(''); } }}
-                          disabled={!s.dropdownPick}
-                          className="px-4 py-2 bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl cursor-pointer hover:bg-cyan-400 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                        >
-                          Add
-                        </button>
-                      </div>
-                      {s.selected.length > 0 ? (
-                        <ul className="space-y-1">
-                          {s.selected.map((c) => (
-                            <li key={c} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${isLightMode ? 'bg-white border border-slate-200 text-slate-700' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>
-                              {c}
-                              <button type="button" onClick={() => s.setSelected(s.selected.filter((x) => x !== c))} className="text-red-400 hover:text-red-300 cursor-pointer shrink-0">
-                                Remove
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No chapters added yet.</p>
-                      )}
-                    </div>
-                  ) : s.mode === 'text' ? (
-                    <textarea
-                      value={s.text}
-                      onChange={(e) => s.setText(e.target.value)}
-                      rows={3}
-                      placeholder={`One chapter per line, e.g.\nReal Numbers\nPolynomials\nPair of Linear Equations`}
-                      className={`${inputClass(isLightMode)} resize-none`}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => s.setImage(e.target.files?.[0] || null)}
-                        className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
-                      />
-                      {s.image && <ImagePlus className="w-4 h-4 text-cyan-400 shrink-0" />}
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-1.5">
