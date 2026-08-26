@@ -293,6 +293,15 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
   const handleSaveSetup = async (e: React.FormEvent) => {
     e.preventDefault();
+    // A setup saved with zero chapters in both subjects is a dead end -- there's nothing to
+    // generate a paper from, and (before this check existed) several students ended up exactly
+    // here: they filled in an exam date and the form let them save successfully with no chapters
+    // added at all, silently producing a syllabus that could never do anything. Block it at the
+    // source with a clear message instead of allowing an unusable setup to be saved.
+    if (mathsSelectedChapters.length === 0 && scienceSelectedChapters.length === 0) {
+      setError('Please add at least one chapter (Maths or Science) before saving your syllabus.');
+      return;
+    }
     setSavingSetup(true);
     setError(null);
     try {
