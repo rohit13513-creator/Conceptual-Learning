@@ -212,18 +212,27 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // Fetches the real chapter list to offer in the dropdown for both subjects at once -- refetched
-  // whenever the setup form opens, and again if a Class 8 student switches Old/New NCERT.
+  // whenever the setup form opens, again if a Class 8 student switches Old/New NCERT, and again the
+  // moment a class becomes known (an account with no class on file -- chiefly the admin's own login
+  // -- can't be given a chapter list until the fallback-class picker below is actually filled in;
+  // previously the fetch just silently returned nothing to select with no explanation why).
   const fetchChapterOptions = useCallback(async (version: 'new' | 'old') => {
     setChapterOptionsLoading(true);
     setChapterOptionsError(null);
     try {
       const [mathsResp, scienceResp] = await Promise.all([
-        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json()),
-        fetch(`/api/revision/chapter-options?subject=Science&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json()),
+        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        fetch(`/api/revision/chapter-options?subject=Science&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
       ]);
-      setChapterOptions({ Maths: mathsResp.chapters || [], Science: scienceResp.chapters || [] });
-    } catch {
-      setChapterOptionsError('Could not load the chapter list -- you can still type your chapters or upload a photo instead.');
+      if (!mathsResp.ok || !scienceResp.ok) {
+        throw new Error((!mathsResp.ok ? mathsResp.data.error : scienceResp.data.error) || 'Failed to load the chapter list.');
+      }
+      setChapterOptions({ Maths: mathsResp.data.chapters || [], Science: scienceResp.data.chapters || [] });
+    } catch (err: any) {
+      setChapterOptions({ Maths: [], Science: [] });
+      setChapterOptionsError(err.message === 'We couldn\'t determine your class. Please pick a class in the revision setup.'
+        ? 'Pick your class below first, then the chapter list will appear.'
+        : 'Could not load the chapter list -- you can still type your chapters or upload a photo instead.');
     } finally {
       setChapterOptionsLoading(false);
     }
@@ -231,7 +240,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
   useEffect(() => {
     if (showSetupForm) fetchChapterOptions(ncertVersion);
-  }, [showSetupForm, ncertVersion, fetchChapterOptions]);
+  }, [showSetupForm, ncertVersion, fallbackClass, user.studentClass, setup?.fallbackClass, fetchChapterOptions]);
 
   // Opening the form for editing starts the dropdown picker from whatever chapters are already
   // saved, so a student adding one more chapter doesn't lose everything else already there --
@@ -611,6 +620,19 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           <form onSubmit={handleSaveSetup} className={`${cardClass(isLightMode)} space-y-5`}>
             <h3 className={`text-sm font-black uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Your Syllabus</h3>
 
+            {needsClassPicker && (
+              <div className="space-y-1.5">
+                <label className={labelClass(isLightMode)}>Your Class</label>
+                <select value={fallbackClass} onChange={(e) => setFallbackClass(e.target.value)} required className={inputClass(isLightMode)}>
+                  <option value="">Choose a class...</option>
+                  <option value="8th">Class VIII</option>
+                  <option value="9th">Class IX</option>
+                  <option value="10th">Class X</option>
+                </select>
+                <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>We couldn't find a class on your account -- pick one first so the right chapter list appears below.</p>
+              </div>
+            )}
+
             {isClass8 && (
               <div className={`p-3 rounded-xl border space-y-2 ${isLightMode ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/20'}`}>
                 <label className={labelClass(isLightMode)}>Which NCERT are you following?</label>
@@ -719,19 +741,6 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
               );
             })}
-
-            {needsClassPicker && (
-              <div className="space-y-1.5">
-                <label className={labelClass(isLightMode)}>Your Class</label>
-                <select value={fallbackClass} onChange={(e) => setFallbackClass(e.target.value)} required className={inputClass(isLightMode)}>
-                  <option value="">Choose a class...</option>
-                  <option value="8th">Class VIII</option>
-                  <option value="9th">Class IX</option>
-                  <option value="10th">Class X</option>
-                </select>
-                <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>We couldn't find a class on your account -- pick one so papers are set at the right difficulty.</p>
-              </div>
-            )}
 
             <button
               type="submit"
