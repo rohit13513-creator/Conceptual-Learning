@@ -9931,10 +9931,19 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   app.get("/api/revision/chapter-options", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { subject, version } = req.query as { subject?: string; version?: string };
+    const { subject, version, classKey: requestedClassKey } = req.query as { subject?: string; version?: string; classKey?: string };
     if (subject !== "Maths" && subject !== "Science") return res.status(400).json({ error: "Invalid subject." });
-    const classLabel = await resolveClassLabelForRevision(auth);
-    const classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    // A class picked in the fallback-class selector only exists in the browser until the whole
+    // setup form is actually saved -- an explicit classKey here lets the dropdown populate
+    // immediately after picking it, the same override pattern /reference-books/mine already uses,
+    // rather than requiring a save-then-reload round trip just to see the chapter list.
+    let classKey: string | null = null;
+    if (requestedClassKey && ["8th", "9th", "10th"].includes(requestedClassKey)) {
+      classKey = requestedClassKey;
+    } else {
+      const classLabel = await resolveClassLabelForRevision(auth);
+      classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    }
     if (!classKey) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
     const chapters = classKey === "8th" && version === "old" ? OLD_NCERT_CLASS8_CHAPTERS[subject] : await getKnownNcertChapters(classKey, subject);
     return res.json({ classKey, subject, chapters });

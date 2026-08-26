@@ -220,9 +220,13 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     setChapterOptionsLoading(true);
     setChapterOptionsError(null);
     try {
+      // A class picked in the fallback-class selector only lives in local state until the whole
+      // form is saved -- pass it straight through as an override so the chapter list appears
+      // immediately after picking a class, not only after a full save-then-reload round trip.
+      const classOverride = fallbackClass ? `&classKey=${fallbackClass}` : '';
       const [mathsResp, scienceResp] = await Promise.all([
-        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
-        fetch(`/api/revision/chapter-options?subject=Science&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}${classOverride}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
+        fetch(`/api/revision/chapter-options?subject=Science&version=${version}${classOverride}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
       ]);
       if (!mathsResp.ok || !scienceResp.ok) {
         throw new Error((!mathsResp.ok ? mathsResp.data.error : scienceResp.data.error) || 'Failed to load the chapter list.');
@@ -236,11 +240,11 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     } finally {
       setChapterOptionsLoading(false);
     }
-  }, [user.token]);
+  }, [user.token, fallbackClass]);
 
   useEffect(() => {
     if (showSetupForm) fetchChapterOptions(ncertVersion);
-  }, [showSetupForm, ncertVersion, fallbackClass, user.studentClass, setup?.fallbackClass, fetchChapterOptions]);
+  }, [showSetupForm, ncertVersion, fetchChapterOptions]);
 
   // Opening the form for editing starts the dropdown picker from whatever chapters are already
   // saved, so a student adding one more chapter doesn't lose everything else already there --
