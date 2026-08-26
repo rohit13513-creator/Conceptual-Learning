@@ -9877,6 +9877,69 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     return (data || []).filter((f: any) => f.name.toLowerCase().endsWith(".pdf")).map((f: any) => referenceBookDisplayTitle(f.name));
   }
 
+  // Class 8 is the one class where a real mix of old and new NCERT is still genuinely in use in
+  // schools (per the admin) -- we only have reference material for the new books (Ganita Prakash /
+  // Curiosity), so a student still following the old syllabus needs the old chapter list instead.
+  // Verified against independent sources (teachoo.com's per-chapter pages) rather than relying on
+  // memory alone, since this app has been burned before by confidently-wrong chapter/content facts.
+  const OLD_NCERT_CLASS8_CHAPTERS: Record<"Maths" | "Science", string[]> = {
+    Maths: [
+      "Rational Numbers",
+      "Linear Equations in One Variable",
+      "Understanding Quadrilaterals",
+      "Practical Geometry",
+      "Data Handling",
+      "Squares and Square Roots",
+      "Cubes and Cube Roots",
+      "Comparing Quantities",
+      "Algebraic Expressions and Identities",
+      "Visualising Solid Shapes",
+      "Mensuration",
+      "Exponents and Powers",
+      "Direct and Inverse Proportions",
+      "Factorisation",
+      "Introduction to Graphs",
+      "Playing with Numbers",
+    ],
+    Science: [
+      "Crop Production and Management",
+      "Microorganisms: Friend and Foe",
+      "Synthetic Fibres and Plastics",
+      "Materials: Metals and Non-Metals",
+      "Coal and Petroleum",
+      "Combustion and Flame",
+      "Conservation of Plants and Animals",
+      "Cell -- Structure and Functions",
+      "Reproduction in Animals",
+      "Reaching the Age of Adolescence",
+      "Force and Pressure",
+      "Friction",
+      "Sound",
+      "Chemical Effects of Electric Current",
+      "Some Natural Phenomena",
+      "Light",
+      "Stars and the Solar System",
+      "Pollution of Air and Water",
+    ],
+  };
+
+  // Powers the dropdown/checklist chapter picker in Revision setup -- returns the exact list of
+  // real chapters a student can choose from for their own class/subject, so there's no free-typing
+  // and therefore nothing to mis-type or need correcting. `version` only matters for Class 8
+  // ("old" returns OLD_NCERT_CLASS8_CHAPTERS instead of the new-book reference list); every other
+  // class only ever has the one (current) syllabus.
+  app.get("/api/revision/chapter-options", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { subject, version } = req.query as { subject?: string; version?: string };
+    if (subject !== "Maths" && subject !== "Science") return res.status(400).json({ error: "Invalid subject." });
+    const classLabel = await resolveClassLabelForRevision(auth);
+    const classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
+    if (!classKey) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+    const chapters = classKey === "8th" && version === "old" ? OLD_NCERT_CLASS8_CHAPTERS[subject] : await getKnownNcertChapters(classKey, subject);
+    return res.json({ classKey, subject, chapters });
+  });
+
   // Checks a student's typed/photographed chapter names against the real NCERT chapter list for
   // their class/subject (derived from the admin-uploaded, renamed reference book files -- see
   // REVISION_REFERENCE_PREFIX), so a paper never gets generated for a chapter that doesn't
@@ -9953,8 +10016,31 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       const textField = `${subj}SyllabusText`;
       const typedText: string = (body[textField] || "").toString().trim();
       const imageFile = files[`${subj}SyllabusImage`]?.[0];
+      // Chapters picked from the dropdown/checklist (see /api/revision/chapter-options) --
+      // guaranteed to already be real chapter titles by construction, so this path skips the
+      // NCERT-name validation entirely below rather than re-checking something that can't be wrong.
+      const chaptersJson: string = (body[`${subj}SyllabusChapters`] || "").toString().trim();
 
-      if (imageFile) {
+      if (chaptersJson) {
+        let chapters: string[] = [];
+        try {
+          const parsed = JSON.parse(chaptersJson);
+          if (Array.isArray(parsed)) chapters = parsed.map((c: any) => String(c).trim()).filter(Boolean);
+        } catch {
+          return res.status(400).json({ error: `Invalid ${subj} chapter selection. Please try again.` });
+        }
+        if (chapters.length > 0) {
+          update[`${subj}_chapters`] = chapters;
+          update[`${subj}_syllabus_text`] = chapters.join("\n");
+          update[`${subj}_syllabus_image_path`] = null;
+        } else if (existing) {
+          update[`${subj}_chapters`] = existing[`${subj}_chapters`];
+          update[`${subj}_syllabus_text`] = existing[`${subj}_syllabus_text`];
+          update[`${subj}_syllabus_image_path`] = existing[`${subj}_syllabus_image_path`];
+        } else {
+          update[`${subj}_chapters`] = [];
+        }
+      } else if (imageFile) {
         try {
           const chapters = await extractChaptersFromImage(imageFile.buffer, imageFile.mimetype);
           if (chapters.length > 0) {

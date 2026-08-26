@@ -77,6 +77,7 @@ interface RevisionProps {
 }
 
 const SECTION_LABELS: Record<string, string> = { A: 'Section A -- Objective', B: 'Section B -- Short Answer', C: 'Section C -- Short Answer', D: 'Section D -- Competency Based', E: 'Section E -- Long Answer' };
+const CLASS_TO_TARGET_CLIENT: Record<string, string> = { VIII: '8th', IX: '9th', X: '10th' };
 const REVISION_SECTION_ORDER: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
 
 const cardClass = (isLightMode: boolean) => `border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`;
@@ -116,18 +117,34 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Setup form fields
-  const [mathsMode, setMathsMode] = useState<'text' | 'image'>('text');
+  const [mathsMode, setMathsMode] = useState<'select' | 'text' | 'image'>('select');
   const [mathsText, setMathsText] = useState('');
   const [mathsImage, setMathsImage] = useState<File | null>(null);
+  const [mathsSelectedChapters, setMathsSelectedChapters] = useState<string[]>([]);
+  const [mathsDropdownPick, setMathsDropdownPick] = useState('');
   const [mathsNoExam, setMathsNoExam] = useState(false);
   const [mathsExamDate, setMathsExamDate] = useState('');
-  const [scienceMode, setScienceMode] = useState<'text' | 'image'>('text');
+  const [scienceMode, setScienceMode] = useState<'select' | 'text' | 'image'>('select');
   const [scienceText, setScienceText] = useState('');
   const [scienceImage, setScienceImage] = useState<File | null>(null);
+  const [scienceSelectedChapters, setScienceSelectedChapters] = useState<string[]>([]);
+  const [scienceDropdownPick, setScienceDropdownPick] = useState('');
   const [scienceNoExam, setScienceNoExam] = useState(false);
   const [scienceExamDate, setScienceExamDate] = useState('');
   const [fallbackClass, setFallbackClass] = useState('');
   const [savingSetup, setSavingSetup] = useState(false);
+
+  // Dropdown/checklist chapter picker -- the default, recommended way to set a syllabus, since
+  // picking from the real chapter list can never be mis-typed or need correcting (unlike Type
+  // Chapters/Upload Photo, which still exist as a fallback for anything not in the list). Class 8
+  // is the one class where old and new NCERT are both genuinely still in use in schools, so it
+  // alone gets an "Old NCERT / New NCERT" choice that changes which chapter list is offered.
+  const [ncertVersion, setNcertVersion] = useState<'new' | 'old'>('new');
+  const [chapterOptions, setChapterOptions] = useState<{ Maths: string[]; Science: string[] }>({ Maths: [], Science: [] });
+  const [chapterOptionsLoading, setChapterOptionsLoading] = useState(false);
+  const [chapterOptionsError, setChapterOptionsError] = useState<string | null>(null);
+  const effectiveClassKey = user.studentClass ? CLASS_TO_TARGET_CLIENT[user.studentClass] : (fallbackClass || setup?.fallbackClass || null);
+  const isClass8 = effectiveClassKey === '8th';
 
   // Active/timer
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
@@ -194,6 +211,38 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Fetches the real chapter list to offer in the dropdown for both subjects at once -- refetched
+  // whenever the setup form opens, and again if a Class 8 student switches Old/New NCERT.
+  const fetchChapterOptions = useCallback(async (version: 'new' | 'old') => {
+    setChapterOptionsLoading(true);
+    setChapterOptionsError(null);
+    try {
+      const [mathsResp, scienceResp] = await Promise.all([
+        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json()),
+        fetch(`/api/revision/chapter-options?subject=Science&version=${version}`, { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json()),
+      ]);
+      setChapterOptions({ Maths: mathsResp.chapters || [], Science: scienceResp.chapters || [] });
+    } catch {
+      setChapterOptionsError('Could not load the chapter list -- you can still type your chapters or upload a photo instead.');
+    } finally {
+      setChapterOptionsLoading(false);
+    }
+  }, [user.token]);
+
+  useEffect(() => {
+    if (showSetupForm) fetchChapterOptions(ncertVersion);
+  }, [showSetupForm, ncertVersion, fetchChapterOptions]);
+
+  // Opening the form for editing starts the dropdown picker from whatever chapters are already
+  // saved, so a student adding one more chapter doesn't lose everything else already there --
+  // matching how the setup form is otherwise a "resume editing" experience, not a blank slate.
+  useEffect(() => {
+    if (showSetupForm && setup) {
+      setMathsSelectedChapters(setup.mathsChapters || []);
+      setScienceSelectedChapters(setup.scienceChapters || []);
+    }
+  }, [showSetupForm, setup]);
+
   useEffect(() => {
     if (!currentPaper || currentPaper.status !== 'active' || !currentPaper.deadlineAt) { setRemainingMs(null); return; }
     const deadline = new Date(currentPaper.deadlineAt).getTime();
@@ -209,10 +258,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     setError(null);
     try {
       const form = new FormData();
-      if (mathsMode === 'text') form.append('mathsSyllabusText', mathsText);
+      if (mathsMode === 'select') form.append('mathsSyllabusChapters', JSON.stringify(mathsSelectedChapters));
+      else if (mathsMode === 'text') form.append('mathsSyllabusText', mathsText);
       else if (mathsImage) form.append('mathsSyllabusImage', mathsImage);
       form.append('mathsExamDate', mathsNoExam ? '' : mathsExamDate);
-      if (scienceMode === 'text') form.append('scienceSyllabusText', scienceText);
+      if (scienceMode === 'select') form.append('scienceSyllabusChapters', JSON.stringify(scienceSelectedChapters));
+      else if (scienceMode === 'text') form.append('scienceSyllabusText', scienceText);
       else if (scienceImage) form.append('scienceSyllabusImage', scienceImage);
       form.append('scienceExamDate', scienceNoExam ? '' : scienceExamDate);
       if (fallbackClass) form.append('fallbackClass', fallbackClass);
@@ -560,20 +611,75 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           <form onSubmit={handleSaveSetup} className={`${cardClass(isLightMode)} space-y-5`}>
             <h3 className={`text-sm font-black uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Your Syllabus</h3>
 
+            {isClass8 && (
+              <div className={`p-3 rounded-xl border space-y-2 ${isLightMode ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                <label className={labelClass(isLightMode)}>Which NCERT are you following?</label>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => setNcertVersion('new')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${ncertVersion === 'new' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-white text-slate-600 border border-amber-200' : 'bg-slate-900 text-slate-400 border border-amber-500/20')}`}>New NCERT (Ganita Prakash / Curiosity)</button>
+                  <button type="button" onClick={() => setNcertVersion('old')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${ncertVersion === 'old' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-white text-slate-600 border border-amber-200' : 'bg-slate-900 text-slate-400 border border-amber-500/20')}`}>Old NCERT</button>
+                </div>
+                <p className={`text-[10px] font-semibold ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>Most schools have switched to the new NCERT -- only pick "Old" if your school is still teaching from the earlier books.</p>
+              </div>
+            )}
+
             {([
-              { key: 'maths', label: 'Maths', mode: mathsMode, setMode: setMathsMode, text: mathsText, setText: setMathsText, image: mathsImage, setImage: setMathsImage, noExam: mathsNoExam, setNoExam: setMathsNoExam, examDate: mathsExamDate, setExamDate: setMathsExamDate },
-              { key: 'science', label: 'Science', mode: scienceMode, setMode: setScienceMode, text: scienceText, setText: setScienceText, image: scienceImage, setImage: setScienceImage, noExam: scienceNoExam, setNoExam: setScienceNoExam, examDate: scienceExamDate, setExamDate: setScienceExamDate },
-            ] as const).map((s) => (
+              { key: 'maths', label: 'Maths', mode: mathsMode, setMode: setMathsMode, text: mathsText, setText: setMathsText, image: mathsImage, setImage: setMathsImage, selected: mathsSelectedChapters, setSelected: setMathsSelectedChapters, dropdownPick: mathsDropdownPick, setDropdownPick: setMathsDropdownPick, noExam: mathsNoExam, setNoExam: setMathsNoExam, examDate: mathsExamDate, setExamDate: setMathsExamDate },
+              { key: 'science', label: 'Science', mode: scienceMode, setMode: setScienceMode, text: scienceText, setText: setScienceText, image: scienceImage, setImage: setScienceImage, selected: scienceSelectedChapters, setSelected: setScienceSelectedChapters, dropdownPick: scienceDropdownPick, setDropdownPick: setScienceDropdownPick, noExam: scienceNoExam, setNoExam: setScienceNoExam, examDate: scienceExamDate, setExamDate: setScienceExamDate },
+            ] as const).map((s) => {
+              const availableOptions = chapterOptions[s.label].filter((c) => !s.selected.includes(c));
+              return (
               <div key={s.key} className={`p-4 rounded-xl border space-y-3 ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                 <h4 className={`text-xs font-black uppercase tracking-wide ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>{s.label}</h4>
 
                 <div className="space-y-1.5">
                   <label className={labelClass(isLightMode)}>Syllabus (chapter names)</label>
                   <div className="flex gap-1.5 mb-1.5">
+                    <button type="button" onClick={() => s.setMode('select')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'select' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Select From List</button>
                     <button type="button" onClick={() => s.setMode('text')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'text' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Type Chapters</button>
                     <button type="button" onClick={() => s.setMode('image')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${s.mode === 'image' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Upload Photo</button>
                   </div>
-                  {s.mode === 'text' ? (
+                  {s.mode === 'select' ? (
+                    <div className="space-y-2">
+                      {chapterOptionsError && (
+                        <p className={`text-[10px] font-semibold ${isLightMode ? 'text-amber-700' : 'text-amber-400'}`}>{chapterOptionsError}</p>
+                      )}
+                      <div className="flex gap-1.5">
+                        <select
+                          value={s.dropdownPick}
+                          onChange={(e) => s.setDropdownPick(e.target.value)}
+                          disabled={chapterOptionsLoading || availableOptions.length === 0}
+                          className={`${inputClass(isLightMode)} disabled:opacity-50`}
+                        >
+                          <option value="">{chapterOptionsLoading ? 'Loading chapters...' : availableOptions.length === 0 ? 'No more chapters to add' : 'Choose a chapter...'}</option>
+                          {availableOptions.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => { if (s.dropdownPick) { s.setSelected([...s.selected, s.dropdownPick]); s.setDropdownPick(''); } }}
+                          disabled={!s.dropdownPick}
+                          className="px-4 py-2 bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wide rounded-xl cursor-pointer hover:bg-cyan-400 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {s.selected.length > 0 ? (
+                        <ul className="space-y-1">
+                          {s.selected.map((c) => (
+                            <li key={c} className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${isLightMode ? 'bg-white border border-slate-200 text-slate-700' : 'bg-slate-900 border border-slate-800 text-slate-300'}`}>
+                              {c}
+                              <button type="button" onClick={() => s.setSelected(s.selected.filter((x) => x !== c))} className="text-red-400 hover:text-red-300 cursor-pointer shrink-0">
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No chapters added yet.</p>
+                      )}
+                    </div>
+                  ) : s.mode === 'text' ? (
                     <textarea
                       value={s.text}
                       onChange={(e) => s.setText(e.target.value)}
@@ -611,7 +717,8 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {needsClassPicker && (
               <div className="space-y-1.5">
