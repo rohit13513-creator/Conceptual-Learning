@@ -9612,6 +9612,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
       questions: content,
       sections: REVISION_SECTION_SHAPE,
       cycleNumber: row.cycle_number || 1,
+      createdAt: row.created_at,
     };
   }
 
@@ -10455,7 +10456,17 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const { data: submissions } = await supabase.from("revision_submissions").select("*").eq("student_email", auth.email).order("submitted_at", { ascending: false }).limit(20);
     return res.json({
       papers: (papers || []).map(mapRevisionPaperForStudent),
-      submissions: (submissions || []).map((s: any) => ({ id: s.id, revisionPaperId: s.revision_paper_id, status: s.status, aiScore: s.ai_score, aiFeedback: s.ai_feedback, isLate: s.is_late, submittedAt: s.submitted_at })),
+      submissions: (submissions || []).map((s: any) => ({
+        id: s.id,
+        revisionPaperId: s.revision_paper_id,
+        status: s.status,
+        aiScore: s.ai_score,
+        aiFeedback: s.ai_feedback,
+        firstAttemptScore: s.first_attempt_score,
+        firstAttemptFeedback: s.first_attempt_feedback,
+        isLate: s.is_late,
+        submittedAt: s.submitted_at,
+      })),
     });
   });
 

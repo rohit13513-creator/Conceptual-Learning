@@ -48,6 +48,7 @@ interface RevisionPaper {
   questions: RevisionQuestion[];
   sections: { label: string; count: number; marks: number; kind: string }[];
   cycleNumber?: number;
+  createdAt?: string;
 }
 
 interface RevisionSubmission {
@@ -56,6 +57,8 @@ interface RevisionSubmission {
   status: 'pending' | 'checked';
   aiScore: number | null;
   aiFeedback: string | null;
+  firstAttemptScore?: number | null;
+  firstAttemptFeedback?: string | null;
   isLate: boolean;
   submittedAt?: string | null;
 }
@@ -177,6 +180,18 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
 
+  // Full paper/submission history (up to the last 20 of each, per /api/revision/mine) -- kept
+  // separately from currentPaper/currentSubmission (which only ever track the single latest one)
+  // so a student can browse and re-download every paper they've already given, with both their
+  // first-attempt and post-improvement scores, not just their most recent attempt.
+  const [allPapers, setAllPapers] = useState<RevisionPaper[]>([]);
+  const [allSubmissions, setAllSubmissions] = useState<RevisionSubmission[]>([]);
+  const [showPastPapers, setShowPastPapers] = useState(false);
+  const [expandedPastPaperId, setExpandedPastPaperId] = useState<string | null>(null);
+  const [pastPaperPdfTarget, setPastPaperPdfTarget] = useState<RevisionPaper | null>(null);
+  const [pastPaperPdfDownloading, setPastPaperPdfDownloading] = useState<string | null>(null);
+  const pastPaperPrintRef = useRef<HTMLDivElement>(null);
+
   // Whether the per-question marking-scheme breakdown is expanded on the result screen -- reset
   // whenever a new paper/submission comes into view so it doesn't carry over from a previous one.
   const [showSolution, setShowSolution] = useState(false);
@@ -229,6 +244,8 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       if (!loadedHasChapters) setShowSetupForm(true);
       const papers: RevisionPaper[] = mineResp?.papers || [];
       const submissions: RevisionSubmission[] = mineResp?.submissions || [];
+      setAllPapers(papers);
+      setAllSubmissions(submissions);
       if (papers.length > 0) {
         const latest = papers[0];
         setCurrentPaper(latest);
@@ -384,6 +401,35 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     if (!html2pdfFunc) return;
     html2pdfFunc().set(opt).from(element).save();
   };
+
+  // Starts a PDF download for a paper from "My Papers" -- just sets which paper the hidden print
+  // node below should render; the actual html2pdf call happens in the effect right after, once
+  // React has committed that paper's content into the DOM (setting state and immediately reading
+  // the ref in the same tick would still show the PREVIOUS paper's content).
+  const handleDownloadPastPaperPdf = (paper: RevisionPaper) => {
+    setPastPaperPdfDownloading(paper.id);
+    setPastPaperPdfTarget(paper);
+  };
+
+  useEffect(() => {
+    if (!pastPaperPdfTarget) return;
+    const element = pastPaperPrintRef.current;
+    if (!element) { setPastPaperPdfDownloading(null); return; }
+    const opt = {
+      margin: [14, 14, 14, 14],
+      filename: `Conceptual_Learning_${pastPaperPdfTarget.subject}_${pastPaperPdfTarget.chapterName.replace(/\s+/g, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2.0, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    };
+    const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
+    if (!html2pdfFunc) { setPastPaperPdfDownloading(null); setPastPaperPdfTarget(null); return; }
+    html2pdfFunc().set(opt).from(element).save().then(() => {
+      setPastPaperPdfDownloading(null);
+      setPastPaperPdfTarget(null);
+    });
+  }, [pastPaperPdfTarget]);
 
   const handleSubmitAnswers = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -614,6 +660,13 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               >
                 <Info className="w-3.5 h-3.5" /> Guidelines
               </button>
+              <button
+                type="button"
+                onClick={() => setShowPastPapers((v) => !v)}
+                className={`flex items-center gap-1 text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
+              >
+                <ListChecks className="w-3.5 h-3.5" /> {showPastPapers ? 'Hide My Papers' : 'My Papers'}
+              </button>
               {/* Always available as an escape hatch, not just when a syllabus is already saved --
                   otherwise a student who saves an exam date without picking any chapters (setup
                   row exists, chapter lists empty) has no button anywhere to get back into the
@@ -653,6 +706,120 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
             </div>
           )}
+        </div>
+
+        {showPastPapers && (
+          <div className={cardClass(isLightMode)}>
+            <h3 className={`text-sm font-black uppercase tracking-wide mb-3 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>My Papers</h3>
+            {allPapers.length === 0 ? (
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>You haven't attempted any papers yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {allPapers.map((p) => {
+                  const sub = allSubmissions.find((s) => s.revisionPaperId === p.id) || null;
+                  const isExpanded = expandedPastPaperId === p.id;
+                  const statusLabel = p.status === 'graded' ? 'Graded' : p.status === 'submitted' ? 'Awaiting check' : p.status === 'active' ? 'In progress' : 'Not started';
+                  const statusColor = p.status === 'graded' ? (isLightMode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20') : (isLightMode ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700');
+                  return (
+                    <div key={p.id} className={`rounded-xl border overflow-hidden ${isLightMode ? 'border-slate-200' : 'border-slate-800'}`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPastPaperId(isExpanded ? null : p.id)}
+                        className={`w-full flex items-center justify-between gap-2 p-3 text-left cursor-pointer ${isLightMode ? 'bg-slate-50 hover:bg-slate-100' : 'bg-slate-950 hover:bg-slate-900'}`}
+                      >
+                        <div>
+                          <p className={`text-xs font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{p.subject} -- {p.chapterName}</p>
+                          <p className={`text-[10px] font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide border ${statusColor}`}>{statusLabel}</span>
+                          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className={`p-3 space-y-2.5 ${isLightMode ? 'bg-white' : 'bg-slate-900/40'}`}>
+                          {sub ? (
+                            <div className="flex flex-wrap gap-2">
+                              {sub.firstAttemptScore != null && (
+                                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-300'}`}>
+                                  First attempt: {sub.firstAttemptScore} / {p.totalMarks}
+                                </span>
+                              )}
+                              {sub.aiScore != null && (
+                                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLightMode ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                  {sub.firstAttemptScore != null ? 'After improvement' : 'Score'}: {sub.aiScore} / {p.totalMarks}
+                                </span>
+                              )}
+                              {sub.status === 'pending' && (
+                                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLightMode ? 'bg-amber-50 text-amber-700' : 'bg-amber-500/10 text-amber-400'}`}>Being checked...</span>
+                              )}
+                            </div>
+                          ) : (
+                            <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Not submitted.</p>
+                          )}
+                          {p.status === 'graded' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPastPaperPdf(p)}
+                              disabled={pastPaperPdfDownloading === p.id}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition disabled:opacity-50 ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                            >
+                              <Download className="w-3.5 h-3.5" /> {pastPaperPdfDownloading === p.id ? 'Preparing PDF...' : 'Download Paper + Answers PDF'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Hidden print node for a past paper's PDF -- includes markingPoints (the official answer)
+            since this is only ever offered for an already-graded paper, and the backend only
+            reveals a paper's markingPoints once its status is 'graded'. */}
+        <div className="fixed -left-[9999px] top-0" aria-hidden="true">
+          <div ref={pastPaperPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
+            {pastPaperPdfTarget && (
+              <>
+                <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Paper with Answers</h1>
+                <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{pastPaperPdfTarget.subject} -- {pastPaperPdfTarget.chapterName}</p>
+                <table style={{ width: '100%', fontSize: '12px', marginBottom: '16px', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '4px 0' }}><b>Time Allotted:</b> {pastPaperPdfTarget.timeAllottedMinutes} minutes</td>
+                      <td style={{ padding: '4px 0', textAlign: 'right' }}><b>Maximum Marks:</b> {pastPaperPdfTarget.totalMarks}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {REVISION_SECTION_ORDER.map((label) => {
+                  const qs = pastPaperPdfTarget.questions.filter((q) => q.sectionLabel === label);
+                  if (qs.length === 0) return null;
+                  return (
+                    <div key={label} style={{ marginBottom: '14px' }}>
+                      <h3 style={{ fontSize: '13px', fontWeight: 700, borderBottom: '1px solid #111', paddingBottom: '2px', marginBottom: '6px' }}>{SECTION_LABELS[label]}</h3>
+                      {qs.map((q) => (
+                        <div key={q.id} style={{ margin: '8px 0' }}>
+                          <p style={{ fontSize: '12px', margin: 0, lineHeight: 1.5 }}>
+                            <b>{q.id}.</b> {q.text} <i>[{q.marks} mark{q.marks > 1 ? 's' : ''}]</i>
+                          </p>
+                          {q.markingPoints && q.markingPoints.length > 0 && (
+                            <div style={{ marginTop: '3px', paddingLeft: '14px', borderLeft: '2px solid #ccc' }}>
+                              {q.markingPoints.map((mp, i) => (
+                                <p key={i} style={{ fontSize: '11px', margin: '2px 0', color: '#1a7a3d' }}>-- {mp}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
         </div>
 
         {error && (
