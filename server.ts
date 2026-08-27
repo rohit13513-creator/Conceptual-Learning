@@ -9309,9 +9309,19 @@ function buildApp(): express.Express {
     { label: "E", count: 1, marks: 5, kind: "long answer" },
   ];
 
+  // No longer reachable from the current frontend (the syllabus setup form only ever sends the
+  // dropdown-picked chapter list now, see mathsSyllabusChapters/scienceSyllabusChapters below), but
+  // kept working correctly regardless, since the API still accepts it and an old cached page or a
+  // direct call could still exercise it. A real submission showed why this matters: pasting a
+  // syllabus from a formatted source (e.g. a table) can turn the gaps BETWEEN chapters into long
+  // runs of spaces/tabs rather than actual newlines, and splitting on newline/comma/semicolon alone
+  // silently fused three separate chapters into one garbled entry ("Electricity ... Chemical
+  // Reactions and Equations ... Acids"), which then generated one unfocused paper spanning all
+  // three topics instead of a proper single-chapter one. A run of 4+ whitespace characters is never
+  // part of a real chapter title, so it's now also treated as a separator.
   function splitSyllabusText(text: string): string[] {
     return text
-      .split(/[\n,;]+/)
+      .split(/[\n,;]+|\s{4,}/)
       .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "").trim())
       .filter((s) => s.length > 0);
   }
