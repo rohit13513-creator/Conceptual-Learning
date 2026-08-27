@@ -7862,13 +7862,23 @@ export default function App() {
                                             <Smartphone className="w-3 h-3 text-cyan-400" />
                                             <span>Reset Devices</span>
                                           </button>
-                                          <button
-                                            onClick={() => handleRejectUser(item.email)}
-                                            className={`px-2 py-1.5 rounded hover:bg-red-500/15 transition cursor-pointer text-[10px] uppercase font-bold ${isLightMode ? 'text-slate-500 hover:text-red-600' : 'text-slate-400 hover:text-red-400'}`}
-                                            title="Suspend access"
-                                          >
-                                            Suspend
-                                          </button>
+                                          {item.status === 'rejected' ? (
+                                            <button
+                                              onClick={() => handleApproveUser(item.email)}
+                                              className={`px-2 py-1.5 rounded hover:bg-green-500/15 transition cursor-pointer text-[10px] uppercase font-bold ${isLightMode ? 'text-slate-500 hover:text-green-600' : 'text-slate-400 hover:text-green-400'}`}
+                                              title="Undo suspension -- restore access"
+                                            >
+                                              Undo Suspend
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => handleRejectUser(item.email)}
+                                              className={`px-2 py-1.5 rounded hover:bg-red-500/15 transition cursor-pointer text-[10px] uppercase font-bold ${isLightMode ? 'text-slate-500 hover:text-red-600' : 'text-slate-400 hover:text-red-400'}`}
+                                              title="Suspend access"
+                                            >
+                                              Suspend
+                                            </button>
+                                          )}
                                         </div>
                                       </td>
                                     </tr>
