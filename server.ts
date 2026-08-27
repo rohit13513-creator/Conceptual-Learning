@@ -190,6 +190,20 @@ function verifyApprovalToken(email: string, token: string): boolean {
 }
 
 const HOMEWORK_BUCKET = "homework";
+
+// A student's own scanned PDF (as opposed to photos taken through this app, which get compressed
+// during the merge step) can land close to or over the storage bucket's size limit -- a real case
+// hit exactly this: repeated "Failed to save your submission" with no indication of why, so the
+// student just kept retrying the same oversized file forever. Supabase's storage API returns this
+// specific error shape when a bucket's file_size_limit is exceeded; detecting it lets the message
+// actually tell the student what to do (retrying an unchanged oversized file can never succeed)
+// instead of implying a transient failure worth retrying as-is.
+function friendlyStorageUploadError(error: { message?: string; statusCode?: string } | null, fallback: string): string {
+  if (error?.statusCode === "413" || /exceeded the maximum allowed size/i.test(error?.message || "")) {
+    return "Your file is too large to upload. Please compress it, split it into fewer/lower-resolution photos, or re-scan at a lower quality, then try again.";
+  }
+  return fallback;
+}
 // Applied uniformly across every class's deadline -- see the late-submission penalty comment in
 // checkHomeworkSubmission for why.
 const LATE_SUBMISSION_GRACE_MS = 60 * 1000;
@@ -7807,7 +7821,7 @@ function buildApp(): express.Express {
     });
     if (uploadError) {
       console.error("Homework file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to save the reassembled homework PDF. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save the reassembled homework PDF. Please try again.") });
     }
 
     let upserted: { row: any; priorMissingQuestions: string[] | null };
@@ -7872,7 +7886,7 @@ function buildApp(): express.Express {
     });
     if (uploadError) {
       console.error("Homework file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to save the combined homework PDF. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save the combined homework PDF. Please try again.") });
     }
 
     let upserted: { row: any; priorMissingQuestions: string[] | null };
@@ -7972,7 +7986,7 @@ function buildApp(): express.Express {
     });
     if (uploadError) {
       console.error("Admin homework file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to save the combined homework PDF. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save the combined homework PDF. Please try again.") });
     }
 
     let upserted: { row: any; priorMissingQuestions: string[] | null };
@@ -8027,7 +8041,7 @@ function buildApp(): express.Express {
     });
     if (uploadError) {
       console.error("Admin homework file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to save the reassembled homework PDF. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save the reassembled homework PDF. Please try again.") });
     }
 
     let upserted: { row: any; priorMissingQuestions: string[] | null };
@@ -8107,7 +8121,7 @@ function buildApp(): express.Express {
         const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(newFilePath, combinedBuffer, { contentType: "application/pdf" });
         if (uploadError) {
           console.error("Error uploading edited submission file:", uploadError.message);
-          return res.status(500).json({ error: "Failed to save the updated submission file." });
+          return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save the updated submission file.") });
         }
         // Old file is no longer referenced by anything now that the combined one is safely saved.
         await supabase.storage.from(HOMEWORK_BUCKET).remove([sub.file_path]).catch(() => {});
@@ -8204,7 +8218,7 @@ function buildApp(): express.Express {
     });
     if (uploadError) {
       console.error("Homework file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to upload homework file. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to upload homework file. Please try again.") });
     }
 
     let upserted: { row: any; priorMissingQuestions: string[] | null };
@@ -10394,7 +10408,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, fileBuffer, { contentType: "application/pdf" });
     if (uploadError) {
       console.error("Revision submission file upload error:", uploadError.message);
-      return res.status(500).json({ error: "Failed to save your submission. Please try again." });
+      return res.status(500).json({ error: friendlyStorageUploadError(uploadError, "Failed to save your submission. Please try again.") });
     }
 
     const isLate = !!paper.deadline_at && Date.now() > new Date(paper.deadline_at).getTime();
