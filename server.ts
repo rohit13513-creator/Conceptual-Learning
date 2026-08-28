@@ -10543,17 +10543,31 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
 
     const report = roster.map((u: any) => {
       const myPapers = (paperRows || []).filter((p: any) => p.student_email === u.email);
-      const scored = myPapers.map((p: any) => submissionByPaper.get(p.id)).filter((s: any) => s && typeof s.ai_score === "number");
+      // "Attempted" must mean the student actually submitted an answer sheet -- a paper that was
+      // only generated or started (clicked into, then abandoned) is not an attempt, and counting it
+      // as one both inflates the attempted count and can wrongly clear the "missed today" flag for
+      // a student who never actually did anything that day.
+      const myAttemptedPapers = myPapers.filter((p: any) => submissionByPaper.has(p.id));
+      const scored = myAttemptedPapers.map((p: any) => submissionByPaper.get(p.id)).filter((s: any) => s && typeof s.ai_score === "number");
       const avgScore = scored.length > 0 ? Math.round((scored.reduce((sum: number, s: any) => sum + s.ai_score, 0) / scored.length) * 10) / 10 : null;
       const lateCount = scored.filter((s: any) => s.is_late).length;
-      const attemptDatesIST = myPapers.map((p: any) => new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+      const attemptDatesIST = myAttemptedPapers.map((p: any) => {
+        const sub = submissionByPaper.get(p.id);
+        return new Date(sub?.submitted_at || p.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      });
       const missedLastCompletedDay = !attemptDatesIST.includes(checkDateIST);
-      const lastAttempt = myPapers.length > 0 ? myPapers.reduce((latest: any, p: any) => (new Date(p.created_at) > new Date(latest.created_at) ? p : latest)).created_at : null;
+      const lastAttempt = myAttemptedPapers.length > 0
+        ? myAttemptedPapers.reduce((latest: any, p: any) => {
+            const latestDate = new Date(submissionByPaper.get(latest.id)?.submitted_at || latest.created_at);
+            const pDate = new Date(submissionByPaper.get(p.id)?.submitted_at || p.created_at);
+            return pDate > latestDate ? p : latest;
+          }).created_at
+        : null;
       return {
         email: u.email,
         name: u.name,
         studentClass: u.student_class,
-        papersAttempted: myPapers.length,
+        papersAttempted: myAttemptedPapers.length,
         papersGraded: scored.length,
         avgScore,
         lateCount,
