@@ -10186,8 +10186,16 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       } else {
         update[`${subj}_chapters`] = [];
       }
-      // Changing a subject's syllabus starts that subject's cycle over.
-      update[`${subj}_completed_chapters`] = [];
+      // Preserve progress on any chapter still part of the (possibly updated) syllabus -- only a
+      // chapter that's no longer in the list at all should drop out of "completed", since it can
+      // never be picked again anyway. This used to unconditionally reset to [] on every single
+      // save, which meant simply reopening "Edit Syllabus" and re-saving -- even just to add one
+      // new chapter, or with nothing actually changed -- silently erased every chapter a student
+      // had already completed this cycle. A real student hit exactly this: two graded papers
+      // showing in "My Papers" but only one counted as "done this cycle".
+      const priorCompleted: string[] = (existing?.[`${subj}_completed_chapters`] as string[] | undefined) || [];
+      const finalChapters: string[] = update[`${subj}_chapters`] || [];
+      update[`${subj}_completed_chapters`] = priorCompleted.filter((c) => finalChapters.includes(c));
     }
 
     if (body.fallbackClass) update.fallback_class = String(body.fallbackClass);
