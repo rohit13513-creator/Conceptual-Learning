@@ -17,6 +17,7 @@ import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
+import { RevisionLeaderboard } from './components/RevisionLeaderboard';
 import { NcertDownloads } from './components/NcertDownloads';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
@@ -161,7 +162,8 @@ import {
   MessageSquare,
   Image as ImageIcon,
   UserX,
-  X
+  X,
+  Trophy
 } from 'lucide-react';
 
 // Mirrors Revision.tsx's own section constants -- used only for the admin's Question Paper /
@@ -980,6 +982,36 @@ export default function App() {
       fetchReferenceBooks();
     }
   }, [activeView, fetchReferenceBooks]);
+
+  // All-three-classes Revision leaderboard, shown on the admin's own landing view -- unlike the
+  // student-facing one (locked server-side to the caller's own class), the admin endpoint returns
+  // every class at once since there's no "own class" to restrict an admin to.
+  const [adminLeaderboardLoading, setAdminLeaderboardLoading] = useState(false);
+  const [adminLeaderboardError, setAdminLeaderboardError] = useState<string | null>(null);
+  const [adminLeaderboardClasses, setAdminLeaderboardClasses] = useState<{
+    classLabel: string;
+    mostAttempted: { email: string; name: string; value: number }[];
+    highestPercentage: { email: string; name: string; value: number }[];
+    topImprovers: { email: string; name: string; value: number }[];
+  }[] | null>(null);
+
+  useEffect(() => {
+    if (!(activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email))) return;
+    (async () => {
+      setAdminLeaderboardLoading(true);
+      setAdminLeaderboardError(null);
+      try {
+        const resp = await fetch('/api/admin/revision/leaderboard', { headers: { Authorization: `Bearer ${user.token}` } });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to load the leaderboard.');
+        setAdminLeaderboardClasses(data.classes || []);
+      } catch (err: any) {
+        setAdminLeaderboardError(err.message);
+      } finally {
+        setAdminLeaderboardLoading(false);
+      }
+    })();
+  }, [activeView, user?.email, user?.token]);
 
   // Confirm-before-delete for reference books -- these are admin-uploaded source material a
   // mis-click shouldn't silently wipe, so removal always goes through this dialog (mirrors the
@@ -4743,6 +4775,7 @@ export default function App() {
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
+            {user && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
             <button
               onClick={() => changeView('ncertDownloads')}
@@ -4913,6 +4946,7 @@ export default function App() {
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
             </button>
+            {user && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
             {/* Download NCERT box */}
             <button
@@ -7544,6 +7578,51 @@ export default function App() {
                 {adminActionMessage.text}
               </div>
             )}
+
+            {/* Class-wise Revision leaderboards -- all three classes at a glance on the admin's own landing view */}
+            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-amber-400 mb-3">
+                <Trophy className="w-4 h-4" /> Revision Leaderboards
+              </h3>
+              {adminLeaderboardLoading && (
+                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboards...</p>
+              )}
+              {adminLeaderboardError && (
+                <p className="text-xs font-bold text-red-400">{adminLeaderboardError}</p>
+              )}
+              {adminLeaderboardClasses && !adminLeaderboardLoading && (
+                <div className="space-y-5">
+                  {adminLeaderboardClasses.map((cls) => (
+                    <div key={cls.classLabel}>
+                      <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {([
+                          { title: 'Most Tests Attempted', rows: cls.mostAttempted, format: (v: number) => `${v} test${v === 1 ? '' : 's'}`, empty: 'No attempts yet.' },
+                          { title: 'Highest Percentage (First Attempt)', rows: cls.highestPercentage, format: (v: number) => `${v}%`, empty: 'No graded papers yet.' },
+                          { title: 'Top Improvers', rows: cls.topImprovers, format: (v: number) => `+${v} marks`, empty: 'No improvements yet.' },
+                        ]).map((section) => (
+                          <div key={section.title} className={`p-3 rounded-xl border ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                            <h5 className={`text-[10px] font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{section.title}</h5>
+                            {section.rows.length === 0 ? (
+                              <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{section.empty}</p>
+                            ) : (
+                              <ol className="space-y-1.5">
+                                {section.rows.map((row, i) => (
+                                  <li key={row.email} className={`flex items-center justify-between gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                                    <span className="truncate">{i + 1}. {row.name}</span>
+                                    <span className="shrink-0 font-mono">{section.format(row.value)}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Admin Panel Rows (single-column stack: guarantees no dead space regardless of how tall any card grows) */}
             <div className="space-y-6">

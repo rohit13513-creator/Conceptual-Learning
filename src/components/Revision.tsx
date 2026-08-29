@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import html2pdf from 'html2pdf.js';
 import { PhotoUploader } from './PhotoUploader';
+import { RevisionLeaderboard } from './RevisionLeaderboard';
 import { fetchJsonWithRetry, uploadWithRetry } from '../utils/uploadWithRetry';
 import {
   BookOpen,
@@ -193,19 +194,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [pastPaperPdfDownloading, setPastPaperPdfDownloading] = useState<string | null>(null);
   const pastPaperPrintRef = useRef<HTMLDivElement>(null);
 
-  // Class-wide leaderboard -- fetched on demand (not on every page load) since it's a secondary,
-  // opt-in view. The server always scopes this to the caller's own class, so there's no client-side
-  // class selection here at all -- a Class VIII student literally cannot request another class's
-  // board.
+  // Class-wide leaderboard panel -- rendered (and so fetched, via RevisionLeaderboard's own
+  // mount-time fetch) only once toggled on, since it's a secondary, opt-in view here.
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
-  const [leaderboardData, setLeaderboardData] = useState<{
-    classLabel: string;
-    mostAttempted: { email: string; name: string; value: number }[];
-    highestPercentage: { email: string; name: string; value: number }[];
-    topImprovers: { email: string; name: string; value: number }[];
-  } | null>(null);
 
   // Whether the per-question marking-scheme breakdown is expanded on the result screen -- reset
   // whenever a new paper/submission comes into view so it doesn't carry over from a previous one.
@@ -415,27 +406,6 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
     if (!html2pdfFunc) return;
     html2pdfFunc().set(opt).from(element).save();
-  };
-
-  const fetchLeaderboard = async () => {
-    setLeaderboardLoading(true);
-    setLeaderboardError(null);
-    try {
-      const resp = await fetch('/api/revision/leaderboard', { headers: { Authorization: `Bearer ${user.token}` } });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to load the leaderboard.');
-      setLeaderboardData(data);
-    } catch (err: any) {
-      setLeaderboardError(err.message);
-    } finally {
-      setLeaderboardLoading(false);
-    }
-  };
-
-  const toggleLeaderboard = () => {
-    const next = !showLeaderboard;
-    setShowLeaderboard(next);
-    if (next && !leaderboardData) fetchLeaderboard();
   };
 
   // Starts a PDF download for a paper from "My Papers" -- just sets which paper the hidden print
@@ -705,7 +675,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </button>
               <button
                 type="button"
-                onClick={toggleLeaderboard}
+                onClick={() => setShowLeaderboard((v) => !v)}
                 className={`flex items-center gap-1 text-[11px] font-black uppercase tracking-wide cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}
               >
                 <Trophy className="w-3.5 h-3.5" /> {showLeaderboard ? 'Hide Leaderboard' : 'Leaderboard'}
@@ -821,43 +791,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
         )}
 
         {showLeaderboard && (
-          <div className={cardClass(isLightMode)}>
-            <h3 className={`text-sm font-black uppercase tracking-wide mb-1 flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-              <Trophy className="w-4 h-4 text-amber-400" /> {leaderboardData ? `Class ${leaderboardData.classLabel} Leaderboard` : 'Leaderboard'}
-            </h3>
-            <p className={`text-xs font-semibold mb-3 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Only students in your own class are shown here.</p>
-            {leaderboardLoading && (
-              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboard...</p>
-            )}
-            {leaderboardError && (
-              <p className="text-xs font-bold text-red-400">{leaderboardError}</p>
-            )}
-            {leaderboardData && !leaderboardLoading && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {([
-                  { title: 'Most Tests Attempted', rows: leaderboardData.mostAttempted, format: (v: number) => `${v} test${v === 1 ? '' : 's'}`, empty: 'No attempts yet.' },
-                  { title: 'Highest Percentage (First Attempt)', rows: leaderboardData.highestPercentage, format: (v: number) => `${v}%`, empty: 'No graded papers yet.' },
-                  { title: 'Top Improvers', rows: leaderboardData.topImprovers, format: (v: number) => `+${v} marks`, empty: 'No improvements yet.' },
-                ]).map((section) => (
-                  <div key={section.title} className={`p-3 rounded-xl border ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
-                    <h4 className={`text-[10px] font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{section.title}</h4>
-                    {section.rows.length === 0 ? (
-                      <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{section.empty}</p>
-                    ) : (
-                      <ol className="space-y-1.5">
-                        {section.rows.map((row, i) => (
-                          <li key={row.email} className={`flex items-center justify-between gap-2 text-xs font-semibold ${row.email === user.email ? (isLightMode ? 'text-cyan-700' : 'text-cyan-400') : (isLightMode ? 'text-slate-700' : 'text-slate-300')}`}>
-                            <span className="truncate">{i + 1}. {row.name}{row.email === user.email ? ' (You)' : ''}</span>
-                            <span className="shrink-0 font-mono">{section.format(row.value)}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />
         )}
 
         {/* Hidden print node for a past paper's PDF -- includes markingPoints (the official answer)

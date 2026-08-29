@@ -10508,10 +10508,8 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     });
   });
 
-  // Class-wide Revision leaderboard, shown to every student for their own class only -- the class
-  // is always resolved server-side from the caller's own account (never a client-supplied param),
-  // so a Class VIII student can only ever see the Class VIII leaderboard, exactly as intended.
-  // Three categories:
+  // Shared by both the student-facing (own class only) and admin (all classes) leaderboard
+  // endpoints below. Three categories:
   //  - Most tests attempted: count of actual submissions (not merely generated/started papers).
   //  - Highest percentage: based on each paper's FIRST-attempt score (first_attempt_score when an
   //    "Improve Score" resubmission happened, otherwise the paper's only ai_score -- which already
@@ -10519,17 +10517,12 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   //    corrected score is used automatically with no separate handling needed).
   //  - Top improvers: total marks gained (ai_score - first_attempt_score) summed across every paper
   //    a student actually used "Improve Score" on, ranking who gained the most in total.
-  app.get("/api/revision/leaderboard", async (req, res) => {
-    const auth = requireAuth(req, res);
-    if (!auth) return;
-    const classLabel = await resolveClassLabelForRevision(auth);
-    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
-
+  async function computeRevisionLeaderboard(classLabel: string) {
     const { data: classmates } = await supabase.from("users").select("email, name").eq("student_class", classLabel).eq("role", "student").eq("status", "approved");
     const roster = classmates || [];
     const nameByEmail = new Map(roster.map((u: any) => [u.email, u.name]));
     const emails = roster.map((u: any) => u.email);
-    if (emails.length === 0) return res.json({ classLabel, mostAttempted: [], highestPercentage: [], topImprovers: [] });
+    if (emails.length === 0) return { classLabel, mostAttempted: [], highestPercentage: [], topImprovers: [] };
 
     const { data: papers } = await supabase.from("revision_papers").select("id, total_marks").in("student_email", emails);
     const maxByPaper = new Map((papers || []).map((p: any) => [p.id, p.total_marks || REVISION_TOTAL_MARKS]));
@@ -10572,7 +10565,30 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
-    return res.json({ classLabel, mostAttempted, highestPercentage, topImprovers });
+    return { classLabel, mostAttempted, highestPercentage, topImprovers };
+  }
+
+  // Class-wide Revision leaderboard, shown to every student for their own class only -- the class
+  // is always resolved server-side from the caller's own account (never a client-supplied param),
+  // so a Class VIII student can only ever see the Class VIII leaderboard, exactly as intended.
+  app.get("/api/revision/leaderboard", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const classLabel = await resolveClassLabelForRevision(auth);
+    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+    return res.json(await computeRevisionLeaderboard(classLabel));
+  });
+
+  // Admin view of the same leaderboard for all three classes at once (unlike the student endpoint
+  // above, not restricted to any one class -- the admin is a trusted role, not a student).
+  app.get("/api/admin/revision/leaderboard", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const [viii, ix, x] = await Promise.all([
+      computeRevisionLeaderboard("VIII"),
+      computeRevisionLeaderboard("IX"),
+      computeRevisionLeaderboard("X"),
+    ]);
+    return res.json({ classes: [viii, ix, x] });
   });
 
   // Admin engagement/performance report -- mirrors /api/admin/homework/missing + /report: for a
