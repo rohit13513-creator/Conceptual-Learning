@@ -1058,6 +1058,11 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   <h4 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                     <Upload className="w-4 h-4 text-cyan-400" /> Submit Your Answers
                   </h4>
+                  {improvingScore && (
+                    <div className={`text-xs font-semibold p-3 rounded-lg border ${isLightMode ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'}`}>
+                      Upload your <b>complete answer sheet again</b> -- every question, not just the ones you're fixing. This resubmission fully replaces your previous one, so a question left out here won't get credit even if you answered it correctly the first time. (Your best result so far on each question is still protected either way, but only redoing the whole paper can actually raise your score.)
+                    </div>
+                  )}
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => setUploadMode('photos')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${uploadMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
                     <button type="button" onClick={() => setUploadMode('pdf')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${uploadMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Single PDF</button>
