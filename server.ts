@@ -10508,6 +10508,73 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     });
   });
 
+  // Class-wide Revision leaderboard, shown to every student for their own class only -- the class
+  // is always resolved server-side from the caller's own account (never a client-supplied param),
+  // so a Class VIII student can only ever see the Class VIII leaderboard, exactly as intended.
+  // Three categories:
+  //  - Most tests attempted: count of actual submissions (not merely generated/started papers).
+  //  - Highest percentage: based on each paper's FIRST-attempt score (first_attempt_score when an
+  //    "Improve Score" resubmission happened, otherwise the paper's only ai_score -- which already
+  //    reflects any manual correction/dispute resolution applied directly to that field, so a
+  //    corrected score is used automatically with no separate handling needed).
+  //  - Top improvers: total marks gained (ai_score - first_attempt_score) summed across every paper
+  //    a student actually used "Improve Score" on, ranking who gained the most in total.
+  app.get("/api/revision/leaderboard", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const classLabel = await resolveClassLabelForRevision(auth);
+    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+
+    const { data: classmates } = await supabase.from("users").select("email, name").eq("student_class", classLabel).eq("role", "student").eq("status", "approved");
+    const roster = classmates || [];
+    const nameByEmail = new Map(roster.map((u: any) => [u.email, u.name]));
+    const emails = roster.map((u: any) => u.email);
+    if (emails.length === 0) return res.json({ classLabel, mostAttempted: [], highestPercentage: [], topImprovers: [] });
+
+    const { data: papers } = await supabase.from("revision_papers").select("id, total_marks").in("student_email", emails);
+    const maxByPaper = new Map((papers || []).map((p: any) => [p.id, p.total_marks || REVISION_TOTAL_MARKS]));
+
+    const { data: submissions } = await supabase.from("revision_submissions").select("student_email, revision_paper_id, ai_score, first_attempt_score").in("student_email", emails);
+
+    const attemptedCount = new Map<string, number>();
+    const scoreSum = new Map<string, number>();
+    const maxSum = new Map<string, number>();
+    const improveSum = new Map<string, number>();
+
+    for (const s of submissions || []) {
+      attemptedCount.set(s.student_email, (attemptedCount.get(s.student_email) || 0) + 1);
+      if (typeof s.ai_score !== "number") continue;
+      const max = maxByPaper.get(s.revision_paper_id) || REVISION_TOTAL_MARKS;
+      const effectiveFirst = typeof s.first_attempt_score === "number" ? s.first_attempt_score : s.ai_score;
+      scoreSum.set(s.student_email, (scoreSum.get(s.student_email) || 0) + effectiveFirst);
+      maxSum.set(s.student_email, (maxSum.get(s.student_email) || 0) + max);
+      if (typeof s.first_attempt_score === "number") {
+        improveSum.set(s.student_email, (improveSum.get(s.student_email) || 0) + (s.ai_score - s.first_attempt_score));
+      }
+    }
+
+    const toEntry = (email: string, value: number, extra: Record<string, any> = {}) => ({ email, name: nameByEmail.get(email) || email, value, ...extra });
+
+    const mostAttempted = [...attemptedCount.entries()]
+      .map(([email, count]) => toEntry(email, count))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    const highestPercentage = [...maxSum.entries()]
+      .filter(([, max]) => max > 0)
+      .map(([email, max]) => toEntry(email, Math.round(((scoreSum.get(email) || 0) / max) * 1000) / 10))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    const topImprovers = [...improveSum.entries()]
+      .filter(([, gained]) => gained > 0)
+      .map(([email, gained]) => toEntry(email, gained))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    return res.json({ classLabel, mostAttempted, highestPercentage, topImprovers });
+  });
+
   // Admin engagement/performance report -- mirrors /api/admin/homework/missing + /report: for a
   // chosen date range, every approved student's revision activity (attempted count, avg score,
   // last attempt, on-time/late split) plus a same-IST-calendar-day "did nothing today" flag.
