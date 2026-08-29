@@ -9873,7 +9873,13 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
             system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
             thinking: { type: "adaptive" },
             output_config: { effort: "medium" },
-            max_tokens: 8000,
+            // Raised from 8000 -- Homework grading hit this exact ceiling problem first: thinking
+            // tokens compete with the structured-output budget (pageByPageNotes/stepResults across
+            // up to 13 questions), and a tight budget here means less real room to work through
+            // each step carefully before committing, not just a truncation risk. Several real
+            // misreads this session (clearly-legible correct answers marked wrong) fit that
+            // profile -- matching Homework's already-fixed max_tokens gives grading the same room.
+            max_tokens: 12000,
             tools: [gradeTool],
             tool_choice: { type: "tool", name: "submit_revision_grade" },
             messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }],
