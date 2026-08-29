@@ -9843,10 +9843,20 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
                   items: {
                     type: "object",
                     properties: {
-                      met: { type: "boolean", description: "True if the student's answer satisfies this specific step of the marking scheme." },
-                      note: { type: "string", description: "Empty string if met. If not met, one short, SIMPLE sentence a student can immediately understand describing exactly what was wrong or missing for this step -- plain language over exam jargon (e.g. 'You didn't write the final answer for k' rather than 'concluding value unstated'). Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
+                      // "note" listed BEFORE "met" on purpose, same reasoning as pageByPageNotes
+                      // above: a prose instruction alone ("don't contradict yourself") was tried
+                      // first and proved unreliable in practice -- a real submission still got a
+                      // note that worked through the check, concluded "this is fine on
+                      // rechecking... correctly matches the required value", and STILL had met set
+                      // to false right next to it, because met was generated first as a snap
+                      // judgment and note was written afterward as commentary that never got the
+                      // chance to change it. Forcing the verification to be written out first, with
+                      // met required to be its direct conclusion, closes that gap structurally
+                      // instead of hoping the model polices its own consistency after the fact.
+                      note: { type: "string", description: "REQUIRED, never empty, written BEFORE met: work through whether the student's answer actually satisfies this specific step -- redo any arithmetic yourself digit by digit rather than eyeballing it. If it's satisfied, write one short plain sentence confirming what they did right (e.g. 'Correctly simplified to 2√10, matches the required value'). If not, one short SIMPLE sentence a student can immediately understand describing exactly what was wrong or missing -- plain language over exam jargon (e.g. 'You didn't write the final answer for k' rather than 'concluding value unstated'). Use real subscript/superscript characters for any chemical formula or exponent (e.g. N₂, x²), never a plain digit." },
+                      met: { type: "boolean", description: "Must be the direct, literal conclusion of the note you just wrote -- if that note concludes the step is correct/satisfied/matches (even after working through and correcting an initial doubt), met MUST be true. It is never valid for met to be false while note says the work is right, or true while note describes something missing or wrong." },
                     },
-                    required: ["met", "note"],
+                    required: ["note", "met"],
                   },
                 },
               },
