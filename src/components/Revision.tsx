@@ -301,13 +301,20 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     if (showSetupForm) fetchChapterOptions(ncertVersion);
   }, [showSetupForm, ncertVersion, fetchChapterOptions]);
 
-  // Opening the form for editing starts the dropdown picker from whatever chapters are already
-  // saved, so a student adding one more chapter doesn't lose everything else already there --
-  // matching how the setup form is otherwise a "resume editing" experience, not a blank slate.
+  // Opening the form for editing starts the dropdown picker (and exam dates) from whatever is
+  // already saved, so a student adding one more chapter doesn't lose everything else already
+  // there -- matching how the setup form is otherwise a "resume editing" experience, not a blank
+  // slate. The exam-date fields were missing from this sync entirely until a real student hit it:
+  // reopening the editor to add a Maths chapter silently wiped her already-saved Science exam date
+  // on save, since the date inputs always started blank/"no exam" regardless of what was stored.
   useEffect(() => {
     if (showSetupForm && setup) {
       setMathsSelectedChapters(setup.mathsChapters || []);
       setScienceSelectedChapters(setup.scienceChapters || []);
+      setMathsExamDate(setup.mathsExamDate || '');
+      setMathsNoExam(!setup.mathsExamDate);
+      setScienceExamDate(setup.scienceExamDate || '');
+      setScienceNoExam(!setup.scienceExamDate);
     }
   }, [showSetupForm, setup]);
 

@@ -646,6 +646,7 @@ export default function App() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   // Profile States
+  const [profileName, setProfileName] = useState('');
   const [profileDob, setProfileDob] = useState('');
   const [profileBio, setProfileBio] = useState('');
   const [profileFavSubject, setProfileFavSubject] = useState('');
@@ -1464,9 +1465,14 @@ export default function App() {
     if (!user) return;
     setProfileError(null);
     setProfileSuccess(null);
+    if (!profileName.trim()) {
+      setProfileError('Name cannot be empty.');
+      return;
+    }
     setProfileSaving(true);
     try {
       const formData = new FormData();
+      formData.append('name', profileName.trim());
       formData.append('dateOfBirth', profileDob);
       formData.append('bio', profileBio);
       formData.append('favoriteSubject', profileFavSubject);
@@ -2468,6 +2474,7 @@ export default function App() {
       fetchChapterNotesJobs();
     }
     if (activeView === 'profile' && user) {
+      setProfileName(user.name || '');
       setProfileDob(user.dateOfBirth || '');
       setProfileBio(user.bio || '');
       setProfileFavSubject(user.favoriteSubject || '');
@@ -7273,6 +7280,17 @@ export default function App() {
               </div>
 
               <form onSubmit={handleProfileUpdate} className="space-y-3 pt-2 border-t border-slate-800/50">
+                <div className="space-y-1">
+                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Full Name</label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    placeholder="Your full name"
+                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                  />
+                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Fix a misspelled name here -- this is what's shown to your teacher and on leaderboards.</p>
+                </div>
                 <div className="space-y-1">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date of Birth</label>
                   <input

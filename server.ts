@@ -7661,7 +7661,7 @@ function buildApp(): express.Express {
   }, async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
+    const { name, dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
 
     const emailNormalized = auth.email;
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
@@ -7673,6 +7673,15 @@ function buildApp(): express.Express {
       favorite_subject: favoriteSubject ? String(favoriteSubject).trim() : null,
       hobbies: hobbies ? String(hobbies).trim() : null,
     };
+
+    // Lets a student fix their own name (a common request: a name mistyped or misspelled at
+    // registration, which only the student themself would reliably know the correct spelling of)
+    // without needing an admin to edit it on their behalf.
+    if (name !== undefined) {
+      const trimmedName = String(name).trim();
+      if (!trimmedName) return res.status(400).json({ error: "Name cannot be empty." });
+      updates.name = trimmedName;
+    }
 
     if (req.file) {
       const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
