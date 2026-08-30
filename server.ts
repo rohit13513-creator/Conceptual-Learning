@@ -11057,6 +11057,11 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   interface ChapterNotesContent { title: string; sections: ChapterNotesSection[]; reviewSummary?: string; reviewConcerns?: string[] }
 
   async function callClaudeTool(opts: { system: string; content: any[]; tool: any; maxTokens?: number; model?: string }): Promise<any> {
+    const model = opts.model || CLAUDE_MODEL;
+    // Adaptive thinking/output_config are a Sonnet/Opus-only feature -- Haiku 4.5 (the cheaper
+    // generation model) rejects the request outright with "adaptive thinking is not supported on
+    // this model" if these are sent, so they're only included for models that actually support them.
+    const supportsAdaptiveThinking = model !== CLAUDE_MODEL_GENERATION;
     let lastErr = "Claude did not return a usable result.";
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
@@ -11064,9 +11069,8 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         method: "POST",
         headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify({
-          model: opts.model || CLAUDE_MODEL,
-          thinking: { type: "adaptive" },
-          output_config: { effort: "medium" },
+          model,
+          ...(supportsAdaptiveThinking ? { thinking: { type: "adaptive" }, output_config: { effort: "medium" } } : {}),
           max_tokens: opts.maxTokens || 8000,
           tools: [opts.tool],
           tool_choice: { type: "tool", name: opts.tool.name },
