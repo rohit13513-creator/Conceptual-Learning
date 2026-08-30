@@ -9944,9 +9944,23 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
           lastErrorMessage = data?.error?.message || "Claude did not return a usable result.";
           break;
         }
-        if (!Array.isArray(toolUseBlock.input?.perQuestion) && attempt < 2) {
-          lastErrorMessage = "Claude did not return per-question step results.";
-          continue;
+        // Catches more than a missing field: Array.isArray([]) is true, so an EMPTY or PARTIAL
+        // perQuestion array (fewer entries than the paper actually has questions) previously
+        // sailed straight past this check and through to scoring -- every question with no
+        // matching entry silently computes to 0 marks with no note at all, which is exactly what
+        // happened to a real, clearly well-attempted 13-question submission: it came back scored
+        // 0/30 with just "Checked." as the feedback, because that attempt's response had an empty
+        // perQuestion array. Requiring it to actually cover every question the paper has closes
+        // that gap -- and unlike the old check, this is NOT gated behind `attempt < 2`: even on the
+        // final attempt, an incomplete result must not be silently accepted as if it were a real
+        // grade. Leaving the submission stuck "pending" (caught by the throw below, same as any
+        // other failed attempt) for a later retry is far safer than fabricating a confident-looking
+        // zero score a student and parent would reasonably take at face value.
+        const returnedPerQuestion = toolUseBlock.input?.perQuestion;
+        if (!Array.isArray(returnedPerQuestion) || returnedPerQuestion.length < questions.length) {
+          lastErrorMessage = "Claude did not return per-question step results for every question.";
+          if (attempt < 2) continue;
+          break;
         }
         succeeded = true;
         break;
