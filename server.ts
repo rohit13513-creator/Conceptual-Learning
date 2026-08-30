@@ -522,6 +522,13 @@ async function findJustCreatedSubmission(studentEmail: string, assignmentId: str
 // grading tool relies on to decide correct vs incorrect. Grading real students' work needs the
 // stronger model; cost savings aren't worth marking correct answers wrong.
 const CLAUDE_MODEL = "claude-sonnet-5";
+// Used ONLY for Revision paper generation (writing the questions), never for grading anything --
+// the comment above this constant is exactly why: Haiku's own arithmetic isn't reliable enough to
+// trust for checking a student's work. Generation is a different risk profile (writing a question
+// is not verifying one), and it's the highest-volume, highest-cost-per-call Claude path in the app
+// (see the cost-reduction pass that introduced this), so it's the one place a cheaper model is
+// worth the trade-off.
+const CLAUDE_MODEL_GENERATION = "claude-haiku-4-5-20251001";
 
 // Finds the student's existing submission for this assignment (if any) and overwrites it in
 // place with the new file, instead of inserting another row -- a student re-submitting the same
@@ -9554,36 +9561,26 @@ Section D (4 marks) and Section E (5 marks) questions: this is exactly how curre
 
 For every question in Sections B, C, D, and E, write markingPoints as a genuine CBSE-board-style STEP marking scheme, exactly like the official marking scheme that would accompany this question on a real CBSE answer key: break the full solution into as many individual steps as the question's mark value (a 2-mark question gets 2 marking points, a 4-mark question gets 4, etc.), each worth exactly 1 mark, in the actual order the working proceeds -- typically: correct formula/concept/method identified, correct substitution of given values, correct intermediate simplification/steps (one point per major step for longer derivations), and the correct final answer/conclusion as its own separate point; for a multi-part question, this just means each sub-part contributes its own share of steps in order (e.g. a 1+2+2 split contributes 1 step for part (i), 2 for part (ii), 2 for part (iii) -- 5 total). However you divide a question, the number of marking points must always sum to exactly that question's own 'marks' value -- never more, never fewer -- so splitting into sub-parts never changes how many marks are actually available or costs the student anything extra. Each marking point must be concrete and checkable (e.g. "Correctly states the quadratic formula" or "(ii) Correctly labels the nucleus and cell membrane"), not vague. For Section A (objective/MCQ or one-line factual answers), there is no step marking -- just write a single markingPoints entry with the one correct option/answer, since these are all-or-nothing for their 1 mark.`;
 
+    // Cost-reduction pass (explicit admin decision): this call now runs on the cheaper generation
+    // model, and the separate proofreading/self-review pass that used to follow it was removed
+    // entirely -- that second call was catching real issues over this app's history (duplicate
+    // questions, wrong marking-scheme answers, out-of-syllabus content, missing-figure references),
+    // so this is a genuine quality-vs-cost trade-off made knowingly, not an oversight. The grading
+    // side's own defenses (page-by-page notes, the never-trust-a-self-contradicting-note backstop,
+    // the crossed-out-work rule, the floor that protects a student's earned marks on Improve Score)
+    // still catch a lot of the same damage after the fact even without this pass, and any paper
+    // defect that does slip through can still be fixed the same way every other one found this
+    // session was: patch the stored question content directly once reported.
     const result = await callClaudeTool({
       system,
       content: [...referenceBlocks, { type: "text", text: "Generate the paper now." }],
       tool: REVISION_PAPER_TOOL,
       maxTokens: 6000,
+      model: CLAUDE_MODEL_GENERATION,
     });
     const draft = Array.isArray(result.questions) ? result.questions : [];
     if (draft.length === 0) throw new Error("Claude did not return any questions.");
-
-    // Second pass: recheck the just-drafted paper for correctness before it's ever shown to a
-    // student -- a math/science teacher would never hand out a paper without proofreading it
-    // first, and the first draft is where an occasional wrong final answer or ill-posed question
-    // would show up. Mirrors the same "generate, then separately self-critique" shape already used
-    // for chapter notes (finalReviewChapterNotes) rather than trusting a single-pass draft.
-    try {
-      const reviewSystem = `You are proofreading a CBSE Class ${classLabel} ${subject} revision paper (chapter: "${chapterName}") that was just drafted, before it is given to a student.${referenceBlocks.length > 0 ? " The attached PDF(s) are the actual official textbook material for this class/subject -- cross-check every question against its real content, terminology, and depth, and fix anything that doesn't actually match what's in there." : ""} Check every single question carefully: is each question factually/mathematically correct and well-posed (no impossible data, no ambiguous wording, no typo in a number that breaks the problem)? Does the MCQ's marked correct option in markingPoints actually match the real correct answer -- work it out yourself independently, don't just trust the draft? For every non-MCQ question, is the final-answer marking point actually the mathematically/scientifically correct answer to that exact question as worded -- redo the calculation yourself to check? Does every question's markingPoints list have exactly as many entries as its 'marks' value? Critically, also check that NO question refers to an external figure/diagram/image the student would need to see but wasn't given -- this paper is text-only and nothing is ever attached, so a question like "Study Fig. 2.10 showing..." or "identify the labelled parts in the diagram below" is unanswerable and must be fixed: either rewrite it so every visually-relevant detail is described directly in the question's own text, or change it to ask the student to draw and label their own diagram. Also check that no question is drawn from NCERT's supplementary/enrichment content -- shaded "box" callouts, "Do You Know?" style panels, footnotes, or anything marked "Not for Examination Purpose" -- since that content isn't part of the examinable syllabus; replace any question that turns out to be based on it. Also check each question is within the CURRENT CBSE board-examinable depth for this exact topic, not just its general subject area -- e.g. Class 10 Polynomials only examines "verify the relationship between zeroes and coefficients" for a QUADRATIC polynomial, never a cubic one, even though the chapter mentions cubics exist; more generally, a question testing an extended/advanced version of a technique the chapter only briefly introduces (rather than one it actually walks through as a worked, practised method) is very likely out of scope and should be replaced with one at the chapter's actual core depth. Also check that no two questions reuse the same specific dataset/points/numbers/scenario -- e.g. an MCQ and a later full-answer question both asking about the exact same three points' collinearity -- since a student who already solved it once has no way to know a later occurrence expects the full working repeated from scratch; replace the later duplicate with a different scenario testing the same skill. Also check formatting: ${REVISION_SUBSCRIPT_INSTRUCTION} Fix any question or marking-scheme step that uses a plain digit where a subscript/superscript belongs. If you find any error, fix it directly (correct the question text, the options, or the marking points as needed) rather than just flagging it. If a question is unfixable or fundamentally broken, replace it with a new, correct question worth the same marks in the same section. Return the complete, corrected 13-question paper -- if everything was already correct, return it unchanged.`;
-      const reviewed = await callClaudeTool({
-        system: reviewSystem,
-        content: [...referenceBlocks, { type: "text", text: `Here is the drafted paper to review:\n\n${JSON.stringify(draft, null, 2)}` }],
-        tool: REVISION_PAPER_TOOL,
-        maxTokens: 6000,
-      });
-      const final = Array.isArray(reviewed.questions) && reviewed.questions.length > 0 ? reviewed.questions : draft;
-      return final;
-    } catch (err: any) {
-      // The review pass is a quality improvement, not a hard requirement -- if it fails for any
-      // reason, the unreviewed (but already validly-generated) draft is still a usable paper.
-      console.error("Revision paper review pass failed, using unreviewed draft:", err.message);
-      return draft;
-    }
+    return draft;
   }
 
   // Looks for an already-generated paper for this exact (class, subject, chapter, cycle) --
@@ -10378,6 +10375,23 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       .maybeSingle();
     if (existingPaper) return res.json({ paper: mapRevisionPaperForStudent(existingPaper) });
 
+    // Cost-reduction cap (explicit admin decision): at most one FRESH paper generated per subject
+    // per IST calendar day. This only limits starting a brand-new chapter's paper -- it can't ever
+    // block resuming today's already-started paper (the existingPaper check above already returned
+    // early for that) or "Improve Score" on a completed one (a completely separate endpoint), so a
+    // student who is actively working never hits this. It only stops a student from generating a
+    // second brand-new paper draft for the same subject later the same day.
+    const todayStart = new Date(`${todayIST()}T00:00:00+05:30`).toISOString();
+    const { count: freshPapersToday } = await supabase
+      .from("revision_papers")
+      .select("id", { count: "exact", head: true })
+      .eq("student_email", auth.email)
+      .eq("subject", target.subject)
+      .gte("created_at", todayStart);
+    if ((freshPapersToday || 0) >= 1) {
+      return res.status(429).json({ error: `You've already started a new ${target.subject} revision paper today. You can continue it or use Improve Score, and a fresh chapter will be available tomorrow.` });
+    }
+
     try {
       const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
       const { data: paperRow, error: insertError } = await supabase
@@ -11042,7 +11056,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   interface ChapterNotesSection { heading: string; points: string[]; diagrams: ChapterNotesDiagramState[] }
   interface ChapterNotesContent { title: string; sections: ChapterNotesSection[]; reviewSummary?: string; reviewConcerns?: string[] }
 
-  async function callClaudeTool(opts: { system: string; content: any[]; tool: any; maxTokens?: number }): Promise<any> {
+  async function callClaudeTool(opts: { system: string; content: any[]; tool: any; maxTokens?: number; model?: string }): Promise<any> {
     let lastErr = "Claude did not return a usable result.";
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
@@ -11050,7 +11064,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         method: "POST",
         headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         body: JSON.stringify({
-          model: CLAUDE_MODEL,
+          model: opts.model || CLAUDE_MODEL,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           max_tokens: opts.maxTokens || 8000,
