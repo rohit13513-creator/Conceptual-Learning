@@ -9583,6 +9583,17 @@ function buildApp(): express.Express {
   // How well a reference file's (renamed, human-readable) title matches the chapter name a
   // student's own syllabus gave us -- used to attach only the relevant file(s) to a generation
   // call instead of the whole book folder (see getRevisionReferenceBookBlocks below).
+  // Generic connector/filler words, plus a small set of overused chapter-title umbrella words that
+  // show up across many UNRELATED chapters ("numbers", "play", "story", "world", "set") -- confirmed
+  // by a real case: a Class VIII student's own-syllabus chapter "Rational Numbers" matched an
+  // uploaded reference file titled "A Story of Numbers" on the single shared word "numbers" alone
+  // (2-word overlap of 1/2 = exactly the old 30-point cutoff), attaching a completely unrelated
+  // chapter about the history of numeral systems to a paper that was supposed to be about the
+  // arithmetic of rational numbers. None of these words carry real topic information on their own.
+  const CHAPTER_MATCH_STOPWORDS = new Set([
+    "and", "the", "for", "with", "from", "into", "onto", "our", "your",
+    "numbers", "number", "play", "story", "world", "set", "sets", "themes", "tales",
+  ]);
   function chapterMatchScore(chapterName: string, fileTitle: string): number {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
     const a = norm(chapterName);
@@ -9590,8 +9601,8 @@ function buildApp(): express.Express {
     if (!a || !b) return 0;
     if (a === b) return 100;
     if (a.includes(b) || b.includes(a)) return 80;
-    const aWords = a.split(" ").filter((w) => w.length > 2);
-    const bWords = new Set(b.split(" ").filter((w) => w.length > 2));
+    const aWords = a.split(" ").filter((w) => w.length > 2 && !CHAPTER_MATCH_STOPWORDS.has(w));
+    const bWords = new Set(b.split(" ").filter((w) => w.length > 2 && !CHAPTER_MATCH_STOPWORDS.has(w)));
     if (aWords.length === 0) return 0;
     const overlap = aWords.filter((w) => bWords.has(w)).length;
     return (overlap / aWords.length) * 60;
