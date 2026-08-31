@@ -10087,12 +10087,35 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         const pq = resultById.get(questionId);
         const max = maxByQuestion.get(questionId) ?? 0;
         const steps = Array.isArray(pq?.stepResults) ? pq!.stepResults : [];
-        // Deterministic per-question mark: count of steps the model marked met, never a number the
-        // model picks itself -- capped at that question's own max in case of a miscounted response.
-        // resolveStepMet applies the self-contradiction backstop above on top of the raw met flag.
-        const marksAwarded = Math.min(max, steps.filter((s) => resolveStepMet(s)).length);
+        // Deterministic per-question mark: the model never picks a number itself, only met/not-met
+        // per step (resolveStepMet applies the self-contradiction backstop above on top of the raw
+        // met flag). Scored as a PROPORTION of steps met, scaled to the question's own declared
+        // mark value, rather than a flat count capped at max -- because the paper's own
+        // markingPoints array doesn't always have exactly `max` entries (confirmed on live data:
+        // roughly two-thirds of multi-step questions across existing papers have a mismatched
+        // count). A flat count either silently caps a fully-correct answer below its true max
+        // (fewer steps than marks -- a real student hit exactly this, a 5-mark question with only
+        // 4 checkable steps, capping a perfect answer at 4/5 with literally nothing to explain the
+        // missing mark) or, the opposite way, hands out full marks despite one of several steps
+        // being wrong (more steps than marks). Proportional scoring is correct either way and
+        // needs no assumption about how many steps the scheme happens to list.
+        const totalSteps = steps.length;
+        const metSteps = steps.filter((s) => resolveStepMet(s)).length;
+        const marksAwarded = totalSteps > 0 ? Math.round((metSteps / totalSteps) * max) : 0;
         const missedNotes = steps.filter((s) => !resolveStepMet(s) && s.note && s.note.trim()).map((s) => s.note.trim());
-        const newLine = missedNotes.length > 0 ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}` : `${questionId}: ${marksAwarded}/${max}`;
+        // A deduction must never reach the student with literally no stated reason -- that happens
+        // either when a not-met step came back with an empty note (the model didn't comply with
+        // the tool schema's "note is required" instruction) or, more subtly, when the paper's own
+        // marking scheme has fewer checkable steps than the question's declared mark value (a
+        // paper-authoring gap, confirmed to happen at least once: a 5-mark question generated with
+        // only 4 markingPoints, capping marksAwarded below max with every existing step satisfied
+        // and nothing to blame it on). Either way, a student reasonably reads a silent deduction as
+        // their own mistake, so this always names at least a generic reason instead.
+        const newLine = missedNotes.length > 0
+          ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}`
+          : marksAwarded < max
+            ? `${questionId}: ${marksAwarded}/${max} -- Marks were deducted here but no specific reason was recorded; please ask your teacher to double-check this question if you believe your answer was fully correct.`
+            : `${questionId}: ${marksAwarded}/${max}`;
         // Never let this specific question's mark regress from what the first attempt already
         // earned -- keep the earlier line (marks and reason) if it scored higher than this fresh
         // regrade, since the student never resubmitted a worse answer for it, the fresh grading
