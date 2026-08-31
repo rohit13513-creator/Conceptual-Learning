@@ -10585,9 +10585,10 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   //  - Top improvers: total marks gained (ai_score - first_attempt_score) summed across every paper
   //    a student actually used "Improve Score" on, ranking who gained the most in total.
   async function computeRevisionLeaderboard(classLabel: string) {
-    const { data: classmates } = await supabase.from("users").select("email, name").eq("student_class", classLabel).eq("role", "student").eq("status", "approved");
+    const { data: classmates } = await supabase.from("users").select("email, name, photo_url").eq("student_class", classLabel).eq("role", "student").eq("status", "approved");
     const roster = classmates || [];
     const nameByEmail = new Map(roster.map((u: any) => [u.email, u.name]));
+    const photoByEmail = new Map(roster.map((u: any) => [u.email, u.photo_url || null]));
     const emails = roster.map((u: any) => u.email);
     if (emails.length === 0) return { classLabel, mostAttempted: [], highestPercentage: [], topImprovers: [] };
 
@@ -10613,7 +10614,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       }
     }
 
-    const toEntry = (email: string, value: number, extra: Record<string, any> = {}) => ({ email, name: nameByEmail.get(email) || email, value, ...extra });
+    const toEntry = (email: string, value: number, extra: Record<string, any> = {}) => ({ email, name: nameByEmail.get(email) || email, photoUrl: photoByEmail.get(email) || null, value, ...extra });
 
     const mostAttempted = [...attemptedCount.entries()]
       .map(([email, count]) => toEntry(email, count))

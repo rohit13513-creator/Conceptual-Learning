@@ -17,7 +17,7 @@ import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
-import { RevisionLeaderboard } from './components/RevisionLeaderboard';
+import { RevisionLeaderboard, Avatar as LeaderboardAvatar, RankBadge as LeaderboardRankBadge } from './components/RevisionLeaderboard';
 import { NcertDownloads } from './components/NcertDownloads';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
@@ -991,9 +991,9 @@ export default function App() {
   const [adminLeaderboardError, setAdminLeaderboardError] = useState<string | null>(null);
   const [adminLeaderboardClasses, setAdminLeaderboardClasses] = useState<{
     classLabel: string;
-    mostAttempted: { email: string; name: string; value: number }[];
-    highestPercentage: { email: string; name: string; value: number }[];
-    topImprovers: { email: string; name: string; value: number }[];
+    mostAttempted: { email: string; name: string; photoUrl: string | null; value: number }[];
+    highestPercentage: { email: string; name: string; photoUrl: string | null; value: number }[];
+    topImprovers: { email: string; name: string; photoUrl: string | null; value: number }[];
   }[] | null>(null);
 
   useEffect(() => {
@@ -7657,8 +7657,10 @@ export default function App() {
                             ) : (
                               <ol className="space-y-1.5">
                                 {section.rows.map((row, i) => (
-                                  <li key={row.email} className={`flex items-center justify-between gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                                    <span className="truncate">{i + 1}. {row.name}</span>
+                                  <li key={row.email} className={`flex items-center gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                                    <LeaderboardRankBadge rank={i + 1} />
+                                    <LeaderboardAvatar row={row} isLightMode={isLightMode} />
+                                    <span className="truncate flex-1">{row.name}</span>
                                     <span className="shrink-0 font-mono">{section.format(row.value)}</span>
                                   </li>
                                 ))}
