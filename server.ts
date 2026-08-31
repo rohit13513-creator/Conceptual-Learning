@@ -9029,6 +9029,97 @@ function buildApp(): express.Express {
     return res.json({ assignments, students: ranked });
   });
 
+  // Every homework is graded on the same fixed 10-mark scale regardless of how many questions it
+  // has (see the deterministic "10 minus 1 mark per bad question" rule in checkHomeworkSubmission),
+  // so unlike Revision's REVISION_TOTAL_MARKS this never needs to be looked up per-assignment.
+  const HOMEWORK_TOTAL_MARKS = 10;
+
+  // All-time Homework leaderboard for one class: every approved offline/tuition student in that
+  // class (online-only students are never assigned homework, so they're excluded, same as the
+  // admin's missing/report endpoints above), ranked by their all-time homework percentage --
+  // unlike Revision's top-5-per-category boards, this lists EVERY student since a full class
+  // ranking (not just the top few) is what was actually asked for here.
+  async function computeHomeworkLeaderboard(classLabel: string) {
+    const targetKey = CLASS_TO_TARGET[classLabel];
+    if (!targetKey) return { classLabel, totalAssignments: 0, rows: [] as any[] };
+
+    const { data: classmates } = await supabase
+      .from("users")
+      .select("email, name, photo_url")
+      .eq("student_class", classLabel)
+      .eq("role", "student")
+      .eq("status", "approved")
+      .neq("student_type", "online");
+    const roster = classmates || [];
+    if (roster.length === 0) return { classLabel, totalAssignments: 0, rows: [] as any[] };
+    const emails = roster.map((u: any) => u.email);
+
+    const { data: assignments } = await supabase.from("homework_assignments").select("id").in("target_class", [targetKey, "All"]);
+    const assignmentIds = new Set((assignments || []).map((a: any) => a.id));
+    const totalAssignments = assignmentIds.size;
+
+    const { data: submissions } = await supabase
+      .from("homework_submissions")
+      .select("student_email, assignment_id, status, ai_score")
+      .in("student_email", emails);
+
+    // The upsert-per-assignment model (see upsertHomeworkSubmission) guarantees at most one row
+    // per (student, assignment) pair, so a plain count of matching rows is already a correct
+    // distinct-assignment count with no dedup needed.
+    const attemptedCount = new Map<string, number>();
+    const scoreSum = new Map<string, number>();
+    const gradedCount = new Map<string, number>();
+    for (const s of submissions || []) {
+      if (!assignmentIds.has(s.assignment_id)) continue;
+      attemptedCount.set(s.student_email, (attemptedCount.get(s.student_email) || 0) + 1);
+      if (s.status === "checked" && typeof s.ai_score === "number") {
+        scoreSum.set(s.student_email, (scoreSum.get(s.student_email) || 0) + s.ai_score);
+        gradedCount.set(s.student_email, (gradedCount.get(s.student_email) || 0) + 1);
+      }
+    }
+
+    const rows = roster
+      .map((u: any) => {
+        const graded = gradedCount.get(u.email) || 0;
+        const score = scoreSum.get(u.email) || 0;
+        const maxScore = graded * HOMEWORK_TOTAL_MARKS;
+        return {
+          email: u.email,
+          name: u.name,
+          photoUrl: u.photo_url || null,
+          attempted: attemptedCount.get(u.email) || 0,
+          score,
+          maxScore,
+          percentage: maxScore > 0 ? Math.round((score / maxScore) * 1000) / 10 : 0,
+        };
+      })
+      .sort((a: any, b: any) => b.percentage - a.percentage || b.attempted - a.attempted || a.name.localeCompare(b.name));
+
+    return { classLabel, totalAssignments, rows };
+  }
+
+  // Class-wide Homework leaderboard, shown to every student for their own class only -- mirrors
+  // /api/revision/leaderboard's scoping (the class is always resolved server-side from the
+  // caller's own account, never a client-supplied param).
+  app.get("/api/homework/leaderboard", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { data: userRow } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
+    if (!userRow?.student_class) return res.status(400).json({ error: "We couldn't determine your class." });
+    return res.json(await computeHomeworkLeaderboard(userRow.student_class));
+  });
+
+  // Admin view of the same leaderboard for all three classes at once.
+  app.get("/api/admin/homework/leaderboard", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const [viii, ix, x] = await Promise.all([
+      computeHomeworkLeaderboard("VIII"),
+      computeHomeworkLeaderboard("IX"),
+      computeHomeworkLeaderboard("X"),
+    ]);
+    return res.json({ classes: [viii, ix, x] });
+  });
+
   // Everyone (students + admin) can view the list of posted announcements/updates
   app.get("/api/announcements", async (req, res) => {
     const { data: rows } = await supabase

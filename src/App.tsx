@@ -18,6 +18,7 @@ import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
 import { RevisionLeaderboard, Avatar as LeaderboardAvatar, RankBadge as LeaderboardRankBadge } from './components/RevisionLeaderboard';
+import { HomeworkLeaderboard, LeaderboardTable as HomeworkLeaderboardTable } from './components/HomeworkLeaderboard';
 import { NcertDownloads } from './components/NcertDownloads';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
 import html2pdf from 'html2pdf.js';
@@ -163,7 +164,8 @@ import {
   Image as ImageIcon,
   UserX,
   X,
-  Trophy
+  Trophy,
+  BookOpenCheck
 } from 'lucide-react';
 
 // Mirrors Revision.tsx's own section constants -- used only for the admin's Question Paper /
@@ -1010,6 +1012,33 @@ export default function App() {
         setAdminLeaderboardError(err.message);
       } finally {
         setAdminLeaderboardLoading(false);
+      }
+    })();
+  }, [activeView, user?.email, user?.token]);
+
+  // All-three-classes Homework leaderboard, same shape/reasoning as the Revision one above.
+  const [adminHwLeaderboardLoading, setAdminHwLeaderboardLoading] = useState(false);
+  const [adminHwLeaderboardError, setAdminHwLeaderboardError] = useState<string | null>(null);
+  const [adminHwLeaderboardClasses, setAdminHwLeaderboardClasses] = useState<{
+    classLabel: string;
+    totalAssignments: number;
+    rows: { email: string; name: string; photoUrl: string | null; attempted: number; score: number; maxScore: number; percentage: number }[];
+  }[] | null>(null);
+
+  useEffect(() => {
+    if (!(activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email))) return;
+    (async () => {
+      setAdminHwLeaderboardLoading(true);
+      setAdminHwLeaderboardError(null);
+      try {
+        const resp = await fetch('/api/admin/homework/leaderboard', { headers: { Authorization: `Bearer ${user.token}` } });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to load the leaderboard.');
+        setAdminHwLeaderboardClasses(data.classes || []);
+      } catch (err: any) {
+        setAdminHwLeaderboardError(err.message);
+      } finally {
+        setAdminHwLeaderboardLoading(false);
       }
     })();
   }, [activeView, user?.email, user?.token]);
@@ -4971,6 +5000,7 @@ export default function App() {
                 </button>
               </div>
             </div>
+            {user && <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
             {/* Revision box -- separate from admin-posted Homework, student-initiated on their own syllabus */}
             <button
@@ -7669,6 +7699,29 @@ export default function App() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Class-wise Homework leaderboards -- all three classes at a glance on the admin's own landing view */}
+            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-indigo-400 mb-3">
+                <BookOpenCheck className="w-4 h-4" /> Homework Leaderboards
+              </h3>
+              {adminHwLeaderboardLoading && (
+                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboards...</p>
+              )}
+              {adminHwLeaderboardError && (
+                <p className="text-xs font-bold text-red-400">{adminHwLeaderboardError}</p>
+              )}
+              {adminHwLeaderboardClasses && !adminHwLeaderboardLoading && (
+                <div className="space-y-5">
+                  {adminHwLeaderboardClasses.map((cls) => (
+                    <div key={cls.classLabel}>
+                      <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
+                      <HomeworkLeaderboardTable data={cls} isLightMode={isLightMode} />
                     </div>
                   ))}
                 </div>
