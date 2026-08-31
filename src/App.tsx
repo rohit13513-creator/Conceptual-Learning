@@ -1026,7 +1026,11 @@ export default function App() {
   }[] | null>(null);
 
   useEffect(() => {
-    if (!(activeView === 'admin' && user?.email && ADMIN_EMAILS.includes(user.email))) return;
+    // Also fetched on the Home page ('hub'), not just the admin panel -- an admin account has no
+    // student_class of its own, so the single-class student endpoint the Home page normally uses
+    // for this card can never resolve for them; this all-classes version is shown there instead
+    // (see the Home page render below).
+    if (!((activeView === 'admin' || activeView === 'hub') && user?.email && ADMIN_EMAILS.includes(user.email))) return;
     (async () => {
       setAdminHwLeaderboardLoading(true);
       setAdminHwLeaderboardError(null);
@@ -5000,7 +5004,35 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {user && <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
+            {user && !ADMIN_EMAILS.includes(user.email) && (
+              <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />
+            )}
+            {/* Admin has no student_class of its own, so it sees all three classes here instead of
+                the single-class board every other student gets -- and only here, not in the admin
+                panel, per explicit request to move this off that page. */}
+            {user && ADMIN_EMAILS.includes(user.email) && (
+              <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+                <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-indigo-400 mb-3">
+                  <BookOpenCheck className="w-4 h-4" /> Homework Leaderboards
+                </h3>
+                {adminHwLeaderboardLoading && (
+                  <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboards...</p>
+                )}
+                {adminHwLeaderboardError && (
+                  <p className="text-xs font-bold text-red-400">{adminHwLeaderboardError}</p>
+                )}
+                {adminHwLeaderboardClasses && !adminHwLeaderboardLoading && (
+                  <div className="space-y-5">
+                    {adminHwLeaderboardClasses.map((cls) => (
+                      <div key={cls.classLabel}>
+                        <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
+                        <HomeworkLeaderboardTable data={cls} isLightMode={isLightMode} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Revision box -- separate from admin-posted Homework, student-initiated on their own syllabus */}
             <button
@@ -7699,29 +7731,6 @@ export default function App() {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Class-wise Homework leaderboards -- all three classes at a glance on the admin's own landing view */}
-            <div className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-indigo-400 mb-3">
-                <BookOpenCheck className="w-4 h-4" /> Homework Leaderboards
-              </h3>
-              {adminHwLeaderboardLoading && (
-                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboards...</p>
-              )}
-              {adminHwLeaderboardError && (
-                <p className="text-xs font-bold text-red-400">{adminHwLeaderboardError}</p>
-              )}
-              {adminHwLeaderboardClasses && !adminHwLeaderboardLoading && (
-                <div className="space-y-5">
-                  {adminHwLeaderboardClasses.map((cls) => (
-                    <div key={cls.classLabel}>
-                      <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
-                      <HomeworkLeaderboardTable data={cls} isLightMode={isLightMode} />
                     </div>
                   ))}
                 </div>
