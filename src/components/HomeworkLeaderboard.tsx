@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpenCheck } from 'lucide-react';
+import { BookOpenCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { Avatar, RankBadge, type LeaderboardRow as AvatarRow } from './RevisionLeaderboard';
 
 export interface HomeworkLeaderboardRow {
@@ -43,11 +43,16 @@ function percentageBarColor(pct: number): string {
   return 'from-rose-500 to-red-400';
 }
 
+const VISIBLE_ROWS_COLLAPSED = 5;
+
 export function LeaderboardTable({ data, isLightMode, currentUserEmail }: { data: HomeworkLeaderboardData; isLightMode: boolean; currentUserEmail?: string }) {
+  const [expanded, setExpanded] = useState(false);
   if (data.rows.length === 0) {
     return <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>No students to show yet.</p>;
   }
+  const visibleRows = expanded ? data.rows : data.rows.slice(0, VISIBLE_ROWS_COLLAPSED);
   return (
+    <div>
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-xs border-separate border-spacing-y-1.5 min-w-[420px]">
         <thead>
@@ -60,7 +65,7 @@ export function LeaderboardTable({ data, isLightMode, currentUserEmail }: { data
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((row, i) => {
+          {visibleRows.map((row, i) => {
             const rank = i + 1;
             const isMe = row.email === currentUserEmail;
             const avatarRow: AvatarRow = { email: row.email, name: row.name, photoUrl: row.photoUrl, value: row.percentage };
@@ -103,6 +108,15 @@ export function LeaderboardTable({ data, isLightMode, currentUserEmail }: { data
           })}
         </tbody>
       </table>
+    </div>
+    {data.rows.length > VISIBLE_ROWS_COLLAPSED && (
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className={`mt-2 flex items-center gap-1 text-[11px] font-black cursor-pointer ${isLightMode ? 'text-indigo-700 hover:text-indigo-900' : 'text-indigo-400 hover:text-indigo-300'}`}
+      >
+        {expanded ? <>Show top {VISIBLE_ROWS_COLLAPSED} <ChevronUp className="w-3.5 h-3.5" /></> : <>More ({data.rows.length - VISIBLE_ROWS_COLLAPSED} more student{data.rows.length - VISIBLE_ROWS_COLLAPSED === 1 ? '' : 's'}) <ChevronDown className="w-3.5 h-3.5" /></>}
+      </button>
+    )}
     </div>
   );
 }

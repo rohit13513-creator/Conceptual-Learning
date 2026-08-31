@@ -17,7 +17,7 @@ import { LearnMaths8 } from './components/LearnMaths8';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
-import { RevisionLeaderboard, Avatar as LeaderboardAvatar, RankBadge as LeaderboardRankBadge } from './components/RevisionLeaderboard';
+import { RevisionLeaderboard, CategoryCard as RevisionCategoryCard } from './components/RevisionLeaderboard';
 import { HomeworkLeaderboard, LeaderboardTable as HomeworkLeaderboardTable } from './components/HomeworkLeaderboard';
 import { NcertDownloads } from './components/NcertDownloads';
 import ChapterNotesViewer from './components/ChapterNotesViewer';
@@ -7707,29 +7707,9 @@ export default function App() {
                     <div key={cls.classLabel}>
                       <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {([
-                          { title: 'Most Tests Attempted', rows: cls.mostAttempted, format: (v: number) => `${v} test${v === 1 ? '' : 's'}`, empty: 'No attempts yet.' },
-                          { title: 'Highest Percentage (First Attempt)', rows: cls.highestPercentage, format: (v: number) => `${v}%`, empty: 'No graded papers yet.' },
-                          { title: 'Top Improvers', rows: cls.topImprovers, format: (v: number) => `+${v} marks`, empty: 'No improvements yet.' },
-                        ]).map((section) => (
-                          <div key={section.title} className={`p-3 rounded-xl border ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
-                            <h5 className={`text-[10px] font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{section.title}</h5>
-                            {section.rows.length === 0 ? (
-                              <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{section.empty}</p>
-                            ) : (
-                              <ol className="space-y-1.5">
-                                {section.rows.map((row, i) => (
-                                  <li key={row.email} className={`flex items-center gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                                    <LeaderboardRankBadge rank={i + 1} />
-                                    <LeaderboardAvatar row={row} isLightMode={isLightMode} />
-                                    <span className="truncate flex-1">{row.name}</span>
-                                    <span className="shrink-0 font-mono">{section.format(row.value)}</span>
-                                  </li>
-                                ))}
-                              </ol>
-                            )}
-                          </div>
-                        ))}
+                        <RevisionCategoryCard sectionKey="attempted" title="Most Tests Attempted" rows={cls.mostAttempted} format={(v) => `${v} test${v === 1 ? '' : 's'}`} empty="No attempts yet." isLightMode={isLightMode} />
+                        <RevisionCategoryCard sectionKey="percentage" title="Highest Percentage (First Attempt)" rows={cls.highestPercentage} format={(v) => `${v}%`} empty="No graded papers yet." isLightMode={isLightMode} />
+                        <RevisionCategoryCard sectionKey="improvers" title="Top Improvers" rows={cls.topImprovers} format={(v) => `+${v} marks`} empty="No improvements yet." isLightMode={isLightMode} />
                       </div>
                     </div>
                   ))}

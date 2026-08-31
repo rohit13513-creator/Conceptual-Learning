@@ -9058,31 +9058,43 @@ function buildApp(): express.Express {
     const assignmentIds = new Set((assignments || []).map((a: any) => a.id));
     const totalAssignments = assignmentIds.size;
 
+    // upsertHomeworkSubmission is *meant* to guarantee one row per (student, assignment) pair, but
+    // real data has cases where that didn't hold (a handful of students have 2-3 rows for the same
+    // assignment_id, each with a different ai_score) -- summing every row would double- or
+    // triple-count those. Ordering by submitted_at and folding into a Map keyed by
+    // "assignment|student" so a later row always overwrites an earlier one for the same pair keeps
+    // exactly one (the latest) row per assignment per student, regardless of how many exist.
     const { data: submissions } = await supabase
       .from("homework_submissions")
-      .select("student_email, assignment_id, status, ai_score")
-      .in("student_email", emails);
+      .select("student_email, assignment_id, status, ai_score, submitted_at")
+      .in("student_email", emails)
+      .order("submitted_at", { ascending: true });
 
-    // The upsert-per-assignment model (see upsertHomeworkSubmission) guarantees at most one row
-    // per (student, assignment) pair, so a plain count of matching rows is already a correct
-    // distinct-assignment count with no dedup needed.
-    const attemptedCount = new Map<string, number>();
-    const scoreSum = new Map<string, number>();
-    const gradedCount = new Map<string, number>();
+    const latestByPair = new Map<string, { student_email: string; assignment_id: string; status: string; ai_score: number | null }>();
     for (const s of submissions || []) {
       if (!assignmentIds.has(s.assignment_id)) continue;
+      latestByPair.set(`${s.assignment_id}|${s.student_email}`, s);
+    }
+
+    const attemptedCount = new Map<string, number>();
+    const scoreSum = new Map<string, number>();
+    for (const s of latestByPair.values()) {
       attemptedCount.set(s.student_email, (attemptedCount.get(s.student_email) || 0) + 1);
       if (s.status === "checked" && typeof s.ai_score === "number") {
         scoreSum.set(s.student_email, (scoreSum.get(s.student_email) || 0) + s.ai_score);
-        gradedCount.set(s.student_email, (gradedCount.get(s.student_email) || 0) + 1);
       }
     }
 
+    // maxScore is every assignment this class has EVER been given, not just the ones a student
+    // actually attempted -- a homework never submitted at all still costs its full 10 marks
+    // against the student's percentage here, the same way it already silently did for the
+    // "attempted" column's own denominator. Scoring only against attempted/graded count let a
+    // student who skipped most homeworks but did well on the few they submitted outrank someone
+    // who attempted (and did reasonably on) far more of them, which is exactly backwards.
+    const maxScore = totalAssignments * HOMEWORK_TOTAL_MARKS;
     const rows = roster
       .map((u: any) => {
-        const graded = gradedCount.get(u.email) || 0;
         const score = scoreSum.get(u.email) || 0;
-        const maxScore = graded * HOMEWORK_TOTAL_MARKS;
         return {
           email: u.email,
           name: u.name,
@@ -10707,22 +10719,21 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
 
     const toEntry = (email: string, value: number, extra: Record<string, any> = {}) => ({ email, name: nameByEmail.get(email) || email, photoUrl: photoByEmail.get(email) || null, value, ...extra });
 
+    // Full ranked lists, not just a top-5 slice -- the frontend shows the top 5 by default with a
+    // "More" toggle to reveal everyone, so the complete ranking needs to actually reach it.
     const mostAttempted = [...attemptedCount.entries()]
       .map(([email, count]) => toEntry(email, count))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+      .sort((a, b) => b.value - a.value);
 
     const highestPercentage = [...maxSum.entries()]
       .filter(([, max]) => max > 0)
       .map(([email, max]) => toEntry(email, Math.round(((scoreSum.get(email) || 0) / max) * 1000) / 10))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+      .sort((a, b) => b.value - a.value);
 
     const topImprovers = [...improveSum.entries()]
       .filter(([, gained]) => gained > 0)
       .map(([email, gained]) => toEntry(email, gained))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+      .sort((a, b) => b.value - a.value);
 
     return { classLabel, mostAttempted, highestPercentage, topImprovers };
   }
