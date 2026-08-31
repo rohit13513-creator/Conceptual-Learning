@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Flame, TrendingUp, Crown, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trophy, Flame, TrendingUp, Crown, ChevronDown } from 'lucide-react';
+import { LeaderboardModal } from './LeaderboardModal';
 
 const VISIBLE_ROWS_COLLAPSED = 5;
 
@@ -118,6 +119,35 @@ export type SectionKey = keyof typeof SECTION_THEME;
 // toggle to reveal the full class ranking, since every category can have far more than 5 students
 // once the server stopped truncating. Exported so the admin's all-classes view (App.tsx) renders
 // the exact same card, with the same expand behavior, instead of a separate hand-rolled list.
+function CategoryRows({ rows, format, isLightMode, currentUserEmail, accentText }: { rows: LeaderboardRow[]; format: (v: number) => string; isLightMode: boolean; currentUserEmail?: string; accentText: string }) {
+  return (
+    <ol className="space-y-1.5">
+      {rows.map((row, i) => {
+        const rank = i + 1;
+        const isMe = row.email === currentUserEmail;
+        const rankStyle = RANK_STYLE[rank];
+        return (
+          <li
+            key={row.email}
+            className={`flex items-center gap-2 text-xs font-semibold rounded-lg px-1.5 py-1 -mx-1.5 transition-transform hover:scale-[1.02] ${
+              isMe
+                ? isLightMode ? 'bg-cyan-50 text-cyan-700' : 'bg-cyan-500/10 text-cyan-300'
+                : isLightMode ? 'text-slate-700' : 'text-slate-300'
+            }`}
+          >
+            <RankBadge rank={rank} />
+            <span className={`rounded-full ${rankStyle?.glow || ''}`}>
+              <Avatar row={row} isLightMode={isLightMode} />
+            </span>
+            <span className="truncate flex-1">{row.name}{isMe ? ' (You)' : ''}</span>
+            <span className={`shrink-0 font-mono ${rank === 1 ? accentText : ''}`}>{format(row.value)}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function CategoryCard({
   sectionKey, title, rows, format, empty, isLightMode, currentUserEmail,
 }: {
@@ -129,10 +159,10 @@ export function CategoryCard({
   isLightMode: boolean;
   currentUserEmail?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const theme = SECTION_THEME[sectionKey];
   const Icon = theme.icon;
-  const visibleRows = expanded ? rows : rows.slice(0, VISIBLE_ROWS_COLLAPSED);
+  const visibleRows = rows.slice(0, VISIBLE_ROWS_COLLAPSED);
   return (
     <div className={`p-3 rounded-xl border bg-gradient-to-b ${theme.headerGradient} ${isLightMode ? 'bg-slate-50 border-slate-200' : 'border-slate-800 bg-slate-950'}`}>
       <h4 className={`text-[10px] font-black uppercase tracking-wide mb-2 flex items-center gap-1.5 ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -142,37 +172,19 @@ export function CategoryCard({
         <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{empty}</p>
       ) : (
         <>
-          <ol className="space-y-1.5">
-            {visibleRows.map((row, i) => {
-              const rank = i + 1;
-              const isMe = row.email === currentUserEmail;
-              const rankStyle = RANK_STYLE[rank];
-              return (
-                <li
-                  key={row.email}
-                  className={`flex items-center gap-2 text-xs font-semibold rounded-lg px-1.5 py-1 -mx-1.5 transition-transform hover:scale-[1.02] ${
-                    isMe
-                      ? isLightMode ? 'bg-cyan-50 text-cyan-700' : 'bg-cyan-500/10 text-cyan-300'
-                      : isLightMode ? 'text-slate-700' : 'text-slate-300'
-                  }`}
-                >
-                  <RankBadge rank={rank} />
-                  <span className={`rounded-full ${rankStyle?.glow || ''}`}>
-                    <Avatar row={row} isLightMode={isLightMode} />
-                  </span>
-                  <span className="truncate flex-1">{row.name}{isMe ? ' (You)' : ''}</span>
-                  <span className={`shrink-0 font-mono ${rank === 1 ? theme.accentText : ''}`}>{format(row.value)}</span>
-                </li>
-              );
-            })}
-          </ol>
+          <CategoryRows rows={visibleRows} format={format} isLightMode={isLightMode} currentUserEmail={currentUserEmail} accentText={theme.accentText} />
           {rows.length > VISIBLE_ROWS_COLLAPSED && (
             <button
-              onClick={() => setExpanded((v) => !v)}
+              onClick={() => setShowAll(true)}
               className={`mt-2 flex items-center gap-1 text-[11px] font-black cursor-pointer ${isLightMode ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              {expanded ? <>Show top {VISIBLE_ROWS_COLLAPSED} <ChevronUp className="w-3.5 h-3.5" /></> : <>More ({rows.length - VISIBLE_ROWS_COLLAPSED}) <ChevronDown className="w-3.5 h-3.5" /></>}
+              More ({rows.length - VISIBLE_ROWS_COLLAPSED}) <ChevronDown className="w-3.5 h-3.5" />
             </button>
+          )}
+          {showAll && (
+            <LeaderboardModal title={title} onClose={() => setShowAll(false)} isLightMode={isLightMode}>
+              <CategoryRows rows={rows} format={format} isLightMode={isLightMode} currentUserEmail={currentUserEmail} accentText={theme.accentText} />
+            </LeaderboardModal>
           )}
         </>
       )}
