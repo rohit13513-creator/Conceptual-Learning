@@ -1222,6 +1222,37 @@ export default function App() {
     }
   }, [deviceType]);
 
+  // Global session-expiry guard. Every authenticated endpoint's requireAuth() sends a plain 401
+  // with a "session expired" message when the bearer token is invalid/expired, but nothing was
+  // ever reading that response -- each screen just showed the raw error text inline (or nothing at
+  // all) while the app kept thinking the user was still logged in, so a stale/expired token looked
+  // like an unexplained wall of "session expired" errors on every action with no way out except
+  // manually finding Logout and logging back in. This patches window.fetch once, for the lifetime
+  // of the app, to catch that specific failure everywhere at once: any 401 that isn't from the
+  // login screen or the change-password form (both of which legitimately return 401 for a wrong
+  // password while the user is otherwise fine) now clears the stale session and drops the user back
+  // on the login screen with a clear explanation, instead of leaving them stuck.
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const response = await originalFetch(...args);
+      if (response.status === 401) {
+        const input = args[0];
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        const isCredentialCheck = url.includes('/api/login') || url.includes('/api/change-password');
+        if (!isCredentialCheck) {
+          setUser(null);
+          localStorage.removeItem('optics_v1_user');
+          sessionStorage.removeItem('optics_v1_user');
+          setAuthError('Your session has expired. Please log in again.');
+          changeView('hub');
+        }
+      }
+      return response;
+    };
+    return () => { window.fetch = originalFetch; };
+  }, []);
+
   // Click outside listener for dropdown global menus
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
