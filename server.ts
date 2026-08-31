@@ -10375,23 +10375,6 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       .maybeSingle();
     if (existingPaper) return res.json({ paper: mapRevisionPaperForStudent(existingPaper) });
 
-    // Cost-reduction cap (explicit admin decision): at most one FRESH paper generated per subject
-    // per IST calendar day. This only limits starting a brand-new chapter's paper -- it can't ever
-    // block resuming today's already-started paper (the existingPaper check above already returned
-    // early for that) or "Improve Score" on a completed one (a completely separate endpoint), so a
-    // student who is actively working never hits this. It only stops a student from generating a
-    // second brand-new paper draft for the same subject later the same day.
-    const todayStart = new Date(`${todayIST()}T00:00:00+05:30`).toISOString();
-    const { count: freshPapersToday } = await supabase
-      .from("revision_papers")
-      .select("id", { count: "exact", head: true })
-      .eq("student_email", auth.email)
-      .eq("subject", target.subject)
-      .gte("created_at", todayStart);
-    if ((freshPapersToday || 0) >= 1) {
-      return res.status(429).json({ error: `You've already started a new ${target.subject} revision paper today. You can continue it or use Improve Score, and a fresh chapter will be available tomorrow.` });
-    }
-
     try {
       const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
       const { data: paperRow, error: insertError } = await supabase
