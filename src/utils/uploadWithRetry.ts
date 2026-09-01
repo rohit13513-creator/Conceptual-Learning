@@ -72,11 +72,21 @@ async function withNetworkRetry<T>(attempt: () => Promise<T>, onRetry: () => voi
 
 // A single attempt, via XHR rather than fetch specifically because XHR exposes upload progress
 // events (fetch has no cross-browser way to report how much of a request body has been sent).
+//
+// xhr.timeout is set explicitly (XHR defaults to 0 = never) -- without it, a connection that
+// stalls after being established (TCP connects fine, then nothing) neither loads nor errors, so
+// the returned promise never settles at all. A real case: a student's photo upload silently hung
+// like this with 22 minutes still on the clock, which permanently disabled the Submit button
+// (derived from "is anything still mid-upload") with no error shown and no way to recover short
+// of reloading the page and losing whatever had already been added. A stalled request now times
+// out and rejects like any other network failure, which the existing retry-with-backoff logic in
+// withNetworkRetry already handles correctly.
 function attemptUpload(url: string, token: string, formData: FormData, method: string, onProgress?: (fraction: number) => void): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.timeout = 60000;
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(e.loaded / e.total);
@@ -108,18 +118,29 @@ export async function uploadWithRetry({ url, token, formData, method = 'POST', o
 
 // Same network-retry behavior for the small JSON requests around an upload (e.g. "finalize this
 // session") that carry no file data and so need no progress reporting.
+//
+// fetch(), like plain XHR, never times out on its own -- a stalled connection just leaves the
+// await hanging forever, which is exactly as capable of permanently disabling a submit button as
+// the unbounded XHR upload was (see attemptUpload above). AbortController is the only way to give
+// fetch a timeout; a shorter one than the upload's is fine here since this request carries no file
+// data.
 export async function fetchJsonWithRetry({ url, token, body, method = 'POST', maxRetries = 6 }: JsonWithRetryOptions): Promise<UploadResult> {
   return withNetworkRetry(
     async () => {
       let resp: Response;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       try {
         resp = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(body),
+          signal: controller.signal,
         });
       } catch {
         throw new Error('network');
+      } finally {
+        clearTimeout(timeoutId);
       }
       let data: any = {};
       try { data = await resp.json(); } catch { /* non-JSON response, treated as empty */ }
