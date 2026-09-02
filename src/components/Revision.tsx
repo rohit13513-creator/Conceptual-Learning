@@ -1021,6 +1021,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   >
                     <RefreshCw className="w-3.5 h-3.5" /> Choose a Different Chapter
                   </button>
+                  <button
+                    onClick={() => setShowGuidelines(true)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                  >
+                    <Info className="w-3.5 h-3.5" /> Guidelines
+                  </button>
                 </div>
               </div>
             )}
@@ -1039,12 +1045,20 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   )}
                 </div>
 
-                <button
-                  onClick={handleDownloadPaperPdf}
-                  className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border cursor-pointer transition ${isLightMode ? 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'}`}
-                >
-                  <Download className="w-4 h-4" /> Download Paper PDF
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDownloadPaperPdf}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border cursor-pointer transition ${isLightMode ? 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/20'}`}
+                  >
+                    <Download className="w-4 h-4" /> Download Paper PDF
+                  </button>
+                  <button
+                    onClick={() => setShowGuidelines(true)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border cursor-pointer transition ${isLightMode ? 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'}`}
+                  >
+                    <Info className="w-4 h-4" /> Guidelines
+                  </button>
+                </div>
 
                 <div className="space-y-4">
                   {REVISION_SECTION_ORDER.map((label) => {
