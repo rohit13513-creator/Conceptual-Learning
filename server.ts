@@ -9586,26 +9586,52 @@ function buildApp(): express.Express {
   // Generic connector/filler words, plus a small set of overused chapter-title umbrella words that
   // show up across many UNRELATED chapters ("numbers", "play", "story", "world", "set") -- confirmed
   // by a real case: a Class VIII student's own-syllabus chapter "Rational Numbers" matched an
-  // uploaded reference file titled "A Story of Numbers" on the single shared word "numbers" alone
-  // (2-word overlap of 1/2 = exactly the old 30-point cutoff), attaching a completely unrelated
-  // chapter about the history of numeral systems to a paper that was supposed to be about the
-  // arithmetic of rational numbers. None of these words carry real topic information on their own.
+  // uploaded reference file titled "A Story of Numbers" on the single shared word "numbers" alone,
+  // attaching a completely unrelated chapter about the history of numeral systems to a paper that
+  // was supposed to be about the arithmetic of rational numbers. None of these words carry real
+  // topic information on their own.
   const CHAPTER_MATCH_STOPWORDS = new Set([
     "and", "the", "for", "with", "from", "into", "onto", "our", "your",
     "numbers", "number", "play", "story", "world", "set", "sets", "themes", "tales",
   ]);
+  // Symmetric Jaccard overlap (shared significant words / all significant words across both
+  // titles), not a one-sided recall of the chapter name's own words -- confirmed necessary by a
+  // real case: a Class X student's "Introduction to Trigonometry" paper pulled in questions from
+  // the separate "Some Applications of Trigonometry" chapter, because the old one-sided formula
+  // scored that pair 30/100 (their one shared word, "trigonometry", was already half of the short
+  // chapter name's own 2-word count) -- exactly the old attach threshold. A full scan of every
+  // actual chapter list on file turned up three more live pairs the old formula silently
+  // cross-attached the same way: "Quadratic Equations" with "Pair of Linear Equations...", and
+  // "Circles" with "Areas Related to Circles" (that one via the old raw-substring shortcut, which
+  // scored it even higher at 80, since "circles" is literally a substring of the longer title).
+  // Requiring the overlap to be a genuine majority of BOTH titles' combined vocabulary -- not just
+  // the shorter one's -- excludes all of these while still matching every real chapter-to-file
+  // pairing across every class and subject on file. Numeric tokens (e.g. the "1"/"2" in "Practice
+  // Set 1"/"Practice Set 2", two genuinely different chapters) are kept rather than length-filtered
+  // away, and a numeric mismatch between two titles that both carry one hard-disqualifies the pair
+  // -- otherwise stripping short digit tokens would make those two distinct chapters register as a
+  // 100% word-set match.
+  const CHAPTER_MATCH_THRESHOLD = 50;
   function chapterMatchScore(chapterName: string, fileTitle: string): number {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
     const a = norm(chapterName);
     const b = norm(fileTitle);
     if (!a || !b) return 0;
     if (a === b) return 100;
-    if (a.includes(b) || b.includes(a)) return 80;
-    const aWords = a.split(" ").filter((w) => w.length > 2 && !CHAPTER_MATCH_STOPWORDS.has(w));
-    const bWords = new Set(b.split(" ").filter((w) => w.length > 2 && !CHAPTER_MATCH_STOPWORDS.has(w)));
-    if (aWords.length === 0) return 0;
-    const overlap = aWords.filter((w) => bWords.has(w)).length;
-    return (overlap / aWords.length) * 60;
+    const significant = (s: string) => new Set(s.split(" ").filter((w) => (w.length > 2 || /^[0-9]+$/.test(w)) && !CHAPTER_MATCH_STOPWORDS.has(w)));
+    const aWords = significant(a);
+    const bWords = significant(b);
+    if (aWords.size === 0 || bWords.size === 0) return 0;
+    const isNumeric = (w: string) => /^[0-9]+$/.test(w);
+    const aNums = [...aWords].filter(isNumeric);
+    const bNums = [...bWords].filter(isNumeric);
+    if (aNums.length > 0 && bNums.length > 0) {
+      const sameNums = aNums.length === bNums.length && aNums.every((n) => bWords.has(n));
+      if (!sameNums) return 0;
+    }
+    const intersection = [...aWords].filter((w) => bWords.has(w)).length;
+    const union = new Set([...aWords, ...bWords]).size;
+    return (intersection / union) * 100;
   }
 
   // Looks up admin-uploaded reference PDF(s) on file for this class/subject that actually look
@@ -9630,7 +9656,7 @@ function buildApp(): express.Express {
 
     const scored = pdfFiles
       .map((f: any) => ({ f, score: chapterMatchScore(chapterName, referenceBookDisplayTitle(f.name)) }))
-      .filter((x: any) => x.score >= 30)
+      .filter((x: any) => x.score >= CHAPTER_MATCH_THRESHOLD)
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, 2);
 
