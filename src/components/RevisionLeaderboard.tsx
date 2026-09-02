@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Flame, TrendingUp, Crown, ChevronDown } from 'lucide-react';
+import { Trophy, Flame, TrendingUp, Crown, ChevronDown, HelpCircle } from 'lucide-react';
 import { LeaderboardModal } from './LeaderboardModal';
 
 const VISIBLE_ROWS_COLLAPSED = 5;
@@ -9,6 +9,10 @@ export interface LeaderboardRow {
   name: string;
   photoUrl: string | null;
   value: number;
+  // Only set on Highest Percentage rows -- how many of the student's most recent tests (up to 5)
+  // this percentage is actually based on, shown so a student can see at a glance why their number
+  // moves the way it does instead of it reading as an opaque lifetime average.
+  testsCounted?: number;
 }
 
 interface LeaderboardData {
@@ -90,6 +94,51 @@ export function RankBadge({ rank }: { rank: number }) {
   );
 }
 
+// A student clicks this to actually understand how each board works -- added after a student with
+// the most tests attempted in his whole class still didn't see himself at #1 and had no way to
+// find out why without asking. Plain, direct language, no jargon, covers all three boards.
+function GuidelinesButton({ isLightMode, onClick }: { isLightMode: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1 text-[11px] font-black cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}
+    >
+      <HelpCircle className="w-3.5 h-3.5" /> Leaderboard Guidelines
+    </button>
+  );
+}
+
+function GuidelinesContent({ isLightMode }: { isLightMode: boolean }) {
+  const item = (title: string, body: string) => (
+    <div>
+      <p className={`text-xs font-black mb-1 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{title}</p>
+      <p className={`text-xs leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{body}</p>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      {item(
+        '🔥 Most Tests Attempted',
+        'Simply how many Revision tests you have completed in total, ever. There is no minimum -- every test you finish counts.'
+      )}
+      {item(
+        '🏆 Highest Percentage',
+        "Based on your MOST RECENT 5 tests only (first-attempt score, not your Improve Score result) -- not every test you've ever taken. If you haven't taken 5 tests yet, it uses however many you have, but you need at least 3 completed tests to appear on this board at all. This means one bad day from a long time ago won't hold you back forever, but it also means your rank can move -- the moment you take a new test, it becomes one of your 'last 5' and an older one drops off."
+      )}
+      {item(
+        '📈 Top Improvers',
+        'How many total marks you have gained by using "Improve Score" to correct and resubmit a test you already took. Only counts marks actually gained, not your final score.'
+      )}
+      <div className={`pt-3 border-t ${isLightMode ? 'border-slate-200' : 'border-slate-800'}`}>
+        <p className={`text-xs font-black mb-1 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>How do I get to #1?</p>
+        <p className={`text-xs leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
+          For Highest Percentage specifically: score well and consistently on your most recent tests. Taking more tests only helps if they're good ones -- your oldest tests stop counting once you've taken 5 more recent ones. For the other two boards, just keep attempting tests regularly and use Improve Score whenever you can.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Distinct color identity per category -- makes the three boards instantly tell-apart at a glance
 // instead of reading as three copies of the same gray card.
 const SECTION_THEME = {
@@ -139,7 +188,12 @@ function CategoryRows({ rows, format, isLightMode, currentUserEmail, accentText 
             <span className={`rounded-full ${rankStyle?.glow || ''}`}>
               <Avatar row={row} isLightMode={isLightMode} />
             </span>
-            <span className="truncate flex-1">{row.name}{isMe ? ' (You)' : ''}</span>
+            <span className="truncate flex-1">
+              {row.name}{isMe ? ' (You)' : ''}
+              {typeof row.testsCounted === 'number' && (
+                <span className={`ml-1 font-normal ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>({row.testsCounted} test{row.testsCounted === 1 ? '' : 's'})</span>
+              )}
+            </span>
             <span className={`shrink-0 font-mono ${rank === 1 ? accentText : ''}`}>{format(row.value)}</span>
           </li>
         );
@@ -200,6 +254,7 @@ export function RevisionLeaderboard({ isLightMode = false, token, currentUserEma
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<LeaderboardData | null>(null);
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,9 +280,12 @@ export function RevisionLeaderboard({ isLightMode = false, token, currentUserEma
       {!compact && (
         <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${isLightMode ? 'from-amber-100/60' : 'from-amber-500/10'} to-transparent pointer-events-none`} />
       )}
-      <h3 className={`relative text-sm font-black uppercase tracking-wide mb-1 flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-        <Trophy className="w-4 h-4 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" /> {data ? `Class ${data.classLabel} Leaderboard` : 'Leaderboard'}
-      </h3>
+      <div className="relative flex items-start justify-between gap-3 mb-1">
+        <h3 className={`text-sm font-black uppercase tracking-wide flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+          <Trophy className="w-4 h-4 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" /> {data ? `Class ${data.classLabel} Leaderboard` : 'Leaderboard'}
+        </h3>
+        <GuidelinesButton isLightMode={isLightMode} onClick={() => setShowGuidelines(true)} />
+      </div>
       <p className={`relative text-xs font-semibold mb-3 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Only students in your own class are shown here.</p>
       {loading && (
         <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading leaderboard...</p>
@@ -238,9 +296,14 @@ export function RevisionLeaderboard({ isLightMode = false, token, currentUserEma
       {data && !loading && (
         <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3">
           <CategoryCard sectionKey="attempted" title="Most Tests Attempted" rows={data.mostAttempted} format={(v) => `${v} test${v === 1 ? '' : 's'}`} empty="No attempts yet." isLightMode={isLightMode} currentUserEmail={currentUserEmail} />
-          <CategoryCard sectionKey="percentage" title="Highest Percentage (First Attempt)" rows={data.highestPercentage} format={(v) => `${v}%`} empty="No graded papers yet." isLightMode={isLightMode} currentUserEmail={currentUserEmail} />
+          <CategoryCard sectionKey="percentage" title="Highest Percentage (Last 5 Tests)" rows={data.highestPercentage} format={(v) => `${v}%`} empty="No graded papers yet." isLightMode={isLightMode} currentUserEmail={currentUserEmail} />
           <CategoryCard sectionKey="improvers" title="Top Improvers" rows={data.topImprovers} format={(v) => `+${v} marks`} empty="No improvements yet." isLightMode={isLightMode} currentUserEmail={currentUserEmail} />
         </div>
+      )}
+      {showGuidelines && (
+        <LeaderboardModal title="Leaderboard Guidelines" onClose={() => setShowGuidelines(false)} isLightMode={isLightMode}>
+          <GuidelinesContent isLightMode={isLightMode} />
+        </LeaderboardModal>
       )}
     </div>
   );

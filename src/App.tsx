@@ -7708,7 +7708,7 @@ export default function App() {
                       <h4 className={`text-xs font-black uppercase tracking-wide mb-2 ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>Class {cls.classLabel}</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <RevisionCategoryCard sectionKey="attempted" title="Most Tests Attempted" rows={cls.mostAttempted} format={(v) => `${v} test${v === 1 ? '' : 's'}`} empty="No attempts yet." isLightMode={isLightMode} />
-                        <RevisionCategoryCard sectionKey="percentage" title="Highest Percentage (First Attempt)" rows={cls.highestPercentage} format={(v) => `${v}%`} empty="No graded papers yet." isLightMode={isLightMode} />
+                        <RevisionCategoryCard sectionKey="percentage" title="Highest Percentage (Last 5 Tests)" rows={cls.highestPercentage} format={(v) => `${v}%`} empty="No graded papers yet." isLightMode={isLightMode} />
                         <RevisionCategoryCard sectionKey="improvers" title="Top Improvers" rows={cls.topImprovers} format={(v) => `+${v} marks`} empty="No improvements yet." isLightMode={isLightMode} />
                       </div>
                     </div>

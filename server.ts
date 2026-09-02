@@ -10736,23 +10736,20 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const { data: papers } = await supabase.from("revision_papers").select("id, total_marks").in("student_email", emails);
     const maxByPaper = new Map((papers || []).map((p: any) => [p.id, p.total_marks || REVISION_TOTAL_MARKS]));
 
-    const { data: submissions } = await supabase.from("revision_submissions").select("student_email, revision_paper_id, ai_score, first_attempt_score").in("student_email", emails);
+    const { data: submissions } = await supabase.from("revision_submissions").select("student_email, revision_paper_id, ai_score, first_attempt_score, submitted_at").in("student_email", emails);
 
     const attemptedCount = new Map<string, number>();
-    const scoreSum = new Map<string, number>();
-    const maxSum = new Map<string, number>();
     const improveSum = new Map<string, number>();
+    const gradedByStudent = new Map<string, typeof submissions>();
 
     for (const s of submissions || []) {
       attemptedCount.set(s.student_email, (attemptedCount.get(s.student_email) || 0) + 1);
       if (typeof s.ai_score !== "number") continue;
-      const max = maxByPaper.get(s.revision_paper_id) || REVISION_TOTAL_MARKS;
-      const effectiveFirst = typeof s.first_attempt_score === "number" ? s.first_attempt_score : s.ai_score;
-      scoreSum.set(s.student_email, (scoreSum.get(s.student_email) || 0) + effectiveFirst);
-      maxSum.set(s.student_email, (maxSum.get(s.student_email) || 0) + max);
       if (typeof s.first_attempt_score === "number") {
         improveSum.set(s.student_email, (improveSum.get(s.student_email) || 0) + (s.ai_score - s.first_attempt_score));
       }
+      if (!gradedByStudent.has(s.student_email)) gradedByStudent.set(s.student_email, []);
+      gradedByStudent.get(s.student_email)!.push(s);
     }
 
     const toEntry = (email: string, value: number, extra: Record<string, any> = {}) => ({ email, name: nameByEmail.get(email) || email, photoUrl: photoByEmail.get(email) || null, value, ...extra });
@@ -10763,9 +10760,34 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       .map(([email, count]) => toEntry(email, count))
       .sort((a, b) => b.value - a.value);
 
-    const highestPercentage = [...maxSum.entries()]
-      .filter(([, max]) => max > 0)
-      .map(([email, max]) => toEntry(email, Math.round(((scoreSum.get(email) || 0) / max) * 1000) / 10))
+    // Highest Percentage is a rolling window, not a lifetime average: a student's most recent 5
+    // graded papers (or their most recent 3-4 if they haven't reached 5 yet), first-attempt scores
+    // only. A lifetime average let one bad early paper permanently cap a student who has since
+    // improved, and rewarded a small early sample size over a much larger, still-strong body of
+    // work -- exactly the mismatch a Class VIII student flagged when he had the most papers
+    // attempted in his class by far, a strong recent record, but a lifetime average that put him
+    // behind two classmates with far fewer papers on file. At least 3 graded papers are required to
+    // appear here at all, so a single lucky (or unlucky) paper can't rank someone off a tiny sample.
+    const HIGHEST_PERCENTAGE_MIN_TESTS = 3;
+    const HIGHEST_PERCENTAGE_WINDOW = 5;
+    const highestPercentage = [...gradedByStudent.entries()]
+      .map(([email, subs]) => {
+        const recent = subs!
+          .slice()
+          .sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
+          .slice(0, HIGHEST_PERCENTAGE_WINDOW);
+        if (recent.length < HIGHEST_PERCENTAGE_MIN_TESTS) return null;
+        let scoreSum = 0;
+        let maxSum = 0;
+        for (const s of recent as any[]) {
+          const max = maxByPaper.get(s.revision_paper_id) || REVISION_TOTAL_MARKS;
+          const effectiveFirst = typeof s.first_attempt_score === "number" ? s.first_attempt_score : s.ai_score;
+          scoreSum += effectiveFirst;
+          maxSum += max;
+        }
+        return maxSum > 0 ? toEntry(email, Math.round((scoreSum / maxSum) * 1000) / 10, { testsCounted: recent.length }) : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => b.value - a.value);
 
     const topImprovers = [...improveSum.entries()]
