@@ -229,9 +229,21 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [checkingNow, setCheckingNow] = useState(false);
+  // Simulated progress, not a real completion percentage -- checkRevisionSubmission on the server
+  // is one single atomic AI call with no intermediate progress to report, so this is purely a
+  // perception fix: a real student reported thinking the site had hung during the ~20-40s a
+  // grading call actually takes, since previously nothing on screen changed while waiting. Climbs
+  // on a diminishing-returns curve toward a cap that's never quite 100, then snaps to 100 only once
+  // the real check-mine response actually comes back (see handleSubmitAnswers).
+  const [checkingProgress, setCheckingProgress] = useState(0);
+  const checkingIntervalRef = useRef<number | null>(null);
 
   const paperPrintRef = useRef<HTMLDivElement>(null);
   const needsClassPicker = !user.studentClass && !fallbackClass && !setup?.fallbackClass;
+
+  useEffect(() => {
+    return () => { if (checkingIntervalRef.current !== null) window.clearInterval(checkingIntervalRef.current); };
+  }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -496,9 +508,23 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
       if (submissionId) {
         setCheckingNow(true);
+        setCheckingProgress(0);
+        const CHECKING_PROGRESS_CAP = 92;
+        checkingIntervalRef.current = window.setInterval(() => {
+          setCheckingProgress((p) => {
+            if (p >= CHECKING_PROGRESS_CAP) return p;
+            const remaining = CHECKING_PROGRESS_CAP - p;
+            return Math.min(CHECKING_PROGRESS_CAP, p + Math.max(0.5, remaining * 0.06));
+          });
+        }, 350);
         try {
           const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId } });
+          if (checkingIntervalRef.current !== null) { window.clearInterval(checkingIntervalRef.current); checkingIntervalRef.current = null; }
           if (checkResult.ok && checkResult.data.submission) {
+            // Let the student actually see the bar reach 100 before the summary replaces it --
+            // snapping straight from ~90 to the graded view would look like it skipped a step.
+            setCheckingProgress(100);
+            await new Promise((resolve) => setTimeout(resolve, 500));
             setCurrentSubmission(checkResult.data.submission);
             if (checkResult.data.submission.status === 'checked') {
               setCurrentPaper((p) => (p ? { ...p, status: 'graded' } : p));
@@ -523,7 +549,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
         } catch {
           // Already told the student it's uploaded -- grading will be retried automatically.
         } finally {
+          if (checkingIntervalRef.current !== null) { window.clearInterval(checkingIntervalRef.current); checkingIntervalRef.current = null; }
           setCheckingNow(false);
+          setCheckingProgress(0);
         }
       }
     } catch (err: any) {
@@ -1031,7 +1059,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
             )}
 
-            {currentPaper && (currentPaper.status === 'active' || currentPaper.status === 'submitted') && currentSubmission?.status !== 'checked' && (
+            {currentPaper && (currentPaper.status === 'active' || currentPaper.status === 'submitted') && currentSubmission?.status !== 'checked' && !checkingNow && (
               <div className={`${cardClass(isLightMode)} space-y-5`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
@@ -1161,6 +1189,24 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
             )}
 
+            {currentPaper && checkingNow && (
+              <div className={`${cardClass(isLightMode)} space-y-4 text-center`}>
+                <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${isLightMode ? 'bg-cyan-100' : 'bg-cyan-500/10'}`}>
+                  <CheckCircle2 className="w-7 h-7 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Your paper is submitted!</h3>
+                  <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Checking has started -- this usually takes under a minute. The page isn't stuck, please don't close it.</p>
+                </div>
+                <div className="space-y-1.5 max-w-xs mx-auto">
+                  <div className={`h-3 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
+                    <div className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-300 ease-out" style={{ width: `${checkingProgress}%` }} />
+                  </div>
+                  <p className={`text-[11px] font-black font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{Math.round(checkingProgress)}% checked</p>
+                </div>
+              </div>
+            )}
+
             {currentPaper && currentSubmission?.status === 'checked' && (
               <div className={`${cardClass(isLightMode)} space-y-4 text-center`}>
                 <Award className="w-10 h-10 text-emerald-400 mx-auto" />
@@ -1261,7 +1307,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
             )}
 
-            {currentPaper && currentSubmission?.status === 'pending' && (
+            {currentPaper && currentSubmission?.status === 'pending' && !checkingNow && (
               <div className={`${cardClass(isLightMode)} text-center`}>
                 <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Your submission is being checked -- your score will appear here shortly.</p>
               </div>
