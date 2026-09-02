@@ -831,7 +831,7 @@ export default function App() {
     const element = (kind === 'questions' ? revisionQuestionsPrintRef : revisionAnswersPrintRef).current;
     if (!element) return;
     setRevisionPaperPdfDownloading(kind);
-    const cycleSuffix = revisionPaperDetail.cycleNumber > 1 ? `_Cycle${revisionPaperDetail.cycleNumber}` : '';
+    const cycleSuffix = revisionPaperDetail.cycleNumber > 1 ? `_Level${revisionPaperDetail.cycleNumber}` : '';
     const filename = `${revisionPaperDetail.subject}_${String(revisionPaperDetail.chapterName).replace(/\s+/g, '_')}${cycleSuffix}_${kind === 'questions' ? 'Question_Paper' : 'Answer_Key'}.pdf`;
     const opt = {
       margin: [14, 14, 14, 14],
@@ -4309,7 +4309,7 @@ export default function App() {
                         {new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {' -- '}{p.status}
                         {p.submission?.isLate && ' -- late'}
-                        {p.cycleNumber > 1 && ` -- cycle ${p.cycleNumber}`}
+                        {p.cycleNumber > 1 && ` -- level ${p.cycleNumber}`}
                       </p>
                       {(p.submission?.firstAttemptScore != null || p.submission?.aiScore != null) && (
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -4478,7 +4478,7 @@ export default function App() {
                 <div className="fixed -left-[9999px] top-0" aria-hidden="true">
                   <div ref={revisionAnswersPrintRef} style={{ background: '#ffffff', color: '#111111', padding: '24px', width: '700px', fontFamily: 'Georgia, serif' }}>
                     <h1 style={{ textAlign: 'center', fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Conceptual Learning -- Answer Key</h1>
-                    <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{revisionPaperDetail.subject} -- {revisionPaperDetail.chapterName}{revisionPaperDetail.cycleNumber > 1 ? ` (Cycle ${revisionPaperDetail.cycleNumber})` : ''}</p>
+                    <p style={{ textAlign: 'center', fontSize: '13px', marginBottom: '16px' }}>{revisionPaperDetail.subject} -- {revisionPaperDetail.chapterName}{revisionPaperDetail.cycleNumber > 1 ? ` (Level ${revisionPaperDetail.cycleNumber})` : ''}</p>
                     {REVISION_SECTION_ORDER.map((label) => {
                       const qs = (revisionPaperDetail.questions || []).filter((q: any) => q.sectionLabel === label);
                       if (qs.length === 0) return null;
@@ -9066,7 +9066,7 @@ export default function App() {
                   <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-cyan-400">
                     <FileText className="w-4 h-4 text-cyan-400" /> Revision Papers Library
                   </h3>
-                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Every chapter Revision has written a paper for, across cycle 1, 2, 3 and on -- independent of any one student.</p>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Every chapter Revision has written a paper for, across level 1, 2, 3 and on -- independent of any one student.</p>
                 </div>
                 <button
                   type="button"
@@ -9123,7 +9123,7 @@ export default function App() {
                             <th className="py-2 pr-3">Class</th>
                             <th className="py-2 pr-3">Subject</th>
                             <th className="py-2 pr-3">Chapter</th>
-                            <th className="py-2 pr-3">Cycle</th>
+                            <th className="py-2 pr-3">Level</th>
                             <th className="py-2 pr-3">Students</th>
                             <th className="py-2 pr-3">First Generated</th>
                             <th className="py-2 pr-3"></th>

@@ -9835,7 +9835,24 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // Marks a chapter as done for the current cycle once its paper is graded, resetting the
   // completed-list back to empty (starting a fresh cycle) once every chapter in that subject's
   // syllabus has been covered.
+  //
+  // Calls for the SAME student must never run concurrently: the cron sweep grades a whole batch of
+  // pending submissions with Promise.all (see processPendingHomework), and if a student's last
+  // Maths chapter and last Science chapter both happen to be pending in the same batch, two
+  // concurrent calls each read the setup row before either had written back -- so each only sees
+  // the OTHER subject's stale, not-yet-complete state and neither one fires the cycle reset, even
+  // though the student has in fact just finished both subjects. Confirmed on a real student (Khanak
+  // Johri): both completed-chapters lists ended up full, but cycle_number never advanced, leaving
+  // her with nothing left to pick and no way to start a new cycle. Serializing per-student via this
+  // lock ensures the second call's read always reflects the first call's completed write.
+  const revisionChapterDoneLocks = new Map<string, Promise<void>>();
   async function markRevisionChapterDone(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
+    const prior = revisionChapterDoneLocks.get(studentEmail) || Promise.resolve();
+    const run = prior.then(() => markRevisionChapterDoneLocked(studentEmail, subject, chapterName)).catch(() => {});
+    revisionChapterDoneLocks.set(studentEmail, run);
+    await run;
+  }
+  async function markRevisionChapterDoneLocked(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", studentEmail).maybeSingle();
     if (!setup) return;
     const completedKey = subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";

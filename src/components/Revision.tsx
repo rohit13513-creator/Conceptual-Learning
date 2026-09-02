@@ -606,7 +606,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
           {section(RefreshCw, 'How your paper is picked', [
             'You choose the chapter yourself: every chapter from your own syllabus (Maths and Science) is listed, and you pick exactly which one you want to be tested on next -- nothing is generated until you choose.',
-            'Chapters you\'ve already completed this cycle are shown but can\'t be picked again -- once every chapter in a subject is done, that subject\'s list resets and everything becomes pickable again, with fresh questions.',
+            'Chapters you\'ve already completed this level are shown but can\'t be picked again -- once every chapter in a subject is done, that subject\'s list resets and everything becomes pickable again, with fresh questions.',
             'You\'ll be asked to confirm you\'re ready before anything is generated, since the 60-minute timer starts the moment your paper is created -- so only confirm when you\'re actually about to sit down and attempt it.',
           ], 'text-cyan-400')}
 
@@ -614,7 +614,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
             'Every paper is a fixed 30-mark, 13-question CBSE-style paper: Section A (5 x 1 mark, objective/MCQ), Section B (3 x 2 marks), Section C (2 x 3 marks), Section D (2 x 4 marks, competency/case-based), Section E (1 x 5 marks, long answer).',
             'Section D and E questions are often split into 2-3 sub-parts (e.g. 1+2+2 or 2+1+2 marks) -- the same way current CBSE teachers usually set these, though a single complete question shows up sometimes too. Splitting a question into parts never changes its total marks.',
             'Science/Biology papers may include a "draw and label a diagram" style question -- a completely normal CBSE question type.',
-            'Every paper is freshly written for you -- questions are never reused, even if you see the same chapter again in a later cycle.',
+            'Every paper is freshly written for you -- questions are never reused, even if you see the same chapter again in a later level.',
           ], 'text-cyan-400')}
 
           {section(Clock, 'Timing', [
@@ -710,7 +710,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                 <span className={`block text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Maths</span>
                 {mathsHasChapters ? (
                   <>
-                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.mathsChapters.length} chapter{setup!.mathsChapters.length === 1 ? '' : 's'} -- {setup!.mathsCompletedChapters.length} done this cycle</span>
+                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.mathsChapters.length} chapter{setup!.mathsChapters.length === 1 ? '' : 's'} -- {setup!.mathsCompletedChapters.length} done this level</span>
                     <span className="block text-amber-400 mt-0.5">{setup!.mathsExamDate ? `Exam: ${new Date(setup!.mathsExamDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No exam date -- just revising'}</span>
                   </>
                 ) : <span className={isLightMode ? 'text-slate-400' : 'text-slate-600'}>Not set up</span>}
@@ -719,7 +719,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                 <span className={`block text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Science</span>
                 {scienceHasChapters ? (
                   <>
-                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.scienceChapters.length} chapter{setup!.scienceChapters.length === 1 ? '' : 's'} -- {setup!.scienceCompletedChapters.length} done this cycle</span>
+                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.scienceChapters.length} chapter{setup!.scienceChapters.length === 1 ? '' : 's'} -- {setup!.scienceCompletedChapters.length} done this level</span>
                     <span className="block text-amber-400 mt-0.5">{setup!.scienceExamDate ? `Exam: ${new Date(setup!.scienceExamDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No exam date -- just revising'}</span>
                   </>
                 ) : <span className={isLightMode ? 'text-slate-400' : 'text-slate-600'}>Not set up</span>}
@@ -989,7 +989,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                             className={`text-left p-3 rounded-lg border text-xs font-semibold transition ${done ? (isLightMode ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed') : (isLightMode ? 'bg-slate-50 border-slate-200 text-slate-800 hover:border-cyan-500 cursor-pointer' : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-cyan-500 cursor-pointer')}`}
                           >
                             {chapterName}
-                            {done && <span className="block text-[9px] font-black uppercase tracking-wide mt-1 text-emerald-500">Done this cycle</span>}
+                            {done && <span className="block text-[9px] font-black uppercase tracking-wide mt-1 text-emerald-500">Done this level</span>}
                           </button>
                         );
                       })}
@@ -1027,7 +1027,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               <div className={`${cardClass(isLightMode)} space-y-5`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{currentPaper.subject}{currentPaper.cycleNumber && currentPaper.cycleNumber > 1 ? ` -- Cycle ${currentPaper.cycleNumber}` : ''}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-cyan-400">{currentPaper.subject}{currentPaper.cycleNumber && currentPaper.cycleNumber > 1 ? ` -- Level ${currentPaper.cycleNumber}` : ''}</span>
                     <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{currentPaper.chapterName}</h3>
                   </div>
                   {remainingMs !== null && (
