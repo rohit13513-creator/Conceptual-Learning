@@ -10828,7 +10828,14 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     for (const s of submissions || []) {
       attemptedCount.set(s.student_email, (attemptedCount.get(s.student_email) || 0) + 1);
       if (typeof s.ai_score !== "number") continue;
-      if (typeof s.first_attempt_score === "number") {
+      // A first-attempt score of exactly 0 is never a genuine graded attempt (see the matching note
+      // on the Highest Percentage calc below) -- it means the upload itself failed to contain any
+      // gradable answer content, most often an accidental wrong-file upload. Counting the jump from
+      // that phantom 0 up to a real score as an "improvement" mischaracterizes what happened: the
+      // student didn't study and get better between attempts, the first attempt just wasn't a real
+      // one. Confirmed on a real case (Arjun Singh, Class X) who asked to be removed from this list
+      // specifically because his one qualifying "improvement" was exactly this kind of accident.
+      if (typeof s.first_attempt_score === "number" && s.first_attempt_score > 0) {
         improveSum.set(s.student_email, (improveSum.get(s.student_email) || 0) + (s.ai_score - s.first_attempt_score));
       }
       if (!gradedByStudent.has(s.student_email)) gradedByStudent.set(s.student_email, []);
@@ -10864,7 +10871,18 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         let maxSum = 0;
         for (const s of recent as any[]) {
           const max = maxByPaper.get(s.revision_paper_id) || REVISION_TOTAL_MARKS;
-          const effectiveFirst = typeof s.first_attempt_score === "number" ? s.first_attempt_score : s.ai_score;
+          // Using the first-attempt score (not the Improve Score result) is deliberate -- it stops a
+          // student inflating this ranking by re-submitting after already seeing where they went
+          // wrong. But a first attempt of exactly 0 is never a genuine graded attempt: with 5 one-mark
+          // MCQs alone, a real attempt at anything essentially never scores a mathematically exact
+          // zero. It means no actual answer content was gradable at all -- confirmed on a real case
+          // (Arjun Singh, Class X): he accidentally uploaded the question paper instead of his answer
+          // sheet, got 0 with "no answer file/content was actually submitted", then correctly
+          // resubmitted his real answers for 26/30 -- but this metric kept counting the accidental 0,
+          // dragging his true ~91% average down to ~74%. A genuine zero from real but entirely wrong
+          // working would be exceptionally rare and isn't worth protecting against at the cost of
+          // punishing every "uploaded the wrong file" accident this harshly.
+          const effectiveFirst = typeof s.first_attempt_score === "number" && s.first_attempt_score > 0 ? s.first_attempt_score : s.ai_score;
           scoreSum += effectiveFirst;
           maxSum += max;
         }
