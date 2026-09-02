@@ -10785,7 +10785,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
           scoreSum += effectiveFirst;
           maxSum += max;
         }
-        return maxSum > 0 ? toEntry(email, Math.round((scoreSum / maxSum) * 1000) / 10, { testsCounted: recent.length }) : null;
+        return maxSum > 0 ? toEntry(email, Math.round((scoreSum / maxSum) * 1000) / 10) : null;
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => b.value - a.value);

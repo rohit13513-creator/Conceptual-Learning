@@ -9,10 +9,6 @@ export interface LeaderboardRow {
   name: string;
   photoUrl: string | null;
   value: number;
-  // Only set on Highest Percentage rows -- how many of the student's most recent tests (up to 5)
-  // this percentage is actually based on, shown so a student can see at a glance why their number
-  // moves the way it does instead of it reading as an opaque lifetime average.
-  testsCounted?: number;
 }
 
 interface LeaderboardData {
@@ -188,12 +184,7 @@ function CategoryRows({ rows, format, isLightMode, currentUserEmail, accentText 
             <span className={`rounded-full ${rankStyle?.glow || ''}`}>
               <Avatar row={row} isLightMode={isLightMode} />
             </span>
-            <span className="truncate flex-1">
-              {row.name}{isMe ? ' (You)' : ''}
-              {typeof row.testsCounted === 'number' && (
-                <span className={`ml-1 font-normal ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>({row.testsCounted} test{row.testsCounted === 1 ? '' : 's'})</span>
-              )}
-            </span>
+            <span className="truncate flex-1">{row.name}{isMe ? ' (You)' : ''}</span>
             <span className={`shrink-0 font-mono ${rank === 1 ? accentText : ''}`}>{format(row.value)}</span>
           </li>
         );
