@@ -126,7 +126,9 @@ function parseRevisionFeedback(raw: string): { overall: string; rows: RevisionFe
   const lines = raw.split('\n');
   const rows: RevisionFeedbackRow[] = [];
   const overallLines: string[] = [];
-  const rowPattern = /^([A-Za-z]\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
+  // Level 2+ papers use plain sequential numeric IDs ("1", "2"...) instead of Level 1's
+  // section-lettered ones ("A1", "B2"...) -- the leading letter is optional so both formats parse.
+  const rowPattern = /^([A-Za-z]?\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
   for (const line of lines) {
     const match = rowPattern.exec(line.trim());
     if (match) {

@@ -9554,31 +9554,41 @@ function buildApp(): express.Express {
     return picked;
   }
 
-  const REVISION_PAPER_TOOL = {
-    name: "submit_paper",
-    description: "Submit the generated revision paper.",
-    input_schema: {
-      type: "object",
-      properties: {
-        questions: {
-          type: "array",
-          description: "Exactly 13 questions in section order: 5 in A, 3 in B, 2 in C, 2 in D, 1 in E.",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", description: "e.g. A1, A2, B1, C1, D1, E1" },
-              sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
-              marks: { type: "integer" },
-              text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options and/or lettered sub-parts (i), (ii), (iii) inline where relevant. Use real subscript/superscript Unicode characters for any chemical formula or exponent (e.g. H₂O, x²), never a plain same-size digit." },
-              markingPoints: { type: "array", items: { type: "string" }, description: "For Section A: a single entry, the one correct option/answer (no step marking, all-or-nothing). For Sections B-E: one entry per mark, in step order (method/formula, substitution, working steps, final answer -- or, for a multi-part question, each sub-part's own step(s) in order) -- a genuine CBSE-style step marking scheme, so the grader can award each step's mark independently. The number of entries must always equal exactly this question's 'marks' value, however many sub-parts it has. Shown to the student afterward as the solution once the paper is graded. Use real subscript/superscript Unicode characters for any chemical formula or exponent (e.g. CO₂, a³), never a plain same-size digit." },
+  // Level 1 papers ID each question by section letter + position ("A1", "B2"...); Level 2+ papers
+  // (cycleNumber >= 2) use a single plain serial number across the whole paper instead ("1".."13"),
+  // per explicit admin instruction -- the tool schema's own description of the id field has to
+  // match whichever convention applies, since the schema is what the model actually reads, not just
+  // the surrounding system-prompt text.
+  function buildRevisionPaperTool(cycleNumber: number) {
+    const idDescription = cycleNumber >= 2
+      ? "A plain sequential serial number, as a string, counting continuously across the WHOLE paper regardless of section -- '1', '2', '3', ... '13' in order (Section A's 5 questions are 1-5, Section B's 3 are 6-8, Section C's 2 are 9-10, Section D's 2 are 11-12, Section E's 1 is 13). Never prefix it with the section letter -- never 'A1', just '1'."
+      : "e.g. A1, A2, B1, C1, D1, E1";
+    return {
+      name: "submit_paper",
+      description: "Submit the generated revision paper.",
+      input_schema: {
+        type: "object",
+        properties: {
+          questions: {
+            type: "array",
+            description: "Exactly 13 questions in section order: 5 in A, 3 in B, 2 in C, 2 in D, 1 in E.",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: idDescription },
+                sectionLabel: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+                marks: { type: "integer" },
+                text: { type: "string", description: "The full question text as it would appear on the paper, including MCQ options and/or lettered sub-parts (i), (ii), (iii) inline where relevant. Use real subscript/superscript Unicode characters for any chemical formula or exponent (e.g. H₂O, x²), never a plain same-size digit." },
+                markingPoints: { type: "array", items: { type: "string" }, description: "For Section A: a single entry, the one correct option/answer (no step marking, all-or-nothing). For Sections B-E: one entry per mark, in step order (method/formula, substitution, working steps, final answer -- or, for a multi-part question, each sub-part's own step(s) in order) -- a genuine CBSE-style step marking scheme, so the grader can award each step's mark independently. The number of entries must always equal exactly this question's 'marks' value, however many sub-parts it has. Shown to the student afterward as the solution once the paper is graded. Use real subscript/superscript Unicode characters for any chemical formula or exponent (e.g. CO₂, a³), never a plain same-size digit." },
+              },
+              required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
             },
-            required: ["id", "sectionLabel", "marks", "text", "markingPoints"],
           },
         },
+        required: ["questions"],
       },
-      required: ["questions"],
-    },
-  };
+    };
+  }
 
   // How well a reference file's (renamed, human-readable) title matches the chapter name a
   // student's own syllabus gave us -- used to attach only the relevant file(s) to a generation
@@ -9675,13 +9685,40 @@ function buildApp(): express.Express {
     return blocks;
   }
 
-  // Cycle 1 is standard difficulty; every full cycle after that should be progressively harder,
-  // since a student re-testing on a chapter they've already been through once should be pushed
-  // further, not shown the same difficulty forever.
+  // Cycle 1 is standard difficulty (Level 1); every full cycle after that (Level 2+) must be
+  // progressively harder, since a student re-testing on a chapter they've already been through once
+  // should be pushed further, not shown the same difficulty forever -- an explicit admin rule
+  // ("difficulty level must increase for sure in both maths and science"), so this is phrased as a
+  // firm requirement, not a soft suggestion.
   function revisionDifficultyInstruction(cycleNumber: number): string {
     if (cycleNumber <= 1) return "";
-    if (cycleNumber === 2) return ` This student has already completed one full cycle through their syllabus and is now on their second pass over this chapter -- raise the difficulty moderately above a first-attempt paper: less scaffolding, harder numbers/scenarios, more multi-step reasoning, while staying strictly within the syllabus for this chapter (never introduce content outside what's actually taught in it just to make it harder).`;
-    return ` This is this student's cycle ${cycleNumber} through their syllabus on this chapter -- raise the difficulty well beyond a cycle-2 paper, and further again than the previous cycle: tougher multi-concept and competency-based questions, less hand-holding, harder numbers, while staying strictly within the syllabus for this chapter (never introduce out-of-syllabus content just to make it harder).`;
+    if (cycleNumber === 2) return ` This student has already completed one full cycle through their syllabus and is now on their second pass over this chapter (Level 2) -- the difficulty MUST be clearly and unmistakably higher than a first-attempt (Level 1) paper on this chapter, with no exceptions: less scaffolding, harder numbers/scenarios, more multi-step reasoning, while staying strictly within the syllabus for this chapter (never introduce content outside what's actually taught in it just to make it harder).`;
+    return ` This is this student's cycle ${cycleNumber} through their syllabus on this chapter (Level ${cycleNumber}) -- the difficulty MUST be clearly higher again than the previous cycle's paper, with no exceptions: tougher multi-concept and competency-based questions, less hand-holding, harder numbers, while staying strictly within the syllabus for this chapter (never introduce out-of-syllabus content just to make it harder).`;
+  }
+
+  // Explicit admin-set rules that apply to every Level 2+ paper (cycleNumber >= 2), on top of the
+  // difficulty increase above and the general chapter-scope/coverage guidance already in the main
+  // system prompt below. Restated explicitly here per a real, confirmed failure (a Class X student's
+  // "Introduction to Trigonometry" paper pulled in heights-and-distances content from the separate
+  // "Some Applications of Trigonometry" chapter -- see chapterMatchScore/getRevisionReferenceBookBlocks
+  // above for the actual root-cause fix; this is a belt-and-suspenders reinforcement in the
+  // generation prompt itself) and per the admin's explicit numbering/question-structure instructions.
+  function revisionLevel2RulesInstruction(cycleNumber: number): string {
+    if (cycleNumber < 2) return "";
+    return ` This is a Level ${cycleNumber} paper, so the following rules apply on top of everything else in this prompt: (1) Every single question must be based ONLY on the exact chapter named above -- never club two chapters together, and never pull in content, terminology, or question types that actually belong to a different chapter, even a closely related or adjacent one (for example, a paper for "Introduction to Trigonometry" must never include heights-and-distances/angle-of-elevation-or-depression questions, since those belong to the separate "Some Applications of Trigonometry" chapter -- the same caution applies to any other pair of similarly-named or adjacent chapters). (2) Stay strictly within NCERT/CBSE syllabus scope for this exact chapter, but cover it thoroughly -- include the chapter's smaller, less-emphasized points as well as its most obviously testable ones, not just a narrow "greatest hits" subset. (3) The overall paper FORMAT stays exactly the same as a Level 1 paper -- the same 13-question, 5-section, 30-mark structure described below; only the difficulty and the question-numbering style (below) change, never the structure. (4) Question IDs must be a single plain sequential serial number counting continuously across the WHOLE paper regardless of section -- "1" through "13" in order (Section A's 5 questions are 1-5, Section B's 3 are 6-8, Section C's 2 are 9-10, Section D's 2 are 11-12, Section E's 1 is 13) -- never a section letter followed by a number (never "A1", "B2" etc.), and never restart the numbering at each new section.`;
+  }
+
+  // Section D (competency/case-based) and Section E (long-answer) sub-part-splitting guidance.
+  // Level 1 keeps the original flexible guidance; Level 2+ fixes Section D to an explicit
+  // three-part 1+1+2 structure per an explicit admin instruction ("In competency based question,
+  // there must be three parts. First two parts must carry one mark and the third part must carry
+  // two marks"), while Section E keeps its own flexible split (the admin's instruction was
+  // specifically about "competency based question", i.e. Section D only).
+  function revisionSectionDEInstruction(cycleNumber: number): string {
+    if (cycleNumber >= 2) {
+      return `Section D (4 marks) and Section E (5 marks) questions: this is exactly how current CBSE teachers actually set these questions, and you must follow the same pattern. Section D should be competency/case-based (a short real-world scenario or data/passage, then sub-question(s) about it) -- for this Level ${cycleNumber} paper, EVERY Section D question MUST be split into exactly three lettered sub-parts (i), (ii), (iii), worth 1 mark, 1 mark, and 2 marks respectively, in that order -- never a single non-split question, and never any other split, for Section D at this level. Section E can be a multi-part numerical/derivation, a multi-part theory question, or a single substantial question, whichever suits the chapter's content best -- PREFER splitting it into 2-3 lettered sub-parts, e.g. (i)/(ii) worth 2+3 or 1+4, or (i)/(ii)/(iii) worth 1+2+2, 2+1+2, or 1+1+3, as long as the sub-part marks add up to exactly 5; a single, complete, non-split question is also allowed for Section E.`;
+    }
+    return `Section D (4 marks) and Section E (5 marks) questions: this is exactly how current CBSE teachers actually set these questions, and you must follow the same pattern. PREFER splitting the question into 2-3 lettered sub-parts, e.g. (i)/(ii) worth 2+2 or 1+3, or (i)/(ii)/(iii) worth 1+2+2 or 2+1+2 or 1+1+3 -- whatever split fits the content best, as long as the sub-part marks add up to exactly the question's total (4 for D, 5 for E). A single, complete, non-split question (e.g. one full derivation, one long-answer theory question, or one "draw and label a neat diagram of..." question for Science/Biology chapters) is also allowed and good to use sometimes, but multi-part is the more common, preferred style -- lean toward it more often than not. Section D should be competency/case-based (a short real-world scenario or data/passage, then sub-question(s) about it); Section E can be a multi-part numerical/derivation, a multi-part theory question, or a single substantial question, whichever suits the chapter's content best.`;
   }
 
   async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number = 1): Promise<RevisionQuestion[]> {
@@ -9691,13 +9728,14 @@ function buildApp(): express.Express {
       ? ` The attached PDF(s) are the actual official textbook material this student's class uses for ${subject} -- possibly one file per chapter, or multiple volumes, so not every attached file is relevant to this specific chapter. They may use different chapter names, ordering, or topic structure than you'd otherwise expect (for example, some 2026-onward NCERT books integrate multiple subjects into one chapter, or split content differently than older editions). Find whichever attached file(s) actually cover "${chapterName}" and base every question strictly on that content, terminology, and depth as it appears there -- do not substitute your own general knowledge of a similarly-named older chapter if it conflicts with what's actually in the attached material.`
       : ` No reference textbook is on file for this class/subject, so use your own best knowledge of the CBSE curriculum for this chapter -- if "${chapterName}" doesn't clearly match a chapter you know, interpret it as sensibly as possible from the name and class level given.`;
     const difficultyInstruction = revisionDifficultyInstruction(cycleNumber);
-    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction}${difficultyInstruction} ${REVISION_SUBSCRIPT_INSTRUCTION} NCERT chapters include supplementary/enrichment content set apart from the main examinable text -- shaded or outlined "box" callouts, "Do You Know?"/"Something to Think About"/"Additional Information" style panels, footnotes, or any passage explicitly marked "Not for Examination Purpose" per CBSE's own circulars. Never base a question on this boxed/supplementary material, even if it's interesting -- every question must come strictly from the chapter's main, examinable running text. If a reference PDF is attached, this applies to whatever is visually set apart as a box/panel on the page, not just text explicitly labelled as excluded. Separately, stay within the CURRENT CBSE board-examinable depth for this exact topic and class, not just the chapter's general subject area -- CBSE's rationalized syllabus has specifically trimmed certain analytical techniques down to a simpler case even where the textbook still briefly mentions the broader concept. The clearest example: Class 10 Polynomials briefly introduces that cubic (and higher-degree) polynomials exist, but "verify the relationship between zeroes and coefficients" is only examinable for a QUADRATIC polynomial -- never write a question asking a student to verify this relationship for a cubic polynomial, even though the chapter mentions cubics exist. Apply the same caution generally: when a chapter's textbook briefly introduces a broader or more advanced version of a technique/concept without walking through it as a worked method the student practises repeatedly, that broader version is very likely NOT board-examinable at this class level -- default to testing the core, standard-depth version of the topic that the chapter actually builds skill in, not an extension of it. Every one of the 13 questions must test a genuinely distinct scenario -- never reuse the same specific dataset, points, numbers, or setup in two different questions, even across sections and even if one is a quick MCQ and the other a full worked answer (e.g. never set an MCQ asking "are points (1,5),(2,3),(–2,–11) collinear?" and separately a Section C question asking to fully determine collinearity for that exact same trio of points -- a student who already answered it once has no way to know the second occurrence expects the full working shown again from scratch, and reasonably treats it as already-solved). Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
+    const level2RulesInstruction = revisionLevel2RulesInstruction(cycleNumber);
+    const system = `You are an expert CBSE-curriculum teacher setting a short revision practice paper for a Class ${classLabel} student, subject: ${subject}, chapter: "${chapterName}".${referenceInstruction}${difficultyInstruction}${level2RulesInstruction} ${REVISION_SUBSCRIPT_INSTRUCTION} NCERT chapters include supplementary/enrichment content set apart from the main examinable text -- shaded or outlined "box" callouts, "Do You Know?"/"Something to Think About"/"Additional Information" style panels, footnotes, or any passage explicitly marked "Not for Examination Purpose" per CBSE's own circulars. Never base a question on this boxed/supplementary material, even if it's interesting -- every question must come strictly from the chapter's main, examinable running text. If a reference PDF is attached, this applies to whatever is visually set apart as a box/panel on the page, not just text explicitly labelled as excluded. Separately, stay within the CURRENT CBSE board-examinable depth for this exact topic and class, not just the chapter's general subject area -- CBSE's rationalized syllabus has specifically trimmed certain analytical techniques down to a simpler case even where the textbook still briefly mentions the broader concept. The clearest example: Class 10 Polynomials briefly introduces that cubic (and higher-degree) polynomials exist, but "verify the relationship between zeroes and coefficients" is only examinable for a QUADRATIC polynomial -- never write a question asking a student to verify this relationship for a cubic polynomial, even though the chapter mentions cubics exist. Apply the same caution generally: when a chapter's textbook briefly introduces a broader or more advanced version of a technique/concept without walking through it as a worked method the student practises repeatedly, that broader version is very likely NOT board-examinable at this class level -- default to testing the core, standard-depth version of the topic that the chapter actually builds skill in, not an extension of it. Every one of the 13 questions must test a genuinely distinct scenario -- never reuse the same specific dataset, points, numbers, or setup in two different questions, even across sections and even if one is a quick MCQ and the other a full worked answer (e.g. never set an MCQ asking "are points (1,5),(2,3),(–2,–11) collinear?" and separately a Section C question asking to fully determine collinearity for that exact same trio of points -- a student who already answered it once has no way to know the second occurrence expects the full working shown again from scratch, and reasonably treats it as already-solved). Write real exam-style questions a CBSE school would actually ask for this chapter, covering as much of the chapter's content as this small paper can reasonably fit (don't concentrate on just one narrow sub-topic). Where useful, draw on the style and phrasing of real recent (2026) CBSE sample papers/model papers for this subject and class, but every question must be your own original wording, not copied verbatim from anywhere. The paper MUST have exactly this fixed structure, 30 marks total:
 ${sectionsText}
 Section A questions are objective -- either a 4-option MCQ (write the options inline as (a)/(b)/(c)/(d) in the question text) or a very short one-line/one-word/fill-in-the-blank answer. Never write MCQ-style phrasing ("Which of the following...", "Choose the correct option...", "Select the correct answer...") unless the four lettered options are actually written out inline right there in the question text -- a question that asks a student to pick from "the following" while never actually stating what the following options are is unanswerable through no fault of the student's. If you are not going to list four real options, phrase the question as a direct question instead (e.g. "Name an example of..." / "State..." / a fill-in-the-blank), never with "which of the following" framing.
 
 This paper is text-only -- no image, diagram, or figure of any kind is ever attached to a question, no matter what a real textbook or exam paper might include. NEVER write a question that refers to an external figure the student is expected to already have (e.g. "Study Fig. 2.10 showing...", "As shown in the diagram below...", "identify the labelled parts in the figure") -- a student receiving a question like that has no diagram to look at and cannot answer it, through no fault of their own. If a question's content genuinely involves a diagram or visual (e.g. comparing cell types, a circuit, a geometric figure), either (a) describe every visually-relevant detail directly in the question's own text, in full sentences, so the question is completely self-contained without needing to see anything, or (b) ask the student to draw and label the diagram themselves as part of their answer (e.g. "Draw and label a neat diagram of..."), which this app's marking scheme already handles well. Never assume a figure will be supplied by someone else.
 
-Section D (4 marks) and Section E (5 marks) questions: this is exactly how current CBSE teachers actually set these questions, and you must follow the same pattern. PREFER splitting the question into 2-3 lettered sub-parts, e.g. (i)/(ii) worth 2+2 or 1+3, or (i)/(ii)/(iii) worth 1+2+2 or 2+1+2 or 1+1+3 -- whatever split fits the content best, as long as the sub-part marks add up to exactly the question's total (4 for D, 5 for E). A single, complete, non-split question (e.g. one full derivation, one long-answer theory question, or one "draw and label a neat diagram of..." question for Science/Biology chapters) is also allowed and good to use sometimes, but multi-part is the more common, preferred style -- lean toward it more often than not. Section D should be competency/case-based (a short real-world scenario or data/passage, then sub-question(s) about it); Section E can be a multi-part numerical/derivation, a multi-part theory question, or a single substantial question, whichever suits the chapter's content best.
+${revisionSectionDEInstruction(cycleNumber)}
 
 For every question in Sections B, C, D, and E, write markingPoints as a genuine CBSE-board-style STEP marking scheme, exactly like the official marking scheme that would accompany this question on a real CBSE answer key: break the full solution into as many individual steps as the question's mark value (a 2-mark question gets 2 marking points, a 4-mark question gets 4, etc.), each worth exactly 1 mark, in the actual order the working proceeds -- typically: correct formula/concept/method identified, correct substitution of given values, correct intermediate simplification/steps (one point per major step for longer derivations), and the correct final answer/conclusion as its own separate point; for a multi-part question, this just means each sub-part contributes its own share of steps in order (e.g. a 1+2+2 split contributes 1 step for part (i), 2 for part (ii), 2 for part (iii) -- 5 total). However you divide a question, the number of marking points must always sum to exactly that question's own 'marks' value -- never more, never fewer -- so splitting into sub-parts never changes how many marks are actually available or costs the student anything extra. Each marking point must be concrete and checkable (e.g. "Correctly states the quadratic formula" or "(ii) Correctly labels the nucleus and cell membrane"), not vague. For Section A (objective/MCQ or one-line factual answers), there is no step marking -- just write a single markingPoints entry with the one correct option/answer, since these are all-or-nothing for their 1 mark.`;
 
@@ -9714,7 +9752,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     const result = await callClaudeTool({
       system,
       content: [...referenceBlocks, { type: "text", text: "Generate the paper now." }],
-      tool: REVISION_PAPER_TOOL,
+      tool: buildRevisionPaperTool(cycleNumber),
       maxTokens: 6000,
       model: CLAUDE_MODEL_GENERATION,
     });
@@ -9920,7 +9958,9 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   function parseRevisionFeedbackForFloor(feedback: string | null | undefined): Map<string, { marks: number; line: string }> {
     const map = new Map<string, { marks: number; line: string }>();
     if (!feedback) return map;
-    const rowPattern = /^([A-Za-z]\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
+    // Level 2+ papers use plain sequential numeric IDs ("1", "2"...) instead of Level 1's
+    // section-lettered ones ("A1", "B2"...) -- the leading letter is optional so both formats parse.
+    const rowPattern = /^([A-Za-z]?\d+):\s*(\d+)\/(\d+)(?:\s*--\s*(.*))?$/;
     for (const rawLine of feedback.split("\n")) {
       const line = rawLine.trim();
       const match = rowPattern.exec(line);
