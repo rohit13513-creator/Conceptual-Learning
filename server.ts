@@ -10097,7 +10097,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
             items: {
               type: "object",
               properties: {
-                questionId: { type: "string" },
+                questionId: { type: "string", description: "Must exactly match this question's own 'id' as given in the marking scheme below (e.g. if the marking scheme lists a question with id \"6\", use questionId: \"6\" here) -- NEVER the label the student happened to write on their own page for it, even if their own numbering differs from the marking scheme (e.g. a student who labels it \"B6\" in their own handwriting, following an older habit, still gets graded as the marking scheme's own \"6\"). Provide exactly one entry per question, in the same order the marking scheme lists them." },
                 stepResults: {
                   type: "array",
                   description: "One entry per step of this question's marking scheme, in the same order, judged independently (apply error-carried-forward: a step can still be met even if an earlier step in the same question was not).",
@@ -10205,8 +10205,20 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       // genuine first check, so the floor below is a no-op there.
       const priorFloor = sub.first_attempt_score != null ? parseRevisionFeedbackForFloor(sub.first_attempt_feedback) : new Map<string, { marks: number; line: string }>();
       const feedbackLines: string[] = [];
-      for (const questionId of perQuestionOrder) {
-        const pq = resultById.get(questionId);
+      let idMismatchCount = 0;
+      for (let qIndex = 0; qIndex < perQuestionOrder.length; qIndex++) {
+        const questionId = perQuestionOrder[qIndex];
+        // Primary: the model's own questionId should exactly match the marking scheme's id (see
+        // the schema description above). Fallback: same array position in perQuestion -- guards
+        // against the model echoing back whatever label the STUDENT happened to write on their own
+        // page instead of the paper's actual id (e.g. an old section-lettered habit like "B6" for a
+        // paper whose real id is plain "6", after the Level 2 numbering change), which otherwise
+        // silently turns EVERY question into a 0 with a fake "no reason recorded" message, since
+        // none of the ids would ever match. Confirmed as a real, reproducible failure: two
+        // independent grading runs on the same submission both scored it 0/30 this way, on a paper
+        // that was actually worth close to full marks on inspection.
+        let pq = resultById.get(questionId);
+        if (!pq && perQuestion[qIndex]) { pq = perQuestion[qIndex]; idMismatchCount++; }
         const max = maxByQuestion.get(questionId) ?? 0;
         const steps = Array.isArray(pq?.stepResults) ? pq!.stepResults : [];
         // Deterministic per-question mark: the model never picks a number itself, only met/not-met
@@ -10256,6 +10268,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       // the line-by-line floor above found nothing to compare against) -- the total shown must
       // still never drop below what was already earned.
       if (sub.first_attempt_score != null) totalScore = Math.max(totalScore, sub.first_attempt_score);
+      if (idMismatchCount > 0) {
+        console.error(`checkRevisionSubmission ${submissionId}: ${idMismatchCount}/${perQuestionOrder.length} questionId(s) from the model didn't match the marking scheme's own ids and fell back to positional matching -- likely the model echoed the student's own handwritten numbering instead of the paper's actual ids.`);
+      }
 
       const overall = sanitizePlaceholderText(parsed.overallFeedback) || "Checked.";
       const fullFeedback = [overall, ...feedbackLines].join("\n");
