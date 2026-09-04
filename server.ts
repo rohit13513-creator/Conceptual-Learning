@@ -2807,6 +2807,43 @@ function buildApp(): express.Express {
       };
     }
 
+    // K + H2O (EVEN MORE VIOLENT THAN SODIUM -- reactivity series)
+    if ((rA === "K" && rB === "H2O") || (rA === "H2O" && rB === "K")) {
+      fallbackMatched = true;
+      fallbackData = {
+        reactionFeasible: true,
+        reactantsData: [
+          { formula: "K", name: "Potassium Metal", iupacName: "Potassium", pubchemId: "5462222", molecularWeight: 39.10 },
+          { formula: "H2O", name: "Water", iupacName: "Oxidane", pubchemId: "962", molecularWeight: 18.02 }
+        ],
+        productsData: [
+          { formula: "KOH", name: "Potassium Hydroxide", pubchemId: "14797", state: "aq" },
+          { formula: "H2", name: "Hydrogen Gas", pubchemId: "783", state: "g" }
+        ],
+        deltaH_rxn: -390.9, // even more exothermic than sodium's equivalent reaction
+        deltaS_rxn: 36.8,
+        balancedEquation: "2K(s) + 2H2O(l) → 2KOH(aq) + H2(g)",
+        reactionClass: "Combination / Vigorous Neutralization",
+        thermoType: "Exothermic",
+        visuals: {
+          solutionColorStart: "clear",
+          solutionColorEnd: "pink", // assuming phenolphthalein indicator
+          hasBubbles: true,
+          gasName: "Hydrogen (H₂)",
+          precipitateColor: "",
+          animationDescription: "Instant violent reaction. The potassium metal ignites the moment it touches the water, skating and spinning across the surface as it evolves Hydrogen gas, burning with a characteristic LILAC flame -- more vigorous and immediate than the equivalent sodium reaction!"
+        },
+        dangerLevel: "explosive",
+        conceptualExplanationFoundational: "Potassium sits above sodium in the reactivity series, so it reacts with cold water even more violently. The evolved Hydrogen gas catches fire immediately on contact, burning with potassium's characteristic lilac flame color, alongside extreme exothermic heat.",
+        conceptualExplanationAdvanced: "Potassium has an even lower first ionization energy than sodium and a more negative redox potential (-2.93V vs -2.71V for Na). It reduces protons in water to Hydrogen gas faster and with more heat release per mole, so the evolved Hydrogen ignites on contact rather than merely risking ignition.",
+        arrowPushingDetails: "2K(s) → 2K⁺(aq) + 2e⁻ (Oxidation)\n2H₂O(l) + 2e⁻ → 2OH⁻(aq) + H₂(g) (Proton Reduction)",
+        advice: [
+          "BOOM! Potassium is even more reactive than sodium -- it ignites the instant it touches water. Re-adjust conditions carefully!",
+          "Try using a mild non-polar medium or cool down the apparatus temperature below 0°C to slow down kinetics."
+        ]
+      };
+    }
+
     // ACID-BASE NEUTRALIZATION NH3/HCL/NAOH/KOH
     if (((rA === "NAOH" || rA === "KOH" || rA === "BASE") && (rB === "HCL" || rB === "ACID")) ||
         ((rA === "HCL" || rA === "ACID") && (rB === "NAOH" || rB === "KOH" || rB === "BASE"))) {

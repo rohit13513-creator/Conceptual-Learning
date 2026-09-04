@@ -37,6 +37,7 @@ const QUICK_SHELF: ReactantItem[] = [
   { formula: "Fe", name: "Iron Metal", type: "metal", colorText: "text-slate-300" },
   { formula: "CuSO4", name: "Copper Sulfate", type: "salt", colorText: "text-blue-400" },
   { formula: "Na", name: "Sodium Metal", type: "metal", colorText: "text-amber-200" },
+  { formula: "K", name: "Potassium Metal", type: "metal", colorText: "text-purple-300" },
   { formula: "H2O", name: "Water", type: "solvent", colorText: "text-cyan-400" },
   { formula: "HCl", name: "Hydrochloric Acid", type: "acid", colorText: "text-red-400" },
   { formula: "NaOH", name: "Sodium Hydroxide", type: "base", colorText: "text-emerald-400" },
@@ -149,6 +150,7 @@ const SUPPORTED_REACTANTS_BASE: SupportedReactant[] = [
   { formula: "CuSO4", name: "Copper Sulfate (CuSO₄)" },
   { formula: "CuSO4·5H2O", name: "Copper Sulfate Pentahydrate / Crystals (CuSO₄·5H₂O)" },
   { formula: "Na", name: "Sodium Metal (Na)" },
+  { formula: "K", name: "Potassium Metal (K)" },
   { formula: "H2O", name: "Water (H₂O)" },
   { formula: "HCl", name: "Hydrochloric Acid (HCl)" },
   { formula: "NaOH", name: "Sodium Hydroxide (NaOH)" },
@@ -699,7 +701,7 @@ export function renderDescriptionWithSubscripts(text: string, isLightMode: boole
           const suffix = match[3];
 
           const hasCapitalAndNumber = /[A-Z]/.test(word) && /\d/.test(word);
-          const isKnownCommon = /^(H2O|CO2|CO|O2|H2|Cl2|I2|NH3|FE|CU|NA|ZN|MG|KI|PB|C|CH3COOH|C2H5OH|C6H14|C18H36O2|C10H22|C5H10|C6H8O7|C4H6O6|H2C2O4|COSO4|CUSO4|ZNSO4|BASO4|NA2SO4|BACL2|C2H4BR2|CH2BR2|CH3BR|CCL4|CH3COCH3|C18H35NAO2)$/i.test(word);
+          const isKnownCommon = /^(H2O|CO2|CO|O2|H2|Cl2|I2|NH3|FE|CU|NA|K|ZN|MG|KI|PB|C|CH3COOH|C2H5OH|C6H14|C18H36O2|C10H22|C5H10|C6H8O7|C4H6O6|H2C2O4|COSO4|CUSO4|ZNSO4|BASO4|NA2SO4|BACL2|C2H4BR2|CH2BR2|CH3BR|CCL4|CH3COCH3|C18H35NAO2)$/i.test(word);
           const isIonic = /[A-Z]/.test(word) && (word.includes("+") || word.includes("-"));
           const looksLikeFormula = isChemicalFormula(word) || hasCapitalAndNumber || isKnownCommon || isIonic || SUPPORTED_REACTANTS.some(r => r.formula.toLowerCase() === word.toLowerCase());
 
@@ -726,6 +728,7 @@ function getMolecularWeightForReactant(formula: string): number {
   if (f === "CUSO4") return 159.61;
   if (f === "FESO4") return 151.91;
   if (f === "NA") return 22.99;
+  if (f === "K") return 39.10;
   if (f === "H2O") return 18.02;
   if (f === "HCL") return 36.46;
   if (f === "NAOH") return 39.99;
@@ -811,7 +814,7 @@ function getMolecularWeightForReactant(formula: string): number {
 function getDefaultUnitForReactant(formula: string): "g" | "mL" {
   if (!formula) return "mL";
   const f = formula.trim().toUpperCase();
-  if (["FE", "NA", "CU", "CUSO4", "ZNSO4", "BACL2", "NA2SO4"].includes(f)) {
+  if (["FE", "NA", "K", "CU", "CUSO4", "ZNSO4", "BACL2", "NA2SO4"].includes(f)) {
     return "g";
   }
   return "mL";
@@ -2572,6 +2575,7 @@ function getChemicalColor(formula: string): { bg: string; text: string; isSolid:
   if (norm.includes("BACL2")) return { bg: "rgba(148, 163, 184, 0.4)", text: "#cbd5e1", isSolid: false, label: "BaCl₂ (aq)" };
   if (norm.includes("ZNSO4")) return { bg: "rgba(236, 72, 153, 0.45)", text: "#fbcfe8", isSolid: false, label: "ZnSO₄ (aq)" };
   if (norm.includes("NA")) return { bg: "rgba(234, 179, 8, 0.95)", text: "#fef08a", isSolid: true, label: "Sodium Metal" };
+  if (norm === "K") return { bg: "rgba(196, 132, 252, 0.95)", text: "#e9d5ff", isSolid: true, label: "Potassium Metal" };
   if (norm.includes("PROPENE") || norm.includes("C3H6")) return { bg: "rgba(99, 102, 241, 0.5)", text: "#c7d2fe", isSolid: false, label: "Propene" };
   if (norm.includes("C6H14") || norm.includes("HEXANE")) return { bg: "rgba(186, 230, 253, 0.25)", text: "#7dd3fc", isSolid: false, label: "Hexane" };
   if (norm.includes("H2C2O4") || norm.includes("OXALIC")) return { bg: "rgba(248, 250, 252, 0.85)", text: "#f1f5f9", isSolid: true, label: "Oxalic Acid" };
