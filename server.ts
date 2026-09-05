@@ -8575,72 +8575,36 @@ function buildApp(): express.Express {
   });
 
   // Lets the admin flip a submission's late status either direction (late -> not late, or the
-  // reverse), correcting the score by exactly the flat 2-mark late penalty if the state actually
-  // changes, and remembering the override so it survives a future Reevaluate.
+  // reverse). The actual late penalty is an escalating per-day scale computed inside
+  // checkHomeworkSubmission (1 day = 2 marks, 2 days = 3, ...N days = N+1), not a flat amount --
+  // so rather than duplicating that formula here (and inevitably drifting out of sync with it, as
+  // a previous flat "always exactly 2 marks" version of this endpoint did, silently leaving a
+  // student's actual 9-mark escalating penalty and its exact wording completely untouched), this
+  // saves the override and then re-runs the real grading pass, which already reads lateOverride
+  // (see the comment above that logic) and will compute the correct score and feedback for
+  // whichever state the admin just set, however the penalty scale is defined at the time.
   app.post("/api/admin/homework/set-late-status", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
     const { submissionId, late } = req.body;
     if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
     if (typeof late !== "boolean") return res.status(400).json({ error: "Missing or invalid 'late' flag." });
 
-    const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    const { data: sub } = await supabase.from("homework_submissions").select("admin_notes").eq("id", submissionId).maybeSingle();
     if (!sub) return res.status(404).json({ error: "Submission not found." });
 
     const notes = parseAdminNotes(sub.admin_notes);
-    let currentlyLate: boolean;
-    if (notes.lateOverride === "not_late") {
-      currentlyLate = false;
-    } else if (notes.lateOverride === "late") {
-      currentlyLate = true;
-    } else {
-      // No override yet -- fall back to the same automatic timestamp comparison
-      // checkHomeworkSubmission would have used.
-      let effectiveDeadline: string | null = null;
-      if (sub.assignment_id) {
-        const { data: a } = await supabase.from("homework_assignments").select("target_class, assigned_date, deadline").eq("id", sub.assignment_id).maybeSingle();
-        if (a) {
-          effectiveDeadline = a.deadline;
-          if (a.target_class === "All") {
-            const { data: studentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
-            const mappedTarget = studentRow?.student_class ? CLASS_TO_TARGET[studentRow.student_class] : null;
-            if (mappedTarget && a.assigned_date) effectiveDeadline = computeDeadline(a.assigned_date, mappedTarget);
-          }
-        }
-      }
-      currentlyLate = !!effectiveDeadline && !!sub.submitted_at && new Date(sub.submitted_at).getTime() > new Date(effectiveDeadline).getTime();
-    }
-
-    const LATE_NOTE = "Submitted after the homework deadline -- 2 marks deducted as per the late-submission rule.";
-    let newScore = sub.ai_score;
-    let newFeedback: string | null = sub.ai_feedback;
-
-    if (currentlyLate !== late && typeof sub.ai_score === "number") {
-      if (late) {
-        newScore = Math.max(0, sub.ai_score - 2);
-        newFeedback = newFeedback && newFeedback.trim() ? `${newFeedback}\n\n${LATE_NOTE}` : LATE_NOTE;
-      } else {
-        newScore = Math.min(10, sub.ai_score + 2);
-        if (newFeedback) {
-          newFeedback = newFeedback.split(`\n\n${LATE_NOTE}`).join("").split(LATE_NOTE).join("").trim();
-          if (!newFeedback) newFeedback = null;
-        }
-      }
-    }
-
-    const { data: updated, error } = await supabase
+    const { error: saveErr } = await supabase
       .from("homework_submissions")
-      .update({
-        ai_score: newScore,
-        ai_feedback: newFeedback,
-        admin_notes: serializeAdminNotes({ ...notes, lateOverride: late ? "late" : "not_late" }),
-      })
-      .eq("id", submissionId)
-      .select()
-      .single();
-    if (error || !updated) {
-      console.error("Set late-status save error:", error?.message);
+      .update({ admin_notes: serializeAdminNotes({ ...notes, lateOverride: late ? "late" : "not_late" }) })
+      .eq("id", submissionId);
+    if (saveErr) {
+      console.error("Set late-status save error:", saveErr.message);
       return res.status(500).json({ error: "Failed to update the late status. Please try again." });
     }
+
+    await checkHomeworkSubmission(String(submissionId));
+    const { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    if (!updated) return res.status(404).json({ error: "Submission not found after regrading." });
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
