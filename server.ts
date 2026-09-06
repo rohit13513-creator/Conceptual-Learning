@@ -9460,7 +9460,17 @@ function buildApp(): express.Express {
     return text
       .split(/[\n,;]+|\s{4,}/)
       .map((s) => s.trim().replace(/^[-•*\d.)\s]+/, "").trim())
-      .filter((s) => s.length > 0);
+      .filter((s) => s.length > 0)
+      // A student typing a syllabus that spans multiple subjects/streams commonly groups it under
+      // bare subject-category labels on their own line ("Biology:", "Physics:", "Chemistry:") before
+      // listing the actual chapters under each -- these headers have no chapter number or mark
+      // allocation at all (unlike every real chapter in this app's data, which always carries one),
+      // so a short, all-letters line ending in a colon is never itself a real chapter. Left in, a
+      // student can NEVER fully "complete" that subject (the header never appears in any submitted
+      // paper to be marked done), permanently blocking the whole-syllabus cycle reset for every
+      // chapter in both subjects -- confirmed on a real case where "Biology:"/"Physics:"/"Chemistry:"
+      // ended up as three uncompletable entries in a student's own chapter list.
+      .filter((s) => !/^[a-z\s]+:$/i.test(s));
   }
 
   async function extractChaptersFromImage(buffer: Buffer, mimeType: string): Promise<string[]> {
