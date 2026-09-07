@@ -492,6 +492,11 @@ function PrintView({ grade }: PrintViewProps) {
 
 const ADMIN_EMAILS = ['rohit13513@gmail.com', 'conceptuallearningonline@gmail.com'];
 
+// Public identifier for "Sign in with Google" -- safe to ship in frontend code (unlike a client
+// secret, a Client ID is meant to be visible; it only tells Google which app is asking, the actual
+// proof of identity is the signed token Google itself hands back after the student authenticates).
+const GOOGLE_CLIENT_ID = '334975414855-jafdetqco1le8rgmklt727vnshibchfv.apps.googleusercontent.com';
+
 export default function App() {
   const [isLightMode, setIsLightMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -1341,6 +1346,65 @@ export default function App() {
       setAuthLoading(false);
     }
   };
+
+  const handleGoogleCredentialResponse = useCallback(async (response: { credential?: string }) => {
+    if (!response?.credential) return;
+    setAuthLoading(true);
+    setAuthError(null);
+    setAuthSuccess(null);
+    try {
+      const apiResponse = await fetch('/api/login/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idToken: response.credential,
+          deviceId,
+          deviceName: deviceType
+        })
+      });
+      const data = await apiResponse.json();
+      if (!apiResponse.ok) {
+        throw new Error(data.error || 'Google sign-in failed.');
+      }
+      const authedUser = { ...data.user, token: data.token };
+      setUser(authedUser);
+      if (keepLoggedIn) {
+        localStorage.setItem('optics_v1_user', JSON.stringify(authedUser));
+        sessionStorage.removeItem('optics_v1_user');
+      } else {
+        sessionStorage.setItem('optics_v1_user', JSON.stringify(authedUser));
+        localStorage.removeItem('optics_v1_user');
+      }
+      setAuthSuccess('Welcome back! Authentication approved.');
+      changeView(ADMIN_EMAILS.includes(authedUser.email) ? 'admin' : 'hub');
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [deviceId, deviceType, keepLoggedIn]);
+
+  // Renders Google's own "Sign in with Google" button into our placeholder div once the Google
+  // Identity Services script (loaded in index.html) is ready and we're actually showing the login
+  // tab -- re-runs if the login tab is re-entered, since Google's script only draws the button into
+  // whatever DOM node exists at render time, and that node gets unmounted when the tab switches away.
+  useEffect(() => {
+    if (authTab !== 'login') return;
+    const google = (window as any).google;
+    if (!google?.accounts?.id) return;
+    const container = document.getElementById('google-signin-button');
+    if (!container) return;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredentialResponse,
+    });
+    google.accounts.id.renderButton(container, {
+      theme: isLightMode ? 'outline' : 'filled_black',
+      size: 'large',
+      width: 320,
+      text: 'signin_with',
+    });
+  }, [authTab, isLightMode, handleGoogleCredentialResponse]);
 
   const handleRequestOtp = async (successMessage?: string) => {
     if (!regEmail || !regPhone) {
@@ -3174,7 +3238,16 @@ export default function App() {
 
           {/* FORM CONTENT */}
           {authTab === 'login' && (
-            <form onSubmit={handleLogin} className="space-y-4">
+            <>
+              <div className="flex justify-center py-1">
+                <div id="google-signin-button" />
+              </div>
+              <div className="flex items-center gap-3 py-1">
+                <div className={`flex-1 h-px ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`} />
+                <span className={`text-[10px] font-black uppercase tracking-wider ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`}>Or</span>
+                <div className={`flex-1 h-px ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`} />
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1">
                 <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Email Address</label>
                 <div className="relative">
@@ -3246,7 +3319,8 @@ export default function App() {
                 {authLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Sign In To Portal'}
                 <ChevronRight className="w-4 h-4" />
               </button>
-            </form>
+              </form>
+            </>
           )}
 
           {authTab === 'register' && (

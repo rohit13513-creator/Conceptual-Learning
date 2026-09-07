@@ -7603,6 +7603,98 @@ function buildApp(): express.Express {
     });
   });
 
+  // "Sign in with Google" -- lets an EXISTING, already-approved account log in using whichever
+  // Google account is already signed into the student's browser, no password typed at all. This is
+  // a convenience login path only: it never creates a new account (a brand-new email still has to
+  // go through the normal register-then-admin-approval flow), it just skips password entry for an
+  // email that already has an approved account. The frontend hands us the raw Google ID token (a
+  // signed JWT) rather than a bare email, specifically so a client can never simply claim to be any
+  // email address it likes -- verifying that token against Google itself is what actually proves
+  // the person on the other end really does control that Google account right now.
+  app.post("/api/login/google", async (req, res) => {
+    const { idToken, deviceId, deviceName } = req.body;
+    if (!idToken || !deviceId) {
+      return res.status(400).json({ error: "Missing required parameters: idToken and deviceId are mandatory." });
+    }
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      console.error("GOOGLE_CLIENT_ID is not configured -- Google sign-in cannot verify tokens.");
+      return res.status(500).json({ error: "Google sign-in isn't configured on this server yet." });
+    }
+
+    // Google's tokeninfo endpoint validates the JWT's signature and expiry itself and hands back
+    // the decoded claims -- this avoids needing a JWT/JWKS library just for this one endpoint. It's
+    // rate-limited for high-volume use, which doesn't apply here (this is a login button, not a
+    // bulk API), and is Google's own documented lightweight verification option.
+    let payload: any;
+    try {
+      const verifyResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      if (!verifyResp.ok) {
+        return res.status(401).json({ error: "Your Google sign-in could not be verified. Please try again." });
+      }
+      payload = await verifyResp.json();
+    } catch (err: any) {
+      console.error("Google token verification request failed:", err.message);
+      return res.status(500).json({ error: "Could not reach Google to verify your sign-in. Please try again." });
+    }
+
+    // The audience MUST be this app's own Client ID -- otherwise a valid Google ID token issued to
+    // some completely different website could be replayed here to log into this app instead.
+    if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+      return res.status(401).json({ error: "Your Google sign-in could not be verified. Please try again." });
+    }
+    if (payload.email_verified !== "true" && payload.email_verified !== true) {
+      return res.status(401).json({ error: "Your Google account's email isn't verified. Please verify it with Google first." });
+    }
+    const emailNormalized = String(payload.email || "").toLowerCase().trim();
+    if (!emailNormalized) {
+      return res.status(401).json({ error: "Your Google sign-in could not be verified. Please try again." });
+    }
+
+    const isTestAccount = emailNormalized === "test@rayoptica.com";
+    const { data: userRow } = await supabase.from("users").select("*").eq("email", emailNormalized).maybeSingle();
+    if (!userRow) {
+      return res.status(401).json({ error: "No account found with this email. Please register first." });
+    }
+
+    if (userRow.status === "pending") {
+      return res.status(403).json({ error: "Registration is pending approval. Please ask your teacher to approve your account." });
+    }
+    if (userRow.status === "rejected") {
+      return res.status(403).json({ error: "Your access has been suspended or rejected by the owner." });
+    }
+
+    const allowedDevices = ["Mobile Phone", "Laptop", "Tablet"];
+    if (!isTestAccount && userRow.role !== "admin" && (!deviceName || !allowedDevices.includes(deviceName))) {
+      return res.status(400).json({
+        error: "Access Denied: Ray-Optica is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
+      });
+    }
+
+    const devices: DeviceSession[] = userRow.devices || [];
+    const existingDeviceIdx = devices.findIndex((d) => d.deviceId === deviceId);
+    if (existingDeviceIdx !== -1) {
+      devices[existingDeviceIdx].lastUsed = new Date().toISOString();
+      if (deviceName) devices[existingDeviceIdx].deviceName = deviceName;
+    } else {
+      if (!isTestAccount && devices.length >= 3 && userRow.role !== "admin") {
+        return res.status(403).json({
+          error: "Permission Denied: This account is already authorized on the maximum of 3 devices. To log in here, please contact the owner to sign out or reset one of your devices."
+        });
+      }
+      devices.push({ deviceId, deviceName: deviceName || "Laptop", lastUsed: new Date().toISOString() });
+    }
+
+    await supabase.from("users").update({ devices }).eq("email", emailNormalized);
+
+    const safeUser = mapUserRow({ ...userRow, devices });
+    const token = signSessionToken({ email: emailNormalized, role: userRow.role });
+    return res.status(200).json({
+      message: "Login successful!",
+      user: safeUser,
+      token
+    });
+  });
+
   // Logged-in user changes their own password (must know the current one)
   app.post("/api/change-password", async (req, res) => {
     const { email, currentPassword, newPassword } = req.body;
