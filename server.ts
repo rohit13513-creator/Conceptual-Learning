@@ -1351,23 +1351,27 @@ function sendSimulatedEmail(to: string, subject: string, body: string, type: 'in
 
 // Content-Security-Policy scoped to the exact external hosts this app actually loads --
 // Google Fonts (stylesheet + font files), Supabase storage (homework/avatar/forum files, all
-// served from signed URLs on the project's own subdomain), and PubChem/RCSB (chemical structure
-// images in KnowYourChemicals). blob: and data: are needed for local file previews (profile
-// photo picker, homework photo uploader) and inline SVG diagrams. style-src needs 'unsafe-inline'
-// because of the many inline style="" props and the <style dangerouslySetInnerHTML> blocks used
-// for light/dark-mode overrides throughout the notes components -- script-src does NOT get
-// 'unsafe-inline' or 'unsafe-eval', which is the directive that actually matters for blocking
-// injected/foreign JavaScript.
+// served from signed URLs on the project's own subdomain), PubChem/RCSB (chemical structure
+// images in KnowYourChemicals), and Google Identity Services (the "Sign in with Google" button on
+// the login screen). blob: and data: are needed for local file previews (profile photo picker,
+// homework photo uploader) and inline SVG diagrams. style-src needs 'unsafe-inline' because of the
+// many inline style="" props and the <style dangerouslySetInnerHTML> blocks used for light/dark-mode
+// overrides throughout the notes components -- script-src does NOT get 'unsafe-inline' or
+// 'unsafe-eval', which is the directive that actually matters for blocking injected/foreign
+// JavaScript. Google's sign-in button itself renders inside an iframe Google serves from its own
+// domain (frame-src) and the library makes its own network calls back to Google (connect-src) to
+// carry out the actual sign-in, so both need the same allowance as script-src.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "script-src 'self' https://accounts.google.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https://*.supabase.co https://pubchem.ncbi.nlm.nih.gov https://cdn.rcsb.org https://www.rcsb.org",
   // KnowYourChemicals also calls PubChem's REST API directly from the browser (CID/name lookups,
   // not just <img> loads) -- confirmed by actually exercising the search in the browser after
   // the first draft of this policy blocked it silently as a generic "Failed to fetch".
-  "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov",
+  "connect-src 'self' https://pubchem.ncbi.nlm.nih.gov https://accounts.google.com",
+  "frame-src https://accounts.google.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
