@@ -9938,6 +9938,34 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // Johri): both completed-chapters lists ended up full, but cycle_number never advanced, leaving
   // her with nothing left to pick and no way to start a new cycle. Serializing per-student via this
   // lock ensures the second call's read always reflects the first call's completed write.
+  // Serializes /api/revision/generate-paper per student -- without this, a page refresh (or a
+  // double-tap) arriving while an earlier generate-paper call is still mid-flight lets both calls
+  // read "no existing draft/active paper yet" before either has finished inserting one, so BOTH
+  // proceed to generate and insert their own paper. Confirmed on a real student: he was already
+  // partway through answering his generated paper on his own sheet of paper when a refresh fired a
+  // second generate-paper call, which produced an entirely different question set and left his
+  // real, in-progress paper orphaned (still "active" in the database, but no longer what the app
+  // showed him) -- from his side, it looked exactly like the app had reset his test and handed him
+  // a fresh one out of nowhere. Chaining every call for the same student through this lock means the
+  // second call's own "does a paper already exist" check only ever runs after the first call's
+  // insert (if any) has fully committed, so it correctly finds and reuses that paper instead of
+  // generating a duplicate.
+  const revisionGeneratePaperLocks = new Map<string, Promise<void>>();
+  async function withRevisionGeneratePaperLock<T>(studentEmail: string, fn: () => Promise<T>): Promise<T> {
+    const prior = revisionGeneratePaperLocks.get(studentEmail) || Promise.resolve();
+    let result: T;
+    let error: unknown;
+    let hasError = false;
+    const run = prior.then(fn, fn).then(
+      (r) => { result = r as T; },
+      (e) => { error = e; hasError = true; }
+    );
+    revisionGeneratePaperLocks.set(studentEmail, run);
+    await run;
+    if (hasError) throw error;
+    return result!;
+  }
+
   const revisionChapterDoneLocks = new Map<string, Promise<void>>();
   async function markRevisionChapterDone(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
     const prior = revisionChapterDoneLocks.get(studentEmail) || Promise.resolve();
@@ -10634,40 +10662,44 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const cycleNumber: number = setup.cycle_number || 1;
 
     // A duplicate request for the exact same (student, subject, chapter) -- a fast double-tap
-    // beating the frontend's own guard, a network retry racing the original call, two tabs -- must
-    // never trigger a second real Claude generation call. Reusing any already-generated paper here
-    // is a pure DB read with no race window relative to the Claude call itself, so this closes the
-    // gap the frontend guard and the cross-student content cache below can't fully close alone.
-    const { data: existingPaper } = await supabase
-      .from("revision_papers")
-      .select("*")
-      .eq("student_email", auth.email)
-      .eq("subject", target.subject)
-      .eq("chapter_name", target.chapterName)
-      .eq("cycle_number", cycleNumber)
-      .in("status", ["draft", "active"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (existingPaper) return res.json({ paper: mapRevisionPaperForStudent(existingPaper) });
-
+    // beating the frontend's own guard, a network retry racing the original call, a page refresh
+    // firing while an earlier call is still mid-flight, two tabs -- must never trigger a second real
+    // Claude generation call. Serialized per-student via withRevisionGeneratePaperLock so the second
+    // call's "does a paper already exist" check always runs after the first call's insert (if any)
+    // has fully committed, rather than racing it.
     try {
-      const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
-      const { data: paperRow, error: insertError } = await supabase
-        .from("revision_papers")
-        .insert({
-          student_email: auth.email,
-          subject: target.subject,
-          chapter_name: target.chapterName,
-          content: { questions, version: REVISION_CONTENT_VERSION },
-          total_marks: REVISION_TOTAL_MARKS,
-          time_allotted_minutes: REVISION_TIME_MINUTES,
-          status: "draft",
-          cycle_number: cycleNumber,
-        })
-        .select()
-        .single();
-      if (insertError || !paperRow) throw new Error(insertError?.message || "Failed to save the generated paper.");
+      const paperRow = await withRevisionGeneratePaperLock(auth.email, async () => {
+        const { data: existingPaper } = await supabase
+          .from("revision_papers")
+          .select("*")
+          .eq("student_email", auth.email)
+          .eq("subject", target.subject)
+          .eq("chapter_name", target.chapterName)
+          .eq("cycle_number", cycleNumber)
+          .in("status", ["draft", "active"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingPaper) return existingPaper;
+
+        const questions = await getRevisionQuestionsForTarget(target.subject, target.chapterName, classLabel, cycleNumber);
+        const { data: inserted, error: insertError } = await supabase
+          .from("revision_papers")
+          .insert({
+            student_email: auth.email,
+            subject: target.subject,
+            chapter_name: target.chapterName,
+            content: { questions, version: REVISION_CONTENT_VERSION },
+            total_marks: REVISION_TOTAL_MARKS,
+            time_allotted_minutes: REVISION_TIME_MINUTES,
+            status: "draft",
+            cycle_number: cycleNumber,
+          })
+          .select()
+          .single();
+        if (insertError || !inserted) throw new Error(insertError?.message || "Failed to save the generated paper.");
+        return inserted;
+      });
       return res.json({ paper: mapRevisionPaperForStudent(paperRow) });
     } catch (err: any) {
       console.error("Error generating revision paper:", err.message);
