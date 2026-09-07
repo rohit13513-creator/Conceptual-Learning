@@ -7320,6 +7320,17 @@ function buildApp(): express.Express {
 
     if (insertError || !insertedRow) {
       console.error("Error inserting new user:", insertError?.message);
+      // The email-uniqueness check above is a plain read-then-write with no locking, so two
+      // registration submissions for the same email landing within milliseconds of each other can
+      // both pass that check before either has actually inserted -- the database's own "email text
+      // unique" constraint is the real backstop that makes a genuine duplicate account impossible
+      // (confirmed live: a direct duplicate insert attempt is rejected with Postgres error 23505),
+      // but without this check its generic error would surface to that unlucky second submitter as
+      // a confusing "Failed to create account", not the same clear "already registered" message
+      // everyone else gets from the check above.
+      if (insertError?.code === "23505") {
+        return res.status(400).json({ error: "An account with this email address is already registered." });
+      }
       return res.status(500).json({ error: "Failed to create account. Please try again." });
     }
 
