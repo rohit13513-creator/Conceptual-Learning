@@ -1361,6 +1361,13 @@ function sendSimulatedEmail(to: string, subject: string, body: string, type: 'in
 // JavaScript. Google's sign-in button itself renders inside an iframe Google serves from its own
 // domain (frame-src) and the library makes its own network calls back to Google (connect-src) to
 // carry out the actual sign-in, so both need the same allowance as script-src.
+//
+// IMPORTANT: vercel.json's own "headers" config carries a second, hand-written copy of this exact
+// policy, and for the static index.html response (the one a fresh browser tab actually loads) THAT
+// copy wins, not this one -- confirmed the hard way when the Google sign-in button silently failed
+// in production after updating only this constant, because the live page kept serving vercel.json's
+// stale, unmodified CSP. Any future change here MUST be mirrored into vercel.json's headers[0] entry
+// too, or it will visibly do nothing for the page students actually load.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' https://accounts.google.com",
