@@ -16,6 +16,7 @@ import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { LearnMaths8SquareCube } from './components/LearnMaths8SquareCube';
 import { LearnScience8 } from './components/LearnScience8';
+import { LearnScience8InvisibleWorld } from './components/LearnScience8InvisibleWorld';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
@@ -117,6 +118,15 @@ import {
   SCIENCE8_COMPETENCY,
   SCIENCE8_SELF_ASSESSMENT,
 } from './data/science8';
+import {
+  SCIENCE8IW_SOLVED_QUESTIONS,
+  SCIENCE8IW_MCQS,
+  SCIENCE8IW_VERY_SHORT,
+  SCIENCE8IW_SHORT,
+  SCIENCE8IW_LONG,
+  SCIENCE8IW_COMPETENCY,
+  SCIENCE8IW_SELF_ASSESSMENT,
+} from './data/science8InvisibleWorld';
 import {
   BIOLOGY10_NCERT_SOLVED,
   BIOLOGY10_MCQS,
@@ -2962,6 +2972,8 @@ export default function App() {
   const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination'>('life-processes');
   // Class 8 Maths now has two chapters -- this tracks which one is active whenever qbSubject === 'maths'.
   const [mathsChapter8, setMathsChapter8] = useState<'quadrilaterals' | 'square-and-cube'>('quadrilaterals');
+  // Class 8 Science now has two chapters -- this tracks which one is active whenever qbSubject === 'science'.
+  const [scienceChapter8, setScienceChapter8] = useState<'investigative-world' | 'invisible-living-world'>('investigative-world');
 
   // "Start Studying" subject picker: which class the picker is showing subjects for. Locked
   // students always see their own registered class; exempt (admin/test) accounts pick one first.
@@ -3043,6 +3055,16 @@ export default function App() {
         long: MATHS8_LONG,
         assertion: MATHS8_ASSERTION_REASON,
         competency: MATHS8_COMPETENCY,
+      };
+    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world') {
+      return {
+        ncert: SCIENCE8IW_SOLVED_QUESTIONS,
+        mcqs: SCIENCE8IW_MCQS,
+        veryshort: SCIENCE8IW_VERY_SHORT,
+        short: SCIENCE8IW_SHORT,
+        long: SCIENCE8IW_LONG,
+        assertion: [] as typeof MATHS8_ASSERTION_REASON,
+        competency: SCIENCE8IW_COMPETENCY,
       };
     } else if (preparingFor === '8th' && qbSubject === 'science') {
       return {
@@ -3135,7 +3157,7 @@ export default function App() {
         competency: [] as typeof CLASSX_CASE_COMPETENCY,
       };
     }
-  }, [preparingFor, qbSubject, bioChapter10, mathsChapter8]);
+  }, [preparingFor, qbSubject, bioChapter10, mathsChapter8, scienceChapter8]);
 
   const [opticsType, setOpticsType] = useState<OpticsType>('concave-mirror');
   const [group, setGroup] = useState<'mirror' | 'lens'>('mirror');
@@ -5712,11 +5734,44 @@ export default function App() {
       )}
 
       {activeView === 'scienceNotes8' && (
-        <LearnScience8
-          isLightMode={isLightMode}
-          onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }}
-          onGoToSelfAssessment={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); }}
-        />
+        <div className="flex-1 flex flex-col overflow-hidden h-full">
+          <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
+            <span className={`text-[11px] font-black uppercase tracking-widest font-mono mr-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Chapter:</span>
+            <button
+              onClick={() => setScienceChapter8('investigative-world')}
+              className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                scienceChapter8 === 'investigative-world'
+                  ? isLightMode ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-slate-950'
+                  : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Investigative World
+            </button>
+            <button
+              onClick={() => setScienceChapter8('invisible-living-world')}
+              className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                scienceChapter8 === 'invisible-living-world'
+                  ? isLightMode ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-slate-950'
+                  : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Invisible Living World
+            </button>
+          </div>
+          {scienceChapter8 === 'invisible-living-world' ? (
+            <LearnScience8InvisibleWorld
+              isLightMode={isLightMode}
+              onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }}
+              onGoToSelfAssessment={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); }}
+            />
+          ) : (
+            <LearnScience8
+              isLightMode={isLightMode}
+              onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }}
+              onGoToSelfAssessment={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); }}
+            />
+          )}
+        </div>
       )}
 
       {/* ── 2. SOLVED NCERT QUESTIONS EXPLORER ── */}
@@ -5804,7 +5859,7 @@ export default function App() {
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
                     ? `Search & study official ${bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
-                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? 'Exploring the Investigative World of Science' : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
+                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -5853,6 +5908,24 @@ export default function App() {
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${mathsChapter8 === 'square-and-cube' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Squares & Cubes
+                </button>
+              </div>
+            )}
+
+            {preparingFor === '8th' && qbSubject === 'science' && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button
+                  onClick={() => setScienceChapter8('investigative-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'investigative-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Investigative World
+                </button>
+                <button
+                  onClick={() => setScienceChapter8('invisible-living-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'invisible-living-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Invisible Living World
                 </button>
               </div>
             )}
@@ -6197,6 +6270,24 @@ export default function App() {
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${mathsChapter8 === 'square-and-cube' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Squares & Cubes
+                </button>
+              </div>
+            )}
+
+            {preparingFor === '8th' && qbSubject === 'science' && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button
+                  onClick={() => setScienceChapter8('investigative-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'investigative-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Investigative World
+                </button>
+                <button
+                  onClick={() => setScienceChapter8('invisible-living-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'invisible-living-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Invisible Living World
                 </button>
               </div>
             )}
@@ -6878,7 +6969,7 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? 'Class 8 (Science)' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Science (Invisible Living World)' : 'Science (Investigative World)') : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
@@ -6922,16 +7013,36 @@ export default function App() {
               </div>
             )}
 
+            {preparingFor === '8th' && qbSubject === 'science' && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button
+                  onClick={() => setScienceChapter8('investigative-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'investigative-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Investigative World
+                </button>
+                <button
+                  onClick={() => setScienceChapter8('invisible-living-world')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'invisible-living-world' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Invisible Living World
+                </button>
+              </div>
+            )}
+
             {/* Dynamic Quiz Frame */}
             <div className="max-w-2xl mx-auto">
               <Quiz
-                key={`${preparingFor}_${qbSubject}_${bioChapter10}_${mathsChapter8}`}
+                key={`${preparingFor}_${qbSubject}_${bioChapter10}_${mathsChapter8}_${scienceChapter8}`}
                 initialGrade={preparingFor === '8th' ? '8th' : preparingFor === '9th' ? '9th' : preparingFor === '10th' ? '10th' : 'jee'}
                 customQuestions={
                   preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'square-and-cube'
                     ? MATHS8SC_SELF_ASSESSMENT
                     : preparingFor === '8th' && qbSubject === 'maths'
                     ? MATHS8_SELF_ASSESSMENT
+                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world'
+                    ? SCIENCE8IW_SELF_ASSESSMENT
                     : preparingFor === '8th' && qbSubject === 'science'
                     ? SCIENCE8_SELF_ASSESSMENT
                     : preparingFor === '8th'
@@ -6943,8 +7054,8 @@ export default function App() {
                     : COMPETITION_SELF_ASSESSMENT
                 }
                 subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : 'Biology Self-Assessment') : undefined}
-                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? 'Ready to test your understanding of scientific inquiry?' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
-                durationSeconds={preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? 1800 : undefined}
+                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
+                durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? 1800 : undefined}
                 isLightMode={isLightMode}
               />
             </div>
