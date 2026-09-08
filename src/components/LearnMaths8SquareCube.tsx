@@ -243,7 +243,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <InfoCard title="Core Definition" icon={Hash} isLightMode={isLightMode}>
                 <p><b>Perfect square:</b> a number obtained by multiplying a whole number by itself. For example, 6 x 6 = 36, so 36 is a perfect square.</p>
-                <p>A perfect square is also called a "square number", since it can always be arranged as a square-shaped grid of dots -- side length n gives exactly n x n = n^2 dots.</p>
+                <p>A perfect square is also called a "square number", since it can always be arranged as a square-shaped grid of dots -- side length n gives exactly n x n = n² dots.</p>
               </InfoCard>
 
               <DiagramCard caption="A 4 x 4 grid of dots -- 4 rows of 4 dots each -- shows exactly why 4 squared equals 16" isLightMode={isLightMode}>
@@ -253,14 +253,14 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                       <circle key={`${row}-${col}`} cx={40 + col * 55} cy={30 + row * 55} r="9" fill="#22d3ee" />
                     ))
                   )}
-                  <text x="120" y="225" textAnchor="middle" fontSize="14" fontWeight="800" fill={textMain}>4 x 4 = 16 dots, so 4^2 = 16</text>
+                  <text x="120" y="225" textAnchor="middle" fontSize="14" fontWeight="800" fill={textMain}>4 x 4 = 16 dots, so 4² = 16</text>
                 </svg>
               </DiagramCard>
 
               <SectionHeading>Squares of 1 to 20</SectionHeading>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-                  <FactRow key={n} label={`${n}^2`} isLightMode={isLightMode}>{n * n}</FactRow>
+                  <FactRow key={n} label={`${n}²`} isLightMode={isLightMode}>{n * n}</FactRow>
                 ))}
               </div>
 
@@ -272,7 +272,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                 <FactRow label="Property 4 (negative squares)" isLightMode={isLightMode}>The square of a negative number is always positive, since a negative times a negative gives a positive: (-6) x (-6) = 36.</FactRow>
               </div>
 
-              <FormulaBox isLightMode={isLightMode}>perfect square = whole number x itself = n^2</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>perfect square = whole number x itself = n²</FormulaBox>
 
               <SectionHeading>Worked Examples</SectionHeading>
               <ExampleQ number={1} isLightMode={isLightMode} question="Is 361 a perfect square?" answer="Yes -- 19 x 19 = 361." />
@@ -295,7 +295,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <InfoCard title="Pattern 1: Sum of Consecutive Odd Numbers" icon={TrendingUp} isLightMode={isLightMode}>
-                <p>Adding up consecutive odd numbers starting from 1 always produces a perfect square. Adding the first n odd numbers gives exactly n^2.</p>
+                <p>Adding up consecutive odd numbers starting from 1 always produces a perfect square. Adding the first n odd numbers gives exactly n².</p>
               </InfoCard>
 
               <DiagramCard caption="Each coloured L-shaped band (called a gnomon) adds the next odd number, building up bigger and bigger squares" isLightMode={isLightMode}>
@@ -309,34 +309,34 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                   <text x="50" y="215" textAnchor="middle" fontSize="13" fontWeight="800" fill="#0f172a">1</text>
                   <text x="170" y="90" textAnchor="middle" fontSize="13" fontWeight="800" fill="#0f172a">5</text>
                   <text x="110" y="150" textAnchor="middle" fontSize="13" fontWeight="800" fill="#0f172a">3</text>
-                  <text x="130" y="255" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>1 + 3 + 5 = 9 = 3^2</text>
+                  <text x="130" y="255" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>1 + 3 + 5 = 9 = 3²</text>
                 </svg>
               </DiagramCard>
 
-              <FormulaBox isLightMode={isLightMode}>1 + 3 + 5 + ... + (first n odd numbers) = n^2</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>1 + 3 + 5 + ... + (first n odd numbers) = n²</FormulaBox>
 
               <SectionHeading>Pattern 2: The Gap Between Consecutive Squares</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Rule" isLightMode={isLightMode}>Between n^2 and (n+1)^2, there are always exactly 2n numbers that are not perfect squares.</FactRow>
-                <FactRow label="Example" isLightMode={isLightMode}>Between 5^2 (25) and 6^2 (36): there are 2 x 5 = 10 numbers (26 to 35).</FactRow>
+                <FactRow label="Rule" isLightMode={isLightMode}>Between n² and (n+1)², there are always exactly 2n numbers that are not perfect squares.</FactRow>
+                <FactRow label="Example" isLightMode={isLightMode}>Between 5² (25) and 6² (36): there are 2 x 5 = 10 numbers (26 to 35).</FactRow>
                 <FactRow label="Why it matters" isLightMode={isLightMode}>The gap between consecutive perfect squares keeps growing as the numbers get bigger -- squares get "further apart" the higher you go.</FactRow>
               </div>
 
               <SectionHeading>Pattern 3: Column Patterns</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Difference of consecutive squares" isLightMode={isLightMode}>(n+1)^2 - n^2 = 2n + 1, which is always exactly the sum of the two numbers, n + (n+1).</FactRow>
-                <FactRow label="Palindromic products" isLightMode={isLightMode}>Numbers made only of 1s, when squared, form palindromes: 11^2 = 121, 111^2 = 12321, 1111^2 = 1234321.</FactRow>
+                <FactRow label="Difference of consecutive squares" isLightMode={isLightMode}>(n+1)² - n² = 2n + 1, which is always exactly the sum of the two numbers, n + (n+1).</FactRow>
+                <FactRow label="Palindromic products" isLightMode={isLightMode}>Numbers made only of 1s, when squared, form palindromes: 11² = 121, 111² = 12321, 1111² = 1234321.</FactRow>
               </div>
 
               <SectionHeading>Worked Examples</SectionHeading>
-              <ExampleQ number={1} isLightMode={isLightMode} question="Find 1+3+5+7+9+11+13+15 using the pattern." answer="There are 8 terms, so the sum is 8^2 = 64." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="How many numbers lie between 14^2 and 15^2?" answer="2 x 14 = 28 numbers." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="Find the difference between 23^2 and 22^2 without squaring either number fully." answer="Using (n+1)^2-n^2 = 2n+1 with n=22: 2(22)+1 = 45." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="What is 1111^2, using the palindrome pattern?" answer="1234321." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="A sum of consecutive odd numbers starting from 1 totals 144. How many terms were added?" answer="Since 144 = 12^2, exactly 12 consecutive odd numbers were added." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Find 1+3+5+7+9+11+13+15 using the pattern." answer="There are 8 terms, so the sum is 8² = 64." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="How many numbers lie between 14² and 15²?" answer="2 x 14 = 28 numbers." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="Find the difference between 23² and 22² without squaring either number fully." answer="Using (n+1)²-n² = 2n+1 with n=22: 2(22)+1 = 45." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="What is 1111², using the palindrome pattern?" answer="1234321." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="A sum of consecutive odd numbers starting from 1 totals 144. How many terms were added?" answer="Since 144 = 12², exactly 12 consecutive odd numbers were added." />
 
               <RememberBox title="These patterns are shortcuts, not tricks" isLightMode={isLightMode}>
-                Every pattern here can be proven with simple algebra (for example, (n+1)^2 - n^2 always expands to 2n+1) -- they aren't coincidences, so they can be trusted and reused confidently in any problem.
+                Every pattern here can be proven with simple algebra (for example, (n+1)² - n² always expands to 2n+1) -- they aren't coincidences, so they can be trusted and reused confidently in any problem.
               </RememberBox>
             </div>
           )}
@@ -349,8 +349,8 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <InfoCard title="Definition" icon={Triangle} isLightMode={isLightMode}>
-                <p><b>Pythagorean triple:</b> three positive whole numbers a, b, c such that a^2 + b^2 = c^2 -- exactly the relationship satisfied by the two legs and the hypotenuse of a right-angled triangle.</p>
-                <p>The most famous example is (3, 4, 5), since 3^2+4^2 = 9+16 = 25 = 5^2.</p>
+                <p><b>Pythagorean triple:</b> three positive whole numbers a, b, c such that a² + b² = c² -- exactly the relationship satisfied by the two legs and the hypotenuse of a right-angled triangle.</p>
+                <p>The most famous example is (3, 4, 5), since 3²+4² = 9+16 = 25 = 5².</p>
               </InfoCard>
 
               <DiagramCard caption="A 3-4-5 right triangle, with a square drawn on each side -- the two smaller squares' areas (9+16) add up to exactly the large square's area (25)" isLightMode={isLightMode}>
@@ -365,7 +365,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </DiagramCard>
 
               <SectionHeading>Generating New Triples: A Ready Formula</SectionHeading>
-              <FormulaBox isLightMode={isLightMode}>For any whole number m greater than 1: (2m, m^2 - 1, m^2 + 1) is always a Pythagorean triple</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>For any whole number m greater than 1: (2m, m² - 1, m² + 1) is always a Pythagorean triple</FormulaBox>
 
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="m = 2" isLightMode={isLightMode}>(4, 3, 5)</FactRow>
@@ -376,14 +376,14 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <SectionHeading>Worked Examples</SectionHeading>
-              <ExampleQ number={1} isLightMode={isLightMode} question="Generate the Pythagorean triple for m = 8." answer="2m=16, m^2-1=63, m^2+1=65, giving (16, 63, 65). Check: 16^2+63^2 = 256+3969 = 4225 = 65^2." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Verify whether (7, 24, 25) is a Pythagorean triple." answer="7^2+24^2 = 49+576 = 625 = 25^2. Yes, it is valid." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="A triple has 2m = 18. Find the other two numbers." answer="m=9, so m^2-1=80 and m^2+1=82, giving (18, 80, 82)." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="Is (5, 6, 8) a Pythagorean triple?" answer="5^2+6^2 = 25+36 = 61, but 8^2 = 64. Since 61 is not equal to 64, this is NOT a valid triple." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="Why does the formula always require m to be greater than 1?" answer="If m=1, then m^2-1=0, which cannot be the length of a real side of a triangle -- a valid triangle needs all three positive side lengths." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Generate the Pythagorean triple for m = 8." answer="2m=16, m²-1=63, m²+1=65, giving (16, 63, 65). Check: 16²+63² = 256+3969 = 4225 = 65²." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Verify whether (7, 24, 25) is a Pythagorean triple." answer="7²+24² = 49+576 = 625 = 25². Yes, it is valid." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="A triple has 2m = 18. Find the other two numbers." answer="m=9, so m²-1=80 and m²+1=82, giving (18, 80, 82)." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="Is (5, 6, 8) a Pythagorean triple?" answer="5²+6² = 25+36 = 61, but 8² = 64. Since 61 is not equal to 64, this is NOT a valid triple." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="Why does the formula always require m to be greater than 1?" answer="If m=1, then m²-1=0, which cannot be the length of a real side of a triangle -- a valid triangle needs all three positive side lengths." />
 
               <RememberBox title="Always verify, don't just trust the formula" isLightMode={isLightMode}>
-                Even though the (2m, m^2-1, m^2+1) formula is always correct, it's good practice to plug the numbers back into a^2+b^2=c^2 and check the arithmetic -- this catches any calculation slip made while working out m^2.
+                Even though the (2m, m²-1, m²+1) formula is always correct, it's good practice to plug the numbers back into a²+b²=c² and check the arithmetic -- this catches any calculation slip made while working out m².
               </RememberBox>
             </div>
           )}
@@ -396,7 +396,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <InfoCard title="Definition" icon={Divide} isLightMode={isLightMode}>
-                <p><b>Square root:</b> if n^2 = m, then n is called the square root of m, written as sqrt(m) or m^(1/2). For example, sqrt(49) = 7, since 7^2 = 49.</p>
+                <p><b>Square root:</b> if n² = m, then n is called the square root of m, written as sqrt(m). For example, sqrt(49) = 7, since 7² = 49.</p>
               </InfoCard>
 
               <SectionHeading>Method 1: Repeated Subtraction</SectionHeading>
@@ -432,7 +432,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                 </svg>
               </DiagramCard>
 
-              <FormulaBox isLightMode={isLightMode}>196 = 2^2 x 7^2, so sqrt(196) = 2 x 7 = 14</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>196 = 2² x 7², so sqrt(196) = 2 x 7 = 14</FormulaBox>
 
               <SectionHeading>Smallest Multiplier / Divisor for a Perfect Square</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
@@ -442,10 +442,10 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <SectionHeading>Worked Examples</SectionHeading>
               <ExampleQ number={1} isLightMode={isLightMode} question="Find sqrt(81) using repeated subtraction." answer="81-1=80, 80-3=77, 77-5=72, 72-7=65, 65-9=56, 56-11=45, 45-13=32, 32-15=17, 17-17=0. Exactly 9 subtractions, so sqrt(81)=9." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Find sqrt(324) using prime factorization." answer="324 = 2^2 x 3^4 = (2x2) x (3x3) x (3x3). sqrt(324) = 2 x 3 x 3 = 18." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="What is the smallest number to multiply 48 by to make it a perfect square?" answer="48 = 2^4 x 3. The 3 is unpaired, so multiply by 3 to get 144 = 12^2." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="What is the smallest number to divide 300 by to make it a perfect square?" answer="300 = 2^2 x 3 x 5^2. The 3 is unpaired, so dividing by 3 gives 100 = 10^2." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="Is 288 a perfect square?" answer="288 = 2^5 x 3^2. The exponent of 2 is 5 (odd), so 288 is not a perfect square." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Find sqrt(324) using prime factorization." answer="324 = 2² x 3⁴ = (2x2) x (3x3) x (3x3). sqrt(324) = 2 x 3 x 3 = 18." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="What is the smallest number to multiply 48 by to make it a perfect square?" answer="48 = 2⁴ x 3. The 3 is unpaired, so multiply by 3 to get 144 = 12²." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="What is the smallest number to divide 300 by to make it a perfect square?" answer="300 = 2² x 3 x 5². The 3 is unpaired, so dividing by 3 gives 100 = 10²." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="Is 288 a perfect square?" answer="288 = 2⁵ x 3². The exponent of 2 is 5 (odd), so 288 is not a perfect square." />
             </div>
           )}
 
@@ -471,7 +471,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <SectionHeading>Step-by-Step: sqrt(7744)</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
-                <FactRow label="Step 1" isLightMode={isLightMode}>First pair is 77. Largest digit d with d^2 &lt;= 77 is 8 (since 8^2=64). Quotient so far: 8. Remainder: 77-64=13.</FactRow>
+                <FactRow label="Step 1" isLightMode={isLightMode}>First pair is 77. Largest digit d with d² &lt;= 77 is 8 (since 8²=64). Quotient so far: 8. Remainder: 77-64=13.</FactRow>
                 <FactRow label="Step 2" isLightMode={isLightMode}>Bring down the next pair (44): new number is 1344. Double the quotient (8x2=16). Find digit x so that (160+x) x x &lt;= 1344. Testing x=8: 168x8=1344, an exact match.</FactRow>
                 <FactRow label="Result" isLightMode={isLightMode}>Quotient becomes 88, remainder 0, so sqrt(7744) = 88.</FactRow>
               </div>
@@ -489,9 +489,9 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <SectionHeading>Worked Examples</SectionHeading>
-              <ExampleQ number={1} isLightMode={isLightMode} question="Find sqrt(1225) using long division." answer="Pairing 12|25: first digit 3 (3^2=9, remainder 3); bring down 25 to get 325; doubling 3 gives 6, and 65x5=325 exactly. sqrt(1225) = 35." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Find sqrt(1225) using long division." answer="Pairing 12|25: first digit 3 (3²=9, remainder 3); bring down 25 to get 325; doubling 3 gives 6, and 65x5=325 exactly. sqrt(1225) = 35." />
               <ExampleQ number={2} isLightMode={isLightMode} question="Find sqrt(12.25)." answer="Pairing 12|.25: quotient works out to 3.5, and 3.5 x 3.5 = 12.25." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="Estimate sqrt(55) between two whole numbers." answer="7^2=49 and 8^2=64. Since 55 lies between them and is closer to 49, sqrt(55) is approximately 7.4." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="Estimate sqrt(55) between two whole numbers." answer="7²=49 and 8²=64. Since 55 lies between them and is closer to 49, sqrt(55) is approximately 7.4." />
               <ExampleQ number={4} isLightMode={isLightMode} question="A square-shaped hall has area 9801 sq m. Find its side using long division." answer="sqrt(9801) = 99 m (99 x 99 = 9801)." />
               <ExampleQ number={5} isLightMode={isLightMode} question="How many digits will the square root of a 6-digit perfect square have?" answer="Pairing 6 digits from the right gives exactly 3 pairs, so the square root has exactly 3 digits." />
 
@@ -510,10 +510,10 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <InfoCard title="Core Definition" icon={Box} isLightMode={isLightMode}>
                 <p><b>Perfect cube:</b> a number obtained by multiplying a whole number by itself three times. For example, 5 x 5 x 5 = 125, so 125 is a perfect cube.</p>
-                <p>A perfect cube can always be built as a cube-shaped stack of unit cubes -- an edge of length n gives exactly n x n x n = n^3 small cubes.</p>
+                <p>A perfect cube can always be built as a cube-shaped stack of unit cubes -- an edge of length n gives exactly n x n x n = n³ small cubes.</p>
               </InfoCard>
 
-              <DiagramCard caption="A simple cube outline -- a solid with edge length 's' has volume s x s x s = s^3" isLightMode={isLightMode}>
+              <DiagramCard caption="A simple cube outline -- a solid with edge length 's' has volume s x s x s = s³" isLightMode={isLightMode}>
                 <svg viewBox="0 0 260 220" className="w-full h-auto">
                   <polygon points="60,160 160,160 160,60 60,60" fill="none" stroke={strokeMain} strokeWidth="2.5" />
                   <polygon points="60,60 110,20 210,20 160,60" fill="none" stroke={strokeMain} strokeWidth="2.5" />
@@ -521,33 +521,33 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                   <text x="35" y="115" fontSize="14" fontWeight="800" fill="#22d3ee">s</text>
                   <text x="105" y="45" fontSize="14" fontWeight="800" fill="#fbbf24">s</text>
                   <text x="225" y="90" fontSize="14" fontWeight="800" fill="#f87171">s</text>
-                  <text x="130" y="200" textAnchor="middle" fontSize="14" fontWeight="800" fill={textMain}>Volume = s^3</text>
+                  <text x="130" y="200" textAnchor="middle" fontSize="14" fontWeight="800" fill={textMain}>Volume = s³</text>
                 </svg>
               </DiagramCard>
 
               <SectionHeading>Cubes of 1 to 15</SectionHeading>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map(n => (
-                  <FactRow key={n} label={`${n}^3`} isLightMode={isLightMode}>{n * n * n}</FactRow>
+                  <FactRow key={n} label={`${n}³`} isLightMode={isLightMode}>{n * n * n}</FactRow>
                 ))}
               </div>
 
               <SectionHeading>Key Properties</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
                 <FactRow label="Property 1 (odd/even)" isLightMode={isLightMode}>The cube of an odd number is always odd, and the cube of an even number is always even.</FactRow>
-                <FactRow label="Property 2 (negative cubes)" isLightMode={isLightMode}>The cube of a negative number is always negative: (-4)^3 = -64. This is different from squaring, where negatives always turn positive.</FactRow>
+                <FactRow label="Property 2 (negative cubes)" isLightMode={isLightMode}>The cube of a negative number is always negative: (-4)³ = -64. This is different from squaring, where negatives always turn positive.</FactRow>
                 <FactRow label="Property 3 (last digit)" isLightMode={isLightMode}>Unlike squares, EVERY digit from 0 to 9 is a valid last digit for some perfect cube -- there is no forbidden last digit for cubes.</FactRow>
                 <FactRow label="Property 4 (trailing zeroes)" isLightMode={isLightMode}>A perfect cube's trailing zero count is always a multiple of 3 (0, 3, 6, 9, ...).</FactRow>
               </div>
 
-              <FormulaBox isLightMode={isLightMode}>perfect cube = whole number x itself x itself = n^3</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>perfect cube = whole number x itself x itself = n³</FormulaBox>
 
               <SectionHeading>Worked Examples</SectionHeading>
               <ExampleQ number={1} isLightMode={isLightMode} question="Is 512 a perfect cube?" answer="Yes -- 8 x 8 x 8 = 512." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Find the cube of -6." answer="(-6)^3 = -216, since a negative number cubed stays negative." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Find the cube of -6." answer="(-6)³ = -216, since a negative number cubed stays negative." />
               <ExampleQ number={3} isLightMode={isLightMode} question="A perfect cube ends in exactly 4 zeroes. Is this possible?" answer="No -- a perfect cube's trailing zero count must be a multiple of 3, and 4 is not a multiple of 3." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="Which digit can never be the last digit of a perfect cube?" answer="None -- every digit 0 through 9 genuinely occurs as the last digit of some perfect cube (for example, 12^3=1728 ends in 8, and 18^3=5832 ends in 2)." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="Is 7^3 odd or even?" answer="Odd, since 7 is odd and an odd number cubed always stays odd (7^3=343)." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="Which digit can never be the last digit of a perfect cube?" answer="None -- every digit 0 through 9 genuinely occurs as the last digit of some perfect cube (for example, 12³=1728 ends in 8, and 18³=5832 ends in 2)." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="Is 7³ odd or even?" answer="Odd, since 7 is odd and an odd number cubed always stays odd (7³=343)." />
 
               <RememberBox title="Cubes and squares are not the same rules" isLightMode={isLightMode}>
                 It's tempting to assume cube rules mirror square rules, but they don't always -- negative numbers stay negative when cubed (not squares), and every last digit is possible for cubes (unlike the restricted list for squares). Always think about which rule applies to which operation.
@@ -563,10 +563,10 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <InfoCard title="Pattern 1: Sum of Consecutive Odd Numbers" icon={Layers} isLightMode={isLightMode}>
-                <p>Every perfect cube n^3 can be written as the sum of exactly n consecutive odd numbers, starting from the odd number (n^2 - n + 1).</p>
+                <p>Every perfect cube n³ can be written as the sum of exactly n consecutive odd numbers, starting from the odd number (n² - n + 1).</p>
               </InfoCard>
 
-              <DiagramCard caption="3^3 as a sum of 3 consecutive odd numbers: 7 + 9 + 11 = 27" isLightMode={isLightMode}>
+              <DiagramCard caption="3³ as a sum of 3 consecutive odd numbers: 7 + 9 + 11 = 27" isLightMode={isLightMode}>
                 <svg viewBox="0 0 260 100" className="w-full h-auto">
                   <rect x="20" y="30" width="60" height="40" fill="#22d3ee" opacity="0.8" rx="6" />
                   <rect x="100" y="30" width="60" height="40" fill="#fbbf24" opacity="0.8" rx="6" />
@@ -574,7 +574,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                   <text x="50" y="55" textAnchor="middle" fontSize="15" fontWeight="800" fill="#0f172a">7</text>
                   <text x="130" y="55" textAnchor="middle" fontSize="15" fontWeight="800" fill="#0f172a">9</text>
                   <text x="210" y="55" textAnchor="middle" fontSize="15" fontWeight="800" fill="#0f172a">11</text>
-                  <text x="130" y="90" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>7 + 9 + 11 = 27 = 3^3</text>
+                  <text x="130" y="90" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>7 + 9 + 11 = 27 = 3³</text>
                 </svg>
               </DiagramCard>
 
@@ -593,11 +593,11 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </RememberBox>
 
               <SectionHeading>Worked Examples</SectionHeading>
-              <ExampleQ number={1} isLightMode={isLightMode} question="Express 6^3 as a sum of consecutive odd numbers." answer="First term = 6^2-6+1 = 31. The 6 terms are 31,33,35,37,39,41, summing to 216 = 6^3." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Without cubing, find the last digit of 43^3." answer="43 ends in 3, and 3 maps to 7, so 43^3 ends in 7." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="Without cubing, find the last digit of 58^3." answer="58 ends in 8, and 8 maps to 2, so 58^3 ends in 2." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="A perfect cube ends in 5. What must its cube root's last digit be?" answer="5, since 5 maps only to itself in the pairing (5^3=125, ending in 5)." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="How many consecutive odd numbers, and starting where, are needed to build 5^3?" answer="5 terms, starting at 5^2-5+1=21: 21+23+25+27+29=125=5^3." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Express 6³ as a sum of consecutive odd numbers." answer="First term = 6²-6+1 = 31. The 6 terms are 31,33,35,37,39,41, summing to 216 = 6³." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Without cubing, find the last digit of 43³." answer="43 ends in 3, and 3 maps to 7, so 43³ ends in 7." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="Without cubing, find the last digit of 58³." answer="58 ends in 8, and 8 maps to 2, so 58³ ends in 2." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="A perfect cube ends in 5. What must its cube root's last digit be?" answer="5, since 5 maps only to itself in the pairing (5³=125, ending in 5)." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="How many consecutive odd numbers, and starting where, are needed to build 5³?" answer="5 terms, starting at 5²-5+1=21: 21+23+25+27+29=125=5³." />
             </div>
           )}
 
@@ -609,7 +609,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <InfoCard title="Definition" icon={Layers} isLightMode={isLightMode}>
-                <p><b>Cube root:</b> if n^3 = m, then n is called the cube root of m, written as cbrt(m) or m^(1/3). For example, cbrt(125) = 5, since 5^3 = 125.</p>
+                <p><b>Cube root:</b> if n³ = m, then n is called the cube root of m, written as cbrt(m). For example, cbrt(125) = 5, since 5³ = 125.</p>
               </InfoCard>
 
               <SectionHeading>Method: Prime Factorization</SectionHeading>
@@ -627,12 +627,12 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                   <line x1="230" y1="103" x2="170" y2="145" stroke={strokeMain} strokeWidth="1.5" />
                   <line x1="230" y1="103" x2="290" y2="145" stroke={strokeMain} strokeWidth="1.5" />
                   <text x="170" y="160" textAnchor="middle" fontSize="15" fontWeight="800" fill="#fbbf24">2</text>
-                  <text x="290" y="160" textAnchor="middle" fontSize="15" fontWeight="800" fill={textMain}>432 = 2^4 x 3^3</text>
-                  <text x="160" y="200" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>1728 = 2^6 x 3^3</text>
+                  <text x="290" y="160" textAnchor="middle" fontSize="15" fontWeight="800" fill={textMain}>432 = 2⁴ x 3³</text>
+                  <text x="160" y="200" textAnchor="middle" fontSize="13" fontWeight="800" fill={textMain}>1728 = 2⁶ x 3³</text>
                 </svg>
               </DiagramCard>
 
-              <FormulaBox isLightMode={isLightMode}>1728 = 2^6 x 3^3 = (2x2x2) x (2x2x2) x (3x3x3), so cbrt(1728) = 2 x 2 x 3 = 12</FormulaBox>
+              <FormulaBox isLightMode={isLightMode}>1728 = 2⁶ x 3³ = (2x2x2) x (2x2x2) x (3x3x3), so cbrt(1728) = 2 x 2 x 3 = 12</FormulaBox>
 
               <SectionHeading>Smallest Multiplier / Divisor for a Perfect Cube</SectionHeading>
               <div className="grid grid-cols-1 gap-2.5">
@@ -641,11 +641,11 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               </div>
 
               <SectionHeading>Worked Examples</SectionHeading>
-              <ExampleQ number={1} isLightMode={isLightMode} question="Find cbrt(2197) using prime factorization." answer="2197 = 13^3, so cbrt(2197) = 13." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Find cbrt(5832) using prime factorization." answer="5832 = 2^3 x 3^6 = (2x3^2)^3 = 18^3, so cbrt(5832) = 18." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="Is 250 a perfect cube? If not, find the smallest multiplier to fix it." answer="250 = 2 x 5^3. The exponent of 2 is 1, needing 2 more, so multiply by 2^2=4 to get 1000=10^3." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="Find the smallest number to divide 128 by to make it a perfect cube." answer="128 = 2^7. The largest multiple of 3 not exceeding 7 is 6, so divide by 2^1=2 to get 64=2^6=4^3." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="A storage cube has volume 3375 cubic cm. Find its edge length." answer="3375 = 3^3 x 5^3, so cbrt(3375) = 3 x 5 = 15 cm." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Find cbrt(2197) using prime factorization." answer="2197 = 13³, so cbrt(2197) = 13." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Find cbrt(5832) using prime factorization." answer="5832 = 2³ x 3⁶ = (2x3²)³ = 18³, so cbrt(5832) = 18." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="Is 250 a perfect cube? If not, find the smallest multiplier to fix it." answer="250 = 2 x 5³. The exponent of 2 is 1, needing 2 more, so multiply by 2²=4 to get 1000=10³." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="Find the smallest number to divide 128 by to make it a perfect cube." answer="128 = 2⁷. The largest multiple of 3 not exceeding 7 is 6, so divide by 2¹=2 to get 64=2⁶=4³." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="A storage cube has volume 3375 cubic cm. Find its edge length." answer="3375 = 3³ x 5³, so cbrt(3375) = 3 x 5 = 15 cm." />
 
               <RememberBox title="Threes for cubes, twos for squares" isLightMode={isLightMode}>
                 The single biggest mix-up between these two topics: square-root factorization groups primes in PAIRS (checking for even exponents), while cube-root factorization groups them in TRIPLES (checking for exponents that are multiples of 3). Always double-check which one a question is actually asking for.
@@ -666,7 +666,7 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                 <FactRow label="Perfect cube" isLightMode={isLightMode}>a number obtained by multiplying a whole number by itself three times, e.g. 125 = 5x5x5.</FactRow>
                 <FactRow label="Square root" isLightMode={isLightMode}>the number that, squared, gives the original number.</FactRow>
                 <FactRow label="Cube root" isLightMode={isLightMode}>the number that, cubed, gives the original number.</FactRow>
-                <FactRow label="Pythagorean triple" isLightMode={isLightMode}>three whole numbers a, b, c satisfying a^2+b^2=c^2.</FactRow>
+                <FactRow label="Pythagorean triple" isLightMode={isLightMode}>three whole numbers a, b, c satisfying a²+b²=c².</FactRow>
                 <FactRow label="Gnomon" isLightMode={isLightMode}>the L-shaped band added to a square to make the next bigger square -- always the next odd number.</FactRow>
                 <FactRow label="Prime factorization" isLightMode={isLightMode}>writing a number as a product of only prime numbers.</FactRow>
                 <FactRow label="Repeated subtraction" isLightMode={isLightMode}>finding a square root by subtracting successive odd numbers until reaching zero.</FactRow>
@@ -676,18 +676,18 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               <SectionHeading>Mind Map</SectionHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <MindMapBranch icon={Hash} title="Perfect Squares" color="cyan" isLightMode={isLightMode} points={[
-                  "n x n = n^2",
+                  "n x n = n²",
                   "Last digit only 0,1,4,5,6,9",
                   "Even trailing zero count",
                 ]} />
                 <MindMapBranch icon={TrendingUp} title="Patterns" color="amber" isLightMode={isLightMode} points={[
-                  "Sum of first n odd numbers = n^2",
-                  "2n numbers between n^2 and (n+1)^2",
-                  "(n+1)^2 - n^2 = 2n+1",
+                  "Sum of first n odd numbers = n²",
+                  "2n numbers between n² and (n+1)²",
+                  "(n+1)² - n² = 2n+1",
                 ]} />
                 <MindMapBranch icon={Triangle} title="Pythagorean Triples" color="sky" isLightMode={isLightMode} points={[
-                  "a^2+b^2=c^2",
-                  "Formula: (2m, m^2-1, m^2+1)",
+                  "a²+b²=c²",
+                  "Formula: (2m, m²-1, m²+1)",
                   "Always verify by direct substitution",
                 ]} />
                 <MindMapBranch icon={Divide} title="Square Roots" color="rose" isLightMode={isLightMode} points={[
@@ -696,14 +696,14 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
                   "Long division: works for decimals too",
                 ]} />
                 <MindMapBranch icon={Box} title="Perfect Cubes" color="indigo" isLightMode={isLightMode} points={[
-                  "n x n x n = n^3",
+                  "n x n x n = n³",
                   "Every digit 0-9 possible as last digit",
                   "Trailing zero count a multiple of 3",
                 ]} />
                 <MindMapBranch icon={Layers} title="Cube Roots" color="emerald" isLightMode={isLightMode} points={[
                   "Group primes into triples, not pairs",
                   "Fixed last-digit pairing (2<->8, 3<->7)",
-                  "n^3 = sum of n consecutive odd numbers",
+                  "n³ = sum of n consecutive odd numbers",
                 ]} />
               </div>
 
@@ -724,15 +724,15 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <InfoCard title="Perfect Sixth Powers" icon={GitBranch} isLightMode={isLightMode}>
                 <p>A number that is BOTH a perfect square and a perfect cube at the same time must be a perfect sixth power -- every prime in its factorization needs an exponent that is a multiple of 6 (since 6 is the smallest number divisible by both 2 and 3).</p>
-                <p>Examples: 1 (1^6), 64 (2^6, and also 8^2 = 4^3), 729 (3^6, and also 27^2 = 9^3).</p>
+                <p>Examples: 1 (1⁶), 64 (2⁶, and also 8² = 4³), 729 (3⁶, and also 27² = 9³).</p>
               </InfoCard>
 
               <InfoCard title="Sum of Cubes Equals Square of the Sum" icon={Layers} isLightMode={isLightMode}>
-                <p>A striking identity: the sum of the first n cubes always equals the SQUARE of the sum of the first n natural numbers. For n=4: 1^3+2^3+3^3+4^3 = 1+8+27+64 = 100, and (1+2+3+4)^2 = 10^2 = 100 -- exactly the same.</p>
+                <p>A striking identity: the sum of the first n cubes always equals the SQUARE of the sum of the first n natural numbers. For n=4: 1³+2³+3³+4³ = 1+8+27+64 = 100, and (1+2+3+4)² = 10² = 100 -- exactly the same.</p>
               </InfoCard>
 
               <InfoCard title="Scaling Rules for Area and Volume" icon={Box} isLightMode={isLightMode}>
-                <p>If every side of a square is scaled by a factor k, its area scales by k^2. If every edge of a cube is scaled by k, its volume scales by k^3. This is why doubling a cube's edge gives 8 times the volume, not 2 times.</p>
+                <p>If every side of a square is scaled by a factor k, its area scales by k². If every edge of a cube is scaled by k, its volume scales by k³. This is why doubling a cube's edge gives 8 times the volume, not 2 times.</p>
               </InfoCard>
 
               <div className="grid grid-cols-1 gap-2.5">
@@ -746,12 +746,12 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
               <SectionHeading>Solved Competitive Questions</SectionHeading>
 
-              <ExampleQ number={1} isLightMode={isLightMode} question="Find the smallest number that is both a perfect square and a perfect cube, greater than 1." answer="It must be a perfect sixth power. The smallest one greater than 1 is 2^6 = 64." />
-              <ExampleQ number={2} isLightMode={isLightMode} question="Verify the identity 1^3+2^3+3^3 = (1+2+3)^2." answer="1+8+27 = 36, and (1+2+3)^2 = 6^2 = 36. They match." />
-              <ExampleQ number={3} isLightMode={isLightMode} question="A cube's edge is tripled. By what factor does its volume increase?" answer="3^3 = 27 times." />
-              <ExampleQ number={4} isLightMode={isLightMode} question="Using the digit-grouping speed trick, find cbrt(42875) mentally." answer="Grouping as 42|875: last digit of 875 is 5, mapping to cube root last digit 5. Left group 42 lies between 3^3=27 and 4^3=64, so first digit is 3. Combined: 35. Check: 35^3=42875." />
-              <ExampleQ number={5} isLightMode={isLightMode} question="Find a Pythagorean triple where the hypotenuse is 25, other than (7,24,25)." answer="Using (2m,m^2-1,m^2+1) with m=... testing m=12: 2m=24 -- not matching hypotenuse form directly; instead scale (3,4,5) by 5: (15,20,25). Check: 15^2+20^2=225+400=625=25^2." />
-              <ExampleQ number={6} isLightMode={isLightMode} question="How many perfect sixth powers lie between 1 and 5000?" answer="1^6=1, 2^6=64, 3^6=729, 4^6=4096 all lie under 5000; 5^6=15625 does not. So there are 4." />
+              <ExampleQ number={1} isLightMode={isLightMode} question="Find the smallest number that is both a perfect square and a perfect cube, greater than 1." answer="It must be a perfect sixth power. The smallest one greater than 1 is 2⁶ = 64." />
+              <ExampleQ number={2} isLightMode={isLightMode} question="Verify the identity 1³+2³+3³ = (1+2+3)²." answer="1+8+27 = 36, and (1+2+3)² = 6² = 36. They match." />
+              <ExampleQ number={3} isLightMode={isLightMode} question="A cube's edge is tripled. By what factor does its volume increase?" answer="3³ = 27 times." />
+              <ExampleQ number={4} isLightMode={isLightMode} question="Using the digit-grouping speed trick, find cbrt(42875) mentally." answer="Grouping as 42|875: last digit of 875 is 5, mapping to cube root last digit 5. Left group 42 lies between 3³=27 and 4³=64, so first digit is 3. Combined: 35. Check: 35³=42875." />
+              <ExampleQ number={5} isLightMode={isLightMode} question="Find a Pythagorean triple where the hypotenuse is 25, other than (7,24,25)." answer="Using (2m,m²-1,m²+1) with m=... testing m=12: 2m=24 -- not matching hypotenuse form directly; instead scale (3,4,5) by 5: (15,20,25). Check: 15²+20²=225+400=625=25²." />
+              <ExampleQ number={6} isLightMode={isLightMode} question="How many perfect sixth powers lie between 1 and 5000?" answer="1⁶=1, 2⁶=64, 3⁶=729, 4⁶=4096 all lie under 5000; 5⁶=15625 does not. So there are 4." />
             </div>
           )}
 
