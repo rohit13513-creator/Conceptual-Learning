@@ -19,6 +19,7 @@ import { LearnScience8 } from './components/LearnScience8';
 import { LearnScience8InvisibleWorld } from './components/LearnScience8InvisibleWorld';
 import { LearnScience8Health } from './components/LearnScience8Health';
 import { LearnScience8Matter } from './components/LearnScience8Matter';
+import { LearnScience8ElementsCompounds } from './components/LearnScience8ElementsCompounds';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
 import { Revision } from './components/Revision';
@@ -147,6 +148,15 @@ import {
   SCIENCE8M_COMPETENCY,
   SCIENCE8M_SELF_ASSESSMENT,
 } from './data/science8Matter';
+import {
+  SCIENCE8EC_SOLVED_QUESTIONS,
+  SCIENCE8EC_MCQS,
+  SCIENCE8EC_VERY_SHORT,
+  SCIENCE8EC_SHORT,
+  SCIENCE8EC_LONG,
+  SCIENCE8EC_COMPETENCY,
+  SCIENCE8EC_SELF_ASSESSMENT,
+} from './data/science8ElementsCompounds';
 import {
   BIOLOGY10_NCERT_SOLVED,
   BIOLOGY10_MCQS,
@@ -2992,8 +3002,8 @@ export default function App() {
   const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination'>('life-processes');
   // Class 8 Maths now has two chapters -- this tracks which one is active whenever qbSubject === 'maths'.
   const [mathsChapter8, setMathsChapter8] = useState<'quadrilaterals' | 'square-and-cube'>('quadrilaterals');
-  // Class 8 Science now has four chapters -- this tracks which one is active whenever qbSubject === 'science'.
-  const [scienceChapter8, setScienceChapter8] = useState<'investigative-world' | 'invisible-living-world' | 'health' | 'matter'>('investigative-world');
+  // Class 8 Science now has five chapters -- this tracks which one is active whenever qbSubject === 'science'.
+  const [scienceChapter8, setScienceChapter8] = useState<'investigative-world' | 'invisible-living-world' | 'health' | 'matter' | 'elements-compounds'>('investigative-world');
 
   // "Start Studying" subject picker: which class the picker is showing subjects for. Locked
   // students always see their own registered class; exempt (admin/test) accounts pick one first.
@@ -3075,6 +3085,16 @@ export default function App() {
         long: MATHS8_LONG,
         assertion: MATHS8_ASSERTION_REASON,
         competency: MATHS8_COMPETENCY,
+      };
+    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'elements-compounds') {
+      return {
+        ncert: SCIENCE8EC_SOLVED_QUESTIONS,
+        mcqs: SCIENCE8EC_MCQS,
+        veryshort: SCIENCE8EC_VERY_SHORT,
+        short: SCIENCE8EC_SHORT,
+        long: SCIENCE8EC_LONG,
+        assertion: [] as typeof MATHS8_ASSERTION_REASON,
+        competency: SCIENCE8EC_COMPETENCY,
       };
     } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'matter') {
       return {
@@ -5817,6 +5837,16 @@ export default function App() {
             >
               Particulate Matter
             </button>
+            <button
+              onClick={() => setScienceChapter8('elements-compounds')}
+              className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                scienceChapter8 === 'elements-compounds'
+                  ? isLightMode ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-slate-950'
+                  : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Elements & Compounds
+            </button>
           </div>
           {scienceChapter8 === 'invisible-living-world' ? (
             <LearnScience8InvisibleWorld
@@ -5832,6 +5862,12 @@ export default function App() {
             />
           ) : scienceChapter8 === 'matter' ? (
             <LearnScience8Matter
+              isLightMode={isLightMode}
+              onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }}
+              onGoToSelfAssessment={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); }}
+            />
+          ) : scienceChapter8 === 'elements-compounds' ? (
+            <LearnScience8ElementsCompounds
               isLightMode={isLightMode}
               onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }}
               onGoToSelfAssessment={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); }}
@@ -5931,7 +5967,7 @@ export default function App() {
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
                     ? `Search & study official ${bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
-                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
+                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? 'Describing Motion Around Us' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -6010,6 +6046,12 @@ export default function App() {
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'matter' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Particulate Matter
+                </button>
+                <button
+                  onClick={() => setScienceChapter8('elements-compounds')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'elements-compounds' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Elements & Compounds
                 </button>
               </div>
             )}
@@ -6384,6 +6426,12 @@ export default function App() {
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'matter' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Particulate Matter
+                </button>
+                <button
+                  onClick={() => setScienceChapter8('elements-compounds')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'elements-compounds' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Elements & Compounds
                 </button>
               </div>
             )}
@@ -7065,7 +7113,7 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Science (Invisible Living World)' : scienceChapter8 === 'health' ? 'Science (Health)' : scienceChapter8 === 'matter' ? 'Science (Particulate Matter)' : 'Science (Investigative World)') : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Science (Invisible Living World)' : scienceChapter8 === 'health' ? 'Science (Health)' : scienceChapter8 === 'matter' ? 'Science (Particulate Matter)' : scienceChapter8 === 'elements-compounds' ? 'Science (Elements & Compounds)' : 'Science (Investigative World)') : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Class IX (Physics)' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
@@ -7136,6 +7184,12 @@ export default function App() {
                 >
                   Particulate Matter
                 </button>
+                <button
+                  onClick={() => setScienceChapter8('elements-compounds')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${scienceChapter8 === 'elements-compounds' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Elements & Compounds
+                </button>
               </div>
             )}
 
@@ -7155,6 +7209,8 @@ export default function App() {
                     ? SCIENCE8H_SELF_ASSESSMENT
                     : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'matter'
                     ? SCIENCE8M_SELF_ASSESSMENT
+                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'elements-compounds'
+                    ? SCIENCE8EC_SELF_ASSESSMENT
                     : preparingFor === '8th' && qbSubject === 'science'
                     ? SCIENCE8_SELF_ASSESSMENT
                     : preparingFor === '8th'
@@ -7166,8 +7222,8 @@ export default function App() {
                     : COMPETITION_SELF_ASSESSMENT
                 }
                 subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : 'Biology Self-Assessment') : undefined}
-                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
-                durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? 1800 : undefined}
+                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Ready to test your knowledge of Motion?' : 'Ready to test your knowledge of the Cell?') : undefined}
+                durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter' || scienceChapter8 === 'elements-compounds') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? 1800 : undefined}
                 isLightMode={isLightMode}
               />
             </div>
