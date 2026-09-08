@@ -10193,6 +10193,29 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
         return `${q.id} (${q.marks} mark${q.marks > 1 ? "s" : ""}): ${q.text}\nStep marking scheme:\n${steps}`;
       })
       .join("\n\n");
+    const maxByQuestion = new Map(questions.map((q) => [q.id, q.marks]));
+    // Only set on an "Improve Score" resubmission (see upsertRevisionSubmission) -- empty on a
+    // genuine first check, so resubmissionNote below is a no-op there.
+    const priorFloor = sub.first_attempt_score != null ? parseRevisionFeedbackForFloor(sub.first_attempt_feedback) : new Map<string, { marks: number; line: string }>();
+    // Tell the grader this is a resubmission, and exactly which questions previously lost marks,
+    // so it looks especially hard for that specific missing/wrong content in the fresh file --
+    // otherwise every "Improve Score" attempt is graded completely blind to the fact a
+    // resubmission even happened, let alone which question the student was trying to fix, and the
+    // exact same handwriting can be misread as "not attempted" a second time with nothing to steer
+    // the model away from repeating its own earlier mistake. Confirmed as a real, reported case: a
+    // student reworked and re-uploaded a specific part after being told it was "not attempted",
+    // and got back the identical verdict, because the regrade had no idea a resubmission -- or
+    // which question -- was even happening. This does not scope or limit what gets graded (unlike
+    // Homework's resubmissionNote): Revision always requires and grades the whole paper fresh
+    // every time, since the floor mechanic below already protects any question from regressing.
+    let resubmissionNote = "";
+    if (priorFloor.size > 0) {
+      const lostMarksEntries = Array.from(priorFloor.entries()).filter(([id, v]) => v.marks < (maxByQuestion.get(id) ?? 0));
+      if (lostMarksEntries.length > 0) {
+        const details = lostMarksEntries.map(([, v]) => `- ${v.line}`).join("\n");
+        resubmissionNote = `\n\nThis is an "Improve Score" resubmission: the student was already graded once on this paper and has resent their answer sheet specifically to fix questions where marks were lost. Here is exactly what they were told was wrong or missing last time:\n${details}\nThe student may well have specifically reworked exactly these parts in this new file. Before concluding any of the above still has the same issue, re-scan the ENTIRE submission -- every page -- with extra care specifically for the content described as missing or wrong above; it is very likely freshly added and easy to miss on a quick read. Still grade every question in the paper fully and fresh as normal -- this note only tells you where to look hardest, it does not limit what you grade.`;
+      }
+    }
 
     // CBSE step marking, made a real mechanic rather than a prompt instruction to hope the model
     // follows correctly: the model judges each step of the paper's own marking scheme true/false
@@ -10229,7 +10252,7 @@ For a "form equation(s) and solve" question (simultaneous equations, word proble
 When a marking-scheme step describes ONE specific method to reach a required value (e.g. "forms two equations and solves them simultaneously" to find a coefficient), but the student instead used a DIFFERENT, mathematically valid, standard method that correctly reaches that SAME required value, credit the step(s) covering that value as met -- do not withhold credit just because the student's working doesn't literally match the scheme's own described method. A real case had exactly this: a marking scheme for finding 'a' in a line y=ax+b wanted the student to form and solve two simultaneous equations from two given points, but the student instead computed the slope directly via (y2-y1)/(x2-x1) -- mathematically the exact same operation, just without writing it as two separate named equations first -- and got the correct value of 'a', yet was marked down for not using the specifically-named method. Only withhold credit for a step like this if the student's alternate method is itself flawed or actually arrives at a wrong value, never merely because it differs from the one method the scheme happened to describe. This applies just as much when the marking scheme's method is a SHORTCUT and the student instead used the general, always-valid method: a real case asked to "determine the distance" between two points sharing a y-coordinate, and the scheme required a step for noting they're parallel to the x-axis before a simpler subtraction -- a student who instead applied the full distance formula (which automatically reduces to the identical correct answer when a coordinate matches) had done nothing wrong and reached the exact right value, yet lost a mark for not separately naming the shortcut. A more general, always-correct method that reaches the right value is never worth less than a shortcut the scheme happened to prefer.
 
 ${REVISION_SUBSCRIPT_INSTRUCTION}`;
-    const prompt = `Here is the paper's own question list and step-wise marking scheme, followed by the student's submitted answers as an attached file. For each question, evaluate every numbered step in order.\n\n${questionsBlock}`;
+    const prompt = `Here is the paper's own question list and step-wise marking scheme, followed by the student's submitted answers as an attached file. For each question, evaluate every numbered step in order.\n\n${questionsBlock}${resubmissionNote}`;
 
     const gradeTool = {
       name: "submit_revision_grade",
@@ -10347,7 +10370,6 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_revision_grade");
       const parsed = toolUseBlock.input;
       const perQuestion: { questionId: string; stepResults?: { met: boolean; note: string }[] }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
-      const maxByQuestion = new Map(questions.map((q) => [q.id, q.marks]));
       let totalScore = 0;
       // Every question gets its own line, always -- not just the ones with lost marks. Students
       // repeatedly told the admin they couldn't tell why marks were deducted because full-marks
@@ -10356,9 +10378,6 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       // only when marks were actually lost) is what was explicitly asked for.
       const perQuestionOrder = questions.map((q) => q.id);
       const resultById = new Map(perQuestion.map((pq) => [pq.questionId, pq]));
-      // Only set on an "Improve Score" resubmission (see upsertRevisionSubmission) -- empty on a
-      // genuine first check, so the floor below is a no-op there.
-      const priorFloor = sub.first_attempt_score != null ? parseRevisionFeedbackForFloor(sub.first_attempt_feedback) : new Map<string, { marks: number; line: string }>();
       const feedbackLines: string[] = [];
       let idMismatchCount = 0;
       for (let qIndex = 0; qIndex < perQuestionOrder.length; qIndex++) {
