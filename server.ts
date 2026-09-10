@@ -11304,6 +11304,50 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     return res.json({ papers: result });
   });
 
+  // Lets the admin directly correct a Revision submission's score/feedback, bypassing the AI --
+  // same pattern as /api/admin/homework/manual-grade, needed for exactly the same reason: a real
+  // grading mistake (see the ratio/decimal-equivalence fix in checkRevisionSubmission's system
+  // prompt) should never require the student to spend an "Improve Score" resubmission to fix an
+  // error that was the grader's fault, not theirs -- and a resubmission would permanently lock in
+  // the wrong score as first_attempt_score anyway (see upsertRevisionSubmission), which is what
+  // the leaderboard's "highest percentage" category actually uses, so it would not even fix the
+  // number that matters. This edits the row directly instead, with no resubmission involved.
+  app.post("/api/admin/revision/manual-grade", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { submissionId, score, feedback } = req.body;
+    if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
+
+    const { data: existing } = await supabase.from("revision_submissions").select("id, revision_paper_id").eq("id", submissionId).maybeSingle();
+    if (!existing) return res.status(404).json({ error: "Submission not found." });
+
+    const { data: paper } = await supabase.from("revision_papers").select("total_marks").eq("id", existing.revision_paper_id).maybeSingle();
+    const maxMarks = paper?.total_marks ?? REVISION_TOTAL_MARKS;
+
+    const scoreNum = Number(score);
+    if (!Number.isInteger(scoreNum) || scoreNum < 0 || scoreNum > maxMarks) {
+      return res.status(400).json({ error: `Score must be a whole number from 0 to ${maxMarks}.` });
+    }
+
+    const { data: updated, error } = await supabase
+      .from("revision_submissions")
+      .update({
+        status: "checked",
+        ai_score: scoreNum,
+        ai_feedback: feedback && String(feedback).trim() ? String(feedback).trim() : null,
+      })
+      .eq("id", submissionId)
+      .select()
+      .single();
+    if (error || !updated) {
+      console.error("Revision manual grade save error:", error?.message);
+      return res.status(500).json({ error: "Failed to save the manual grade. Please try again." });
+    }
+    return res.json({
+      success: true,
+      submission: { id: updated.id, status: updated.status, aiScore: updated.ai_score, aiFeedback: updated.ai_feedback, firstAttemptScore: updated.first_attempt_score, firstAttemptFeedback: updated.first_attempt_feedback },
+    });
+  });
+
   // Full paper content (including the marking scheme/answer key) for admin review -- unlike the
   // student-facing mapRevisionPaperForStudent, this is available regardless of the paper's status,
   // since the admin isn't the one taking the test.

@@ -765,6 +765,15 @@ export default function App() {
   const [manualGradeFeedback, setManualGradeFeedback] = useState('');
   const [manualGradeSaving, setManualGradeSaving] = useState(false);
   const [manualGradeError, setManualGradeError] = useState<string | null>(null);
+  // Same manual-grading escape hatch as homework's above, for Revision submissions -- e.g. when a
+  // grading mistake (a valid alternate method, a decimal/fraction mismatch, etc.) needs a direct
+  // score correction rather than asking the student to spend an "Improve Score" resubmission to
+  // fix an error that wasn't theirs.
+  const [revisionManualGradeSub, setRevisionManualGradeSub] = useState<any | null>(null);
+  const [revisionManualGradeScore, setRevisionManualGradeScore] = useState('');
+  const [revisionManualGradeFeedback, setRevisionManualGradeFeedback] = useState('');
+  const [revisionManualGradeSaving, setRevisionManualGradeSaving] = useState(false);
+  const [revisionManualGradeError, setRevisionManualGradeError] = useState<string | null>(null);
   // Class performance / ranking report -- date range + class picked by the admin, showing every
   // student's day-by-day score (with late flags) and total across the range, highest first.
   // Assess Revision -- the admin engagement/performance report for the self-serve Revision feature.
@@ -1924,6 +1933,35 @@ export default function App() {
       setManualGradeError(err.message);
     } finally {
       setManualGradeSaving(false);
+    }
+  };
+
+  const openRevisionManualGrade = (sub: any, paper: any) => {
+    setRevisionManualGradeSub({ ...sub, totalMarks: paper.totalMarks, chapterName: paper.chapterName, subject: paper.subject });
+    setRevisionManualGradeScore(sub.aiScore != null ? String(sub.aiScore) : '');
+    setRevisionManualGradeFeedback(sub.aiFeedback || '');
+    setRevisionManualGradeError(null);
+  };
+
+  const handleSaveRevisionManualGrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !revisionManualGradeSub) return;
+    setRevisionManualGradeError(null);
+    setRevisionManualGradeSaving(true);
+    try {
+      const resp = await fetch('/api/admin/revision/manual-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+        body: JSON.stringify({ submissionId: revisionManualGradeSub.id, score: revisionManualGradeScore, feedback: revisionManualGradeFeedback }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || 'Failed to save the manual grade.');
+      setRevisionManualGradeSub(null);
+      if (revisionStudentDetail) await openRevisionStudentDetail(revisionStudentDetail.email, revisionStudentDetail.name);
+    } catch (err: any) {
+      setRevisionManualGradeError(err.message);
+    } finally {
+      setRevisionManualGradeSaving(false);
     }
   };
 
@@ -4406,6 +4444,65 @@ export default function App() {
         </div>
       )}
 
+      {revisionManualGradeSub && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !revisionManualGradeSaving && setRevisionManualGradeSub(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div>
+              <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Manual Grade</h3>
+              <p className={`text-xs font-semibold mt-0.5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{revisionStudentDetail?.name} -- {revisionManualGradeSub.subject} ({revisionManualGradeSub.chapterName})</p>
+            </div>
+            {revisionManualGradeError && (
+              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{revisionManualGradeError}</div>
+            )}
+            <form onSubmit={handleSaveRevisionManualGrade} className="space-y-3">
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Score (out of {revisionManualGradeSub.totalMarks})</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={revisionManualGradeSub.totalMarks}
+                  step={1}
+                  value={revisionManualGradeScore}
+                  onChange={(e) => setRevisionManualGradeScore(e.target.value)}
+                  required
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Feedback (optional)</label>
+                <textarea
+                  value={revisionManualGradeFeedback}
+                  onChange={(e) => setRevisionManualGradeFeedback(e.target.value)}
+                  rows={6}
+                  placeholder="Remarks for the student..."
+                  className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRevisionManualGradeSub(null)}
+                  disabled={revisionManualGradeSaving}
+                  className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={revisionManualGradeSaving}
+                  className="flex-1 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {revisionManualGradeSaving ? 'Saving...' : 'Save Grade'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {deleteConfirmSub && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !deletingSubmission && setDeleteConfirmSub(null)}>
           <div
@@ -4545,6 +4642,16 @@ export default function App() {
                           className="px-2.5 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer hover:bg-cyan-500/20 transition disabled:opacity-50"
                         >
                           {revisionAnswerSheetDownloading === p.submission.id ? 'Downloading...' : 'Answer Sheet'}
+                        </button>
+                      )}
+                      {p.submission && (
+                        <button
+                          type="button"
+                          onClick={() => openRevisionManualGrade(p.submission, p)}
+                          title="Set this submission's score and feedback yourself, bypassing the AI"
+                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                          Manual Grade
                         </button>
                       )}
                     </div>
