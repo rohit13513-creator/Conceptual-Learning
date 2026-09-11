@@ -1278,6 +1278,20 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     {!currentPaper.questions[0]?.markingPoints ? (
                       <p className={`text-xs font-semibold text-center ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Loading solution...</p>
                     ) : (
+                      // This section lists the full model answer/marking scheme for EVERY
+                      // question, with the same checkmark bullet style regardless of whether the
+                      // student's own answer matched -- it never reads or compares against their
+                      // submission. Without this note, the checkmark next to a marking point (e.g.
+                      // next to the correct option on an assertion-reason question) reads as "you
+                      // got this right", which is exactly backwards right next to a question the
+                      // student actually lost marks on -- a real student's confusion after
+                      // selecting a wrong assertion-reason option and then seeing this panel's
+                      // checkmark next to the correct one.
+                      <p className={`text-[11px] font-semibold italic ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                        This shows the full correct answer for every question, whether you got it right or not -- compare it with what you actually wrote to see where you lost marks. Your own score breakdown above already explains that.
+                      </p>
+                    )}
+                    {currentPaper.questions[0]?.markingPoints && (
                       REVISION_SECTION_ORDER.map((label) => {
                         const qs = currentPaper.questions.filter((q) => q.sectionLabel === label);
                         if (qs.length === 0) return null;
