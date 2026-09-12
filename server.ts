@@ -10088,6 +10088,30 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     revisionChapterDoneLocks.set(studentEmail, run);
     await run;
   }
+  // Only start a fresh cycle once EVERY chapter across the WHOLE syllabus (both subjects) has been
+  // completed -- resetting per-subject the moment just that one subject finishes would let its
+  // chapters repeat while the other subject's syllabus hasn't even been started yet, which defeats
+  // the entire point of "don't repeat a chapter until the full syllabus cycle is done." Shared by
+  // both markRevisionChapterDoneLocked (grading a paper) and POST /api/revision/setup (editing the
+  // syllabus), since trimming a syllabus down to exactly the chapters already completed can
+  // legitimately finish a cycle just as much as grading the last paper can -- a real student did
+  // exactly this (edited her Science syllabus down to the 3 chapters she'd already finished) and
+  // was left permanently stuck with every chapter shown "done" and no way to start a new cycle,
+  // because only the grading path used to ever run this check.
+  function computeRevisionCycleReset(
+    mathsChapters: string[], mathsCompleted: string[],
+    scienceChapters: string[], scienceCompleted: string[],
+    currentCycleNumber: number
+  ): { maths_completed_chapters: string[]; science_completed_chapters: string[]; cycle_number: number } | null {
+    const mathsDone = mathsChapters.length === 0 || mathsChapters.every((c) => mathsCompleted.includes(c));
+    const scienceDone = scienceChapters.length === 0 || scienceChapters.every((c) => scienceCompleted.includes(c));
+    if ((mathsChapters.length > 0 || scienceChapters.length > 0) && mathsDone && scienceDone) {
+      // A full cycle just finished -- the next cycle's papers should be harder than this one's,
+      // and progressively harder again each cycle after that (see generateRevisionPaper).
+      return { maths_completed_chapters: [], science_completed_chapters: [], cycle_number: (currentCycleNumber || 1) + 1 };
+    }
+    return null;
+  }
   async function markRevisionChapterDoneLocked(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", studentEmail).maybeSingle();
     if (!setup) return;
@@ -10097,23 +10121,10 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
 
     const updates: Record<string, any> = { [completedKey]: completed, updated_at: new Date().toISOString() };
 
-    // Only start a fresh cycle once EVERY chapter across the WHOLE syllabus (both subjects) has
-    // been completed -- resetting per-subject the moment just that one subject finishes would let
-    // its chapters repeat while the other subject's syllabus hasn't even been started yet, which
-    // defeats the entire point of "don't repeat a chapter until the full syllabus cycle is done."
-    const mathsChapters: string[] = setup.maths_chapters || [];
-    const scienceChapters: string[] = setup.science_chapters || [];
     const mathsCompleted: string[] = subject === "Maths" ? completed : (setup.maths_completed_chapters || []);
     const scienceCompleted: string[] = subject === "Science" ? completed : (setup.science_completed_chapters || []);
-    const mathsDone = mathsChapters.length === 0 || mathsChapters.every((c) => mathsCompleted.includes(c));
-    const scienceDone = scienceChapters.length === 0 || scienceChapters.every((c) => scienceCompleted.includes(c));
-    if ((mathsChapters.length > 0 || scienceChapters.length > 0) && mathsDone && scienceDone) {
-      updates.maths_completed_chapters = [];
-      updates.science_completed_chapters = [];
-      // A full cycle just finished -- the next cycle's papers should be harder than this one's,
-      // and progressively harder again each cycle after that (see generateRevisionPaper).
-      updates.cycle_number = (setup.cycle_number || 1) + 1;
-    }
+    const cycleReset = computeRevisionCycleReset(setup.maths_chapters || [], mathsCompleted, setup.science_chapters || [], scienceCompleted, setup.cycle_number || 1);
+    if (cycleReset) Object.assign(updates, cycleReset);
 
     await supabase.from("revision_setups").update(updates).eq("student_email", studentEmail);
   }
@@ -10706,6 +10717,17 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       const finalChapters: string[] = update[`${subj}_chapters`] || [];
       update[`${subj}_completed_chapters`] = priorCompleted.filter((c) => finalChapters.includes(c));
     }
+
+    // Trimming a syllabus down to exactly the chapters already completed (e.g. removing a chapter
+    // that was never actually finished) can complete the whole-syllabus cycle right here, on a
+    // syllabus save, not just when a paper is graded -- see computeRevisionCycleReset for the real
+    // student this happened to.
+    const cycleReset = computeRevisionCycleReset(
+      update.maths_chapters || [], update.maths_completed_chapters || [],
+      update.science_chapters || [], update.science_completed_chapters || [],
+      existing?.cycle_number || 1
+    );
+    if (cycleReset) Object.assign(update, cycleReset);
 
     if (body.fallbackClass) update.fallback_class = String(body.fallbackClass);
 
