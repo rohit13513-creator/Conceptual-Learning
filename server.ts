@@ -435,6 +435,31 @@ const REVISION_TEMP_PREFIX = "revision-temp";
 const REVISION_REFERENCE_PREFIX = "revision-reference-books";
 const REVISION_REFERENCE_TEMP_PREFIX = "revision-reference-temp";
 
+// Single source of truth for every Revision subject -- added to let "Advanced Maths" (a distinct,
+// separately-tracked optional CBSE module, Class 9 only) join the original two subjects without
+// re-hardcoding a two-way branch at every call site. Adding a future subject (e.g. "Advanced
+// Science") means one more entry here plus matching revision_setups columns plus uploaded
+// reference PDFs -- no other call site listed below should need to change again.
+interface RevisionSubjectConfig {
+  key: "maths" | "science" | "advancedMaths";       // camelCase: JSON/multer field prefixes, frontend state keys
+  dbPrefix: "maths" | "science" | "advanced_maths";  // snake_case: revision_setups column prefix
+  label: "Maths" | "Science" | "Advanced Maths";     // display label; stored verbatim in revision_papers.subject
+  classKeys: readonly string[] | null;               // null = every class; else restrict to these classKeys
+}
+const REVISION_SUBJECTS: readonly RevisionSubjectConfig[] = [
+  { key: "maths", dbPrefix: "maths", label: "Maths", classKeys: null },
+  { key: "science", dbPrefix: "science", label: "Science", classKeys: null },
+  { key: "advancedMaths", dbPrefix: "advanced_maths", label: "Advanced Maths", classKeys: ["9th"] },
+] as const;
+function getRevisionSubjectByLabel(label: string): RevisionSubjectConfig | undefined {
+  return REVISION_SUBJECTS.find((s) => s.label === label);
+}
+const subjectChaptersCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_chapters`;
+const subjectCompletedCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_completed_chapters`;
+const subjectExamDateCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_exam_date`;
+const subjectSyllabusTextCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_syllabus_text`;
+const subjectSyllabusImageCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_syllabus_image_path`;
+
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
 // deletes the temp copies. Returns null if no photos were found for that session. `prefix`
 // defaults to the homework temp folder; Revision submissions pass REVISION_TEMP_PREFIX instead.
@@ -9621,66 +9646,72 @@ function buildApp(): express.Express {
   // are all completed (null), even if the other subject is still mid-cycle. The only place a fresh
   // cycle actually begins is markRevisionChapterDone, which resets BOTH subjects together the
   // instant the whole syllabus is done, not just one subject in isolation.
-  function pickChapterWithinSubject(subject: "Maths" | "Science", setup: any): { subject: "Maths" | "Science"; chapterName: string } | null {
-    const chapters: string[] = (subject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
+  function pickChapterWithinSubject(subjectLabel: string, setup: any): { subject: string; chapterName: string } | null {
+    const cfg = getRevisionSubjectByLabel(subjectLabel);
+    if (!cfg) return null;
+    const chapters: string[] = setup[subjectChaptersCol(cfg)] || [];
     if (chapters.length === 0) return null;
-    const completed: string[] = (subject === "Maths" ? setup.maths_completed_chapters : setup.science_completed_chapters) || [];
+    const completed: string[] = setup[subjectCompletedCol(cfg)] || [];
     const available = chapters.filter((c) => !completed.includes(c));
     if (available.length === 0) return null;
     const chapterName = available[Math.floor(Math.random() * available.length)];
-    return { subject, chapterName };
+    return { subject: cfg.label, chapterName };
   }
 
-  // Picks which subject to serve next: whichever has completed fewer chapters this cycle catches
-  // up first; tied (including "both zero"), the nearer non-null exam date wins; still tied, random
-  // -- this is what keeps a student from only ever seeing the subject with the closer exam date,
-  // per the explicit "don't give only maths test, give science also" requirement. Only used as a
-  // fallback when the student hasn't picked an explicit chapter themselves (see generate-paper).
-  function pickNextRevisionTarget(setup: any, excludeChapter?: { subject: string; chapterName: string }): { subject: "Maths" | "Science"; chapterName: string } | null {
-    const hasMaths = ((setup.maths_chapters || []) as string[]).length > 0;
-    const hasScience = ((setup.science_chapters || []) as string[]).length > 0;
-    if (!hasMaths && !hasScience) return null;
+  // Orders every subject that has a non-empty syllabus by the same priority rule regardless of how
+  // many subjects are configured: fewest chapters completed this cycle goes first; tied, a subject
+  // with a set exam date beats one without; both have dates, the nearer one wins; still tied,
+  // random. Behavior-preserving generalization of the original 2-way Maths/Science branch (hand
+  // -traced against every one of its branches) -- this is what keeps a student from only ever
+  // seeing whichever subject has the closer exam date, now for any number of subjects.
+  function orderRevisionCandidates(setup: any, candidates: RevisionSubjectConfig[]): RevisionSubjectConfig[] {
+    const completedCount = (s: RevisionSubjectConfig) => ((setup[subjectCompletedCol(s)] || []) as string[]).length;
+    return candidates
+      .map((s) => ({ s, rand: Math.random() }))
+      .sort((a, b) => {
+        const ac = completedCount(a.s), bc = completedCount(b.s);
+        if (ac !== bc) return ac - bc;
+        const ad = setup[subjectExamDateCol(a.s)], bd = setup[subjectExamDateCol(b.s)];
+        if (!!ad !== !!bd) return ad ? -1 : 1;
+        if (ad && bd) {
+          const diff = new Date(ad).getTime() - new Date(bd).getTime();
+          if (diff !== 0) return diff;
+        }
+        return a.rand - b.rand;
+      })
+      .map((x) => x.s);
+  }
 
-    let subject: "Maths" | "Science";
-    if (hasMaths && !hasScience) subject = "Maths";
-    else if (hasScience && !hasMaths) subject = "Science";
-    else {
-      const mathsDone = ((setup.maths_completed_chapters || []) as string[]).length;
-      const scienceDone = ((setup.science_completed_chapters || []) as string[]).length;
-      if (mathsDone !== scienceDone) {
-        subject = mathsDone < scienceDone ? "Maths" : "Science";
-      } else if (setup.maths_exam_date && setup.science_exam_date) {
-        subject = new Date(setup.maths_exam_date).getTime() <= new Date(setup.science_exam_date).getTime() ? "Maths" : "Science";
-      } else if (setup.maths_exam_date && !setup.science_exam_date) {
-        subject = "Maths";
-      } else if (setup.science_exam_date && !setup.maths_exam_date) {
-        subject = "Science";
-      } else {
-        subject = Math.random() < 0.5 ? "Maths" : "Science";
+  // Picks which subject to serve next when the student hasn't picked an explicit chapter
+  // themselves (see generate-paper) -- walks every configured subject with a non-empty syllabus in
+  // priority order (see orderRevisionCandidates) and returns the first one that actually has an
+  // available chapter, so a subject that's finished mid-cycle correctly falls through to the next
+  // rather than dead-ending.
+  function pickNextRevisionTarget(setup: any, excludeChapter?: { subject: string; chapterName: string }): { subject: string; chapterName: string } | null {
+    const candidates = REVISION_SUBJECTS.filter((s) => ((setup[subjectChaptersCol(s)] || []) as string[]).length > 0);
+    if (candidates.length === 0) return null;
+    const ordered = orderRevisionCandidates(setup, candidates);
+
+    for (const cfg of ordered) {
+      const picked = pickChapterWithinSubject(cfg.label, setup);
+      if (!picked) continue;
+      // If we landed on the exact chapter the student is switching away from, try the next-best
+      // candidate once instead of re-serving the same chapter.
+      if (excludeChapter && picked.subject === excludeChapter.subject && picked.chapterName === excludeChapter.chapterName) {
+        for (const alt of ordered) {
+          if (alt.key === cfg.key) continue;
+          const altPicked = pickChapterWithinSubject(alt.label, setup);
+          if (altPicked) return altPicked;
+        }
+        // Only one option existed and it's the one being excluded -- re-roll within the same
+        // subject once (harmless if it comes back the same; nothing better is available).
+        const retry = pickChapterWithinSubject(cfg.label, setup);
+        if (retry) return retry;
+        continue;
       }
+      return picked;
     }
-
-    let picked = pickChapterWithinSubject(subject, setup);
-    if (!picked) {
-      // Preferred subject has nothing left available (e.g. it finished while the other subject
-      // still has pending chapters) -- fall back to whichever subject actually has something.
-      const otherSubject: "Maths" | "Science" = subject === "Maths" ? "Science" : "Maths";
-      picked = pickChapterWithinSubject(otherSubject, setup);
-    }
-    if (!picked) return null;
-
-    // If we landed on the exact chapter the student is switching away from and the other subject
-    // also has options, try the other subject once instead of re-serving the same chapter.
-    if (excludeChapter && picked.subject === excludeChapter.subject && picked.chapterName === excludeChapter.chapterName) {
-      const otherSubject: "Maths" | "Science" = picked.subject === "Maths" ? "Science" : "Maths";
-      const alt = pickChapterWithinSubject(otherSubject, setup);
-      if (alt) return alt;
-      // Only one option existed and it's the one being excluded -- re-roll within the same subject
-      // once (harmless if it comes back the same; nothing better is available).
-      const retry = pickChapterWithinSubject(picked.subject, setup);
-      if (retry) return retry;
-    }
-    return picked;
+    return null;
   }
 
   // Level 1 papers ID each question by section letter + position ("A1", "B2"...); Level 2+ papers
@@ -9785,7 +9816,7 @@ function buildApp(): express.Express {
   // generation call (twice, once for the draft and once for the review pass) was the single
   // biggest driver of API cost once reference books were in use. Matching by title keeps the
   // attached material to what's actually relevant.
-  async function getRevisionReferenceBookBlocks(classLabel: string, subject: "Maths" | "Science", chapterName: string): Promise<any[]> {
+  async function getRevisionReferenceBookBlocks(classLabel: string, subject: string, chapterName: string): Promise<any[]> {
     const classKey = CLASS_TO_TARGET[classLabel];
     if (!classKey) return [];
     const folder = `${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`;
@@ -9850,7 +9881,7 @@ function buildApp(): express.Express {
     return `Section D (4 marks) and Section E (5 marks) questions: this is exactly how current CBSE teachers actually set these questions, and you must follow the same pattern. PREFER splitting the question into 2-3 lettered sub-parts, e.g. (i)/(ii) worth 2+2 or 1+3, or (i)/(ii)/(iii) worth 1+2+2 or 2+1+2 or 1+1+3 -- whatever split fits the content best, as long as the sub-part marks add up to exactly the question's total (4 for D, 5 for E). A single, complete, non-split question (e.g. one full derivation, one long-answer theory question, or one "draw and label a neat diagram of..." question for Science/Biology chapters) is also allowed and good to use sometimes, but multi-part is the more common, preferred style -- lean toward it more often than not. Section D should be competency/case-based (a short real-world scenario or data/passage, then sub-question(s) about it); Section E can be a multi-part numerical/derivation, a multi-part theory question, or a single substantial question, whichever suits the chapter's content best.`;
   }
 
-  async function generateRevisionPaper(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number = 1): Promise<RevisionQuestion[]> {
+  async function generateRevisionPaper(subject: string, chapterName: string, classLabel: string, cycleNumber: number = 1): Promise<RevisionQuestion[]> {
     const sectionsText = REVISION_SECTION_SHAPE.map((s) => `Section ${s.label}: ${s.count} question(s) x ${s.marks} mark(s) each, ${s.kind} style.`).join("\n");
     const referenceBlocks = await getRevisionReferenceBookBlocks(classLabel, subject, chapterName);
     const referenceInstruction = referenceBlocks.length > 0
@@ -9912,7 +9943,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // REVISION_CONTENT_VERSION -- an older paper is treated as a cache miss, falling through to a
   // fresh (currently-correct) generation instead of perpetuating a since-fixed defect. Returns null
   // on a miss.
-  async function findReusableRevisionQuestions(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[] | null> {
+  async function findReusableRevisionQuestions(subject: string, chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[] | null> {
     const { data: candidates } = await supabase
       .from("revision_papers")
       .select("student_email, content, created_at, cycle_number")
@@ -9935,7 +9966,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // Drop-in wrapper around generateRevisionPaper that checks the reuse cache first -- same
   // (subject, chapterName, classLabel) argument order plus cycleNumber, so both call sites below
   // just swap the function name.
-  async function getRevisionQuestionsForTarget(subject: "Maths" | "Science", chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[]> {
+  async function getRevisionQuestionsForTarget(subject: string, chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[]> {
     const reused = await findReusableRevisionQuestions(subject, chapterName, classLabel, cycleNumber);
     if (reused) return reused;
     return generateRevisionPaper(subject, chapterName, classLabel, cycleNumber);
@@ -10082,7 +10113,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   }
 
   const revisionChapterDoneLocks = new Map<string, Promise<void>>();
-  async function markRevisionChapterDone(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
+  async function markRevisionChapterDone(studentEmail: string, subject: string, chapterName: string) {
     const prior = revisionChapterDoneLocks.get(studentEmail) || Promise.resolve();
     const run = prior.then(() => markRevisionChapterDoneLocked(studentEmail, subject, chapterName)).catch(() => {});
     revisionChapterDoneLocks.set(studentEmail, run);
@@ -10098,32 +10129,40 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // exactly this (edited her Science syllabus down to the 3 chapters she'd already finished) and
   // was left permanently stuck with every chapter shown "done" and no way to start a new cycle,
   // because only the grading path used to ever run this check.
+  // Keyed by dbPrefix (e.g. "maths"/"science"/"advanced_maths") so it scales to however many
+  // subjects REVISION_SUBJECTS configures, not just two.
   function computeRevisionCycleReset(
-    mathsChapters: string[], mathsCompleted: string[],
-    scienceChapters: string[], scienceCompleted: string[],
+    bySubject: Record<string, { chapters: string[]; completed: string[] }>,
     currentCycleNumber: number
-  ): { maths_completed_chapters: string[]; science_completed_chapters: string[]; cycle_number: number } | null {
-    const mathsDone = mathsChapters.length === 0 || mathsChapters.every((c) => mathsCompleted.includes(c));
-    const scienceDone = scienceChapters.length === 0 || scienceChapters.every((c) => scienceCompleted.includes(c));
-    if ((mathsChapters.length > 0 || scienceChapters.length > 0) && mathsDone && scienceDone) {
+  ): Record<string, any> | null {
+    const entries = Object.entries(bySubject);
+    const anyHasChapters = entries.some(([, v]) => v.chapters.length > 0);
+    const allDone = entries.every(([, v]) => v.chapters.length === 0 || v.chapters.every((c) => v.completed.includes(c)));
+    if (anyHasChapters && allDone) {
       // A full cycle just finished -- the next cycle's papers should be harder than this one's,
       // and progressively harder again each cycle after that (see generateRevisionPaper).
-      return { maths_completed_chapters: [], science_completed_chapters: [], cycle_number: (currentCycleNumber || 1) + 1 };
+      const updates: Record<string, any> = { cycle_number: (currentCycleNumber || 1) + 1 };
+      for (const [prefix] of entries) updates[`${prefix}_completed_chapters`] = [];
+      return updates;
     }
     return null;
   }
-  async function markRevisionChapterDoneLocked(studentEmail: string, subject: "Maths" | "Science", chapterName: string) {
+  async function markRevisionChapterDoneLocked(studentEmail: string, subjectLabel: string, chapterName: string) {
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", studentEmail).maybeSingle();
     if (!setup) return;
-    const completedKey = subject === "Maths" ? "maths_completed_chapters" : "science_completed_chapters";
+    const cfg = getRevisionSubjectByLabel(subjectLabel);
+    if (!cfg) return;
+    const completedKey = subjectCompletedCol(cfg);
     let completed: string[] = setup[completedKey] || [];
     if (!completed.includes(chapterName)) completed = [...completed, chapterName];
 
     const updates: Record<string, any> = { [completedKey]: completed, updated_at: new Date().toISOString() };
 
-    const mathsCompleted: string[] = subject === "Maths" ? completed : (setup.maths_completed_chapters || []);
-    const scienceCompleted: string[] = subject === "Science" ? completed : (setup.science_completed_chapters || []);
-    const cycleReset = computeRevisionCycleReset(setup.maths_chapters || [], mathsCompleted, setup.science_chapters || [], scienceCompleted, setup.cycle_number || 1);
+    const bySubject = Object.fromEntries(REVISION_SUBJECTS.map((s) => [
+      s.dbPrefix,
+      { chapters: setup[subjectChaptersCol(s)] || [], completed: s.key === cfg.key ? completed : (setup[subjectCompletedCol(s)] || []) },
+    ]));
+    const cycleReset = computeRevisionCycleReset(bySubject, setup.cycle_number || 1);
     if (cycleReset) Object.assign(updates, cycleReset);
 
     await supabase.from("revision_setups").update(updates).eq("student_email", studentEmail);
@@ -10473,10 +10512,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     }
   }
 
-  const revisionSetupUpload = homeworkUpload.fields([
-    { name: "mathsSyllabusImage", maxCount: 1 },
-    { name: "scienceSyllabusImage", maxCount: 1 },
-  ]);
+  const revisionSetupUpload = homeworkUpload.fields(
+    REVISION_SUBJECTS.map((s) => ({ name: `${s.key}SyllabusImage`, maxCount: 1 }))
+  );
 
   // Resolves the "8th"/"9th"/"10th"-style class key for validating a syllabus AT SAVE TIME --
   // distinct from resolveClassLabelForRevision (which returns the Roman-numeral form used
@@ -10498,7 +10536,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     return !/^practice\s*sets?\b/i.test(title.trim());
   }
 
-  async function getKnownNcertChapters(classKey: string, subject: "Maths" | "Science"): Promise<string[]> {
+  async function getKnownNcertChapters(classKey: string, subject: string): Promise<string[]> {
     const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`);
     return (data || [])
       .filter((f: any) => f.name.toLowerCase().endsWith(".pdf"))
@@ -10561,7 +10599,8 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const auth = requireAuth(req, res);
     if (!auth) return;
     const { subject, version, classKey: requestedClassKey } = req.query as { subject?: string; version?: string; classKey?: string };
-    if (subject !== "Maths" && subject !== "Science") return res.status(400).json({ error: "Invalid subject." });
+    const cfg = getRevisionSubjectByLabel(subject || "");
+    if (!cfg) return res.status(400).json({ error: "Invalid subject." });
     // A class picked in the fallback-class selector only exists in the browser until the whole
     // setup form is actually saved -- an explicit classKey here lets the dropdown populate
     // immediately after picking it, the same override pattern /reference-books/mine already uses,
@@ -10574,8 +10613,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       classKey = classLabel ? CLASS_TO_TARGET[classLabel] : null;
     }
     if (!classKey) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
-    const chapters = classKey === "8th" && version === "old" ? OLD_NCERT_CLASS8_CHAPTERS[subject] : await getKnownNcertChapters(classKey, subject);
-    return res.json({ classKey, subject, chapters });
+    if (cfg.classKeys && !cfg.classKeys.includes(classKey)) return res.status(400).json({ error: `${cfg.label} isn't available for your class.` });
+    const chapters = classKey === "8th" && version === "old" ? OLD_NCERT_CLASS8_CHAPTERS[cfg.label as "Maths" | "Science"] : await getKnownNcertChapters(classKey, cfg.label);
+    return res.json({ classKey, subject: cfg.label, chapters });
   });
 
   // Checks a student's typed/photographed chapter names against the real NCERT chapter list for
@@ -10587,7 +10627,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   // typed) when there's no reference chapter list to check against for that class/subject, or if
   // the validation call itself fails -- this is a safety net, not something that should ever block
   // a student from saving their syllabus due to an unrelated outage.
-  async function validateAndNormalizeChapters(chapters: string[], classKey: string | null, subject: "Maths" | "Science"): Promise<{ corrected: string[]; invalid: string[] }> {
+  async function validateAndNormalizeChapters(chapters: string[], classKey: string | null, subject: string): Promise<{ corrected: string[]; invalid: string[] }> {
     if (!classKey || chapters.length === 0) return { corrected: chapters, invalid: [] };
     const known = await getKnownNcertChapters(classKey, subject);
     if (known.length === 0) return { corrected: chapters, invalid: [] };
@@ -10607,7 +10647,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         required: ["matches"],
       },
     };
-    const system = `Here is the real, complete list of NCERT chapters for this class/subject:\n${known.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nA student typed the following as their own syllabus chapter names. For each one, decide which real chapter above (if any) it clearly refers to -- even if misspelled, shortened, or just a common partial name (e.g. "Acid" clearly means "Acids, Bases and Salts" if that's the closest chapter in the list; "chem reactions" means "Chemical Reactions and Equations"). Return that chapter's title copied EXACTLY as written in the list above. If an input genuinely doesn't match any chapter in the list (a made-up name, a chapter from a different class/subject entirely, or gibberish), return an empty string for it instead of guessing.`;
+    const system = `Here is the real, complete list of chapters for this class/subject:\n${known.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\nA student typed the following as their own syllabus chapter names. For each one, decide which real chapter above (if any) it clearly refers to -- even if misspelled, shortened, or just a common partial name (e.g. "Acid" clearly means "Acids, Bases and Salts" if that's the closest chapter in the list; "chem reactions" means "Chemical Reactions and Equations"). Return that chapter's title copied EXACTLY as written in the list above. If an input genuinely doesn't match any chapter in the list (a made-up name, a chapter from a different class/subject entirely, or gibberish), return an empty string for it instead of guessing.`;
     try {
       const result = await callClaudeTool({
         system,
@@ -10644,12 +10684,18 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const { data: existing } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
 
     const update: any = { student_email: auth.email, updated_at: new Date().toISOString() };
-    const newlySubmittedSubjects: ("maths" | "science")[] = [];
+    const newlySubmittedSubjects: RevisionSubjectConfig[] = [];
+    // Resolved up front (not just when NCERT validation is needed) since it's also needed to gate
+    // which subjects this student's class can even use (e.g. Advanced Maths, Class 9 only) --
+    // fields submitted for a subject their class can't use are silently ignored below.
+    const classKey = await resolveClassKeyForRevisionSetup(auth, body.fallbackClass ? String(body.fallbackClass) : undefined);
 
-    for (const subj of ["maths", "science"] as const) {
+    for (const cfg of REVISION_SUBJECTS) {
+      if (cfg.classKeys && (!classKey || !cfg.classKeys.includes(classKey))) continue;
+      const subj = cfg.key; // camelCase -- matches body/multer field names
       const examDateField = `${subj}ExamDate`;
       const examDateVal = body[examDateField];
-      update[`${subj}_exam_date`] = examDateVal ? String(examDateVal) : null;
+      update[subjectExamDateCol(cfg)] = examDateVal ? String(examDateVal) : null;
 
       const textField = `${subj}SyllabusText`;
       const typedText: string = (body[textField] || "").toString().trim();
@@ -10665,46 +10711,46 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
           const parsed = JSON.parse(chaptersJson);
           if (Array.isArray(parsed)) chapters = parsed.map((c: any) => String(c).trim()).filter(Boolean);
         } catch {
-          return res.status(400).json({ error: `Invalid ${subj} chapter selection. Please try again.` });
+          return res.status(400).json({ error: `Invalid ${cfg.label} chapter selection. Please try again.` });
         }
         if (chapters.length > 0) {
-          update[`${subj}_chapters`] = chapters;
-          update[`${subj}_syllabus_text`] = chapters.join("\n");
-          update[`${subj}_syllabus_image_path`] = null;
+          update[subjectChaptersCol(cfg)] = chapters;
+          update[subjectSyllabusTextCol(cfg)] = chapters.join("\n");
+          update[subjectSyllabusImageCol(cfg)] = null;
         } else if (existing) {
-          update[`${subj}_chapters`] = existing[`${subj}_chapters`];
-          update[`${subj}_syllabus_text`] = existing[`${subj}_syllabus_text`];
-          update[`${subj}_syllabus_image_path`] = existing[`${subj}_syllabus_image_path`];
+          update[subjectChaptersCol(cfg)] = existing[subjectChaptersCol(cfg)];
+          update[subjectSyllabusTextCol(cfg)] = existing[subjectSyllabusTextCol(cfg)];
+          update[subjectSyllabusImageCol(cfg)] = existing[subjectSyllabusImageCol(cfg)];
         } else {
-          update[`${subj}_chapters`] = [];
+          update[subjectChaptersCol(cfg)] = [];
         }
       } else if (imageFile) {
         try {
           const chapters = await extractChaptersFromImage(imageFile.buffer, imageFile.mimetype);
           if (chapters.length > 0) {
-            update[`${subj}_chapters`] = chapters;
-            update[`${subj}_syllabus_text`] = null;
-            newlySubmittedSubjects.push(subj);
+            update[subjectChaptersCol(cfg)] = chapters;
+            update[subjectSyllabusTextCol(cfg)] = null;
+            newlySubmittedSubjects.push(cfg);
             const imgPath = `revision-syllabus/${auth.email}/${subj}-${Date.now()}.jpg`;
             const { error: upErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(imgPath, imageFile.buffer, { contentType: imageFile.mimetype });
-            if (!upErr) update[`${subj}_syllabus_image_path`] = imgPath;
+            if (!upErr) update[subjectSyllabusImageCol(cfg)] = imgPath;
           }
         } catch (err: any) {
-          console.error(`Failed to extract ${subj} syllabus from image:`, err.message);
-          return res.status(500).json({ error: `Could not read the chapter list from the ${subj} syllabus photo. Please try a clearer photo or type the chapters instead.` });
+          console.error(`Failed to extract ${cfg.label} syllabus from image:`, err.message);
+          return res.status(500).json({ error: `Could not read the chapter list from the ${cfg.label} syllabus photo. Please try a clearer photo or type the chapters instead.` });
         }
       } else if (typedText) {
         const chapters = splitSyllabusText(typedText);
-        update[`${subj}_chapters`] = chapters;
-        update[`${subj}_syllabus_text`] = typedText;
-        newlySubmittedSubjects.push(subj);
+        update[subjectChaptersCol(cfg)] = chapters;
+        update[subjectSyllabusTextCol(cfg)] = typedText;
+        newlySubmittedSubjects.push(cfg);
       } else if (existing) {
         // Neither a new image nor new text for this subject this time -- keep whatever was there.
-        update[`${subj}_chapters`] = existing[`${subj}_chapters`];
-        update[`${subj}_syllabus_text`] = existing[`${subj}_syllabus_text`];
-        update[`${subj}_syllabus_image_path`] = existing[`${subj}_syllabus_image_path`];
+        update[subjectChaptersCol(cfg)] = existing[subjectChaptersCol(cfg)];
+        update[subjectSyllabusTextCol(cfg)] = existing[subjectSyllabusTextCol(cfg)];
+        update[subjectSyllabusImageCol(cfg)] = existing[subjectSyllabusImageCol(cfg)];
       } else {
-        update[`${subj}_chapters`] = [];
+        update[subjectChaptersCol(cfg)] = [];
       }
       // Preserve progress on any chapter still part of the (possibly updated) syllabus -- only a
       // chapter that's no longer in the list at all should drop out of "completed", since it can
@@ -10713,20 +10759,20 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       // new chapter, or with nothing actually changed -- silently erased every chapter a student
       // had already completed this cycle. A real student hit exactly this: two graded papers
       // showing in "My Papers" but only one counted as "done this cycle".
-      const priorCompleted: string[] = (existing?.[`${subj}_completed_chapters`] as string[] | undefined) || [];
-      const finalChapters: string[] = update[`${subj}_chapters`] || [];
-      update[`${subj}_completed_chapters`] = priorCompleted.filter((c) => finalChapters.includes(c));
+      const priorCompleted: string[] = (existing?.[subjectCompletedCol(cfg)] as string[] | undefined) || [];
+      const finalChapters: string[] = update[subjectChaptersCol(cfg)] || [];
+      update[subjectCompletedCol(cfg)] = priorCompleted.filter((c) => finalChapters.includes(c));
     }
 
     // Trimming a syllabus down to exactly the chapters already completed (e.g. removing a chapter
     // that was never actually finished) can complete the whole-syllabus cycle right here, on a
     // syllabus save, not just when a paper is graded -- see computeRevisionCycleReset for the real
     // student this happened to.
-    const cycleReset = computeRevisionCycleReset(
-      update.maths_chapters || [], update.maths_completed_chapters || [],
-      update.science_chapters || [], update.science_completed_chapters || [],
-      existing?.cycle_number || 1
-    );
+    const bySubjectForReset = Object.fromEntries(REVISION_SUBJECTS.map((s) => [
+      s.dbPrefix,
+      { chapters: update[subjectChaptersCol(s)] || [], completed: update[subjectCompletedCol(s)] || [] },
+    ]));
+    const cycleReset = computeRevisionCycleReset(bySubjectForReset, existing?.cycle_number || 1);
     if (cycleReset) Object.assign(update, cycleReset);
 
     if (body.fallbackClass) update.fallback_class = String(body.fallbackClass);
@@ -10735,14 +10781,12 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     // an unchanged subject was presumably already valid (or already accepted before this check
     // existed), so re-validating it on every unrelated edit would be pointless extra cost.
     if (newlySubmittedSubjects.length > 0) {
-      const classKey = await resolveClassKeyForRevisionSetup(auth, body.fallbackClass ? String(body.fallbackClass) : undefined);
-      for (const subj of newlySubmittedSubjects) {
-        const subjectLabel = subj === "maths" ? "Maths" : "Science";
-        const { corrected, invalid } = await validateAndNormalizeChapters(update[`${subj}_chapters`] || [], classKey, subjectLabel);
+      for (const cfg of newlySubmittedSubjects) {
+        const { corrected, invalid } = await validateAndNormalizeChapters(update[subjectChaptersCol(cfg)] || [], classKey, cfg.label);
         if (invalid.length > 0) {
-          return res.status(400).json({ error: `These don't match any real NCERT Class ${classKey ? classKey.replace("th", "") + "th" : ""} ${subjectLabel} chapter: ${invalid.join(", ")}. Please check the name(s) and try again.` });
+          return res.status(400).json({ error: `These don't match any real Class ${classKey ? classKey.replace("th", "") + "th" : ""} ${cfg.label} chapter: ${invalid.join(", ")}. Please check the name(s) and try again.` });
         }
-        update[`${subj}_chapters`] = corrected;
+        update[subjectChaptersCol(cfg)] = corrected;
       }
     }
 
@@ -10759,17 +10803,16 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!auth) return;
     const { data } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
     if (!data) return res.json({ setup: null });
-    return res.json({
-      setup: {
-        mathsExamDate: data.maths_exam_date,
-        mathsChapters: data.maths_chapters || [],
-        mathsCompletedChapters: data.maths_completed_chapters || [],
-        scienceExamDate: data.science_exam_date,
-        scienceChapters: data.science_chapters || [],
-        scienceCompletedChapters: data.science_completed_chapters || [],
-        fallbackClass: data.fallback_class,
-      },
-    });
+    // Ungated (built for every configured subject regardless of class) -- harmless empty
+    // arrays/nulls for a subject a student's class can't use or has never touched; the frontend's
+    // own class-based filter is what actually hides Advanced Maths from non-9th students.
+    const setupResponse: Record<string, any> = { fallbackClass: data.fallback_class };
+    for (const cfg of REVISION_SUBJECTS) {
+      setupResponse[`${cfg.key}ExamDate`] = data[subjectExamDateCol(cfg)];
+      setupResponse[`${cfg.key}Chapters`] = data[subjectChaptersCol(cfg)] || [];
+      setupResponse[`${cfg.key}CompletedChapters`] = data[subjectCompletedCol(cfg)] || [];
+    }
+    return res.json({ setup: setupResponse });
   });
 
   async function resolveClassLabelForRevision(auth: { email: string; role: string }): Promise<string | null> {
@@ -10790,15 +10833,21 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const { data: setup } = await supabase.from("revision_setups").select("*").eq("student_email", auth.email).maybeSingle();
     if (!setup) return res.status(400).json({ error: "Please set up your syllabus first." });
 
+    const classLabel = await resolveClassLabelForRevision(auth);
+    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
+    const classKey: string | null = CLASS_TO_TARGET[classLabel] || null;
+
     const { subject: requestedSubject, chapterName: requestedChapterName } = req.body as { subject?: string; chapterName?: string };
 
-    let target: { subject: "Maths" | "Science"; chapterName: string };
+    let target: { subject: string; chapterName: string };
     if (requestedSubject && requestedChapterName) {
-      if (requestedSubject !== "Maths" && requestedSubject !== "Science") {
-        return res.status(400).json({ error: "Invalid subject." });
+      const cfg = getRevisionSubjectByLabel(requestedSubject);
+      if (!cfg) return res.status(400).json({ error: "Invalid subject." });
+      if (cfg.classKeys && (!classKey || !cfg.classKeys.includes(classKey))) {
+        return res.status(400).json({ error: `${cfg.label} isn't available for your class.` });
       }
-      const chapters: string[] = (requestedSubject === "Maths" ? setup.maths_chapters : setup.science_chapters) || [];
-      const completed: string[] = (requestedSubject === "Maths" ? setup.maths_completed_chapters : setup.science_completed_chapters) || [];
+      const chapters: string[] = setup[subjectChaptersCol(cfg)] || [];
+      const completed: string[] = setup[subjectCompletedCol(cfg)] || [];
       if (!chapters.includes(requestedChapterName)) {
         return res.status(400).json({ error: "That chapter isn't in your syllabus. Please refresh and pick again." });
       }
@@ -10809,15 +10858,12 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       if (completed.includes(requestedChapterName)) {
         return res.status(400).json({ error: "You've already completed that chapter this cycle. Pick one that's still pending." });
       }
-      target = { subject: requestedSubject, chapterName: requestedChapterName };
+      target = { subject: cfg.label, chapterName: requestedChapterName };
     } else {
       const picked = pickNextRevisionTarget(setup);
-      if (!picked) return res.status(400).json({ error: "Please add at least one chapter to your Maths or Science syllabus first." });
+      if (!picked) return res.status(400).json({ error: "Please add at least one chapter to your syllabus first." });
       target = picked;
     }
-
-    const classLabel = await resolveClassLabelForRevision(auth);
-    if (!classLabel) return res.status(400).json({ error: "We couldn't determine your class. Please pick a class in the revision setup." });
 
     const cycleNumber: number = setup.cycle_number || 1;
 
@@ -11416,7 +11462,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   // since a real textbook PDF or a zip of a whole book's chapters is far past what a single Vercel
   // request body can carry.
   const REVISION_REFERENCE_CLASS_KEYS = ["8th", "9th", "10th"] as const;
-  const REVISION_REFERENCE_SUBJECTS = ["Maths", "Science"] as const;
+  const REVISION_REFERENCE_SUBJECTS = REVISION_SUBJECTS.map((s) => s.label);
 
   // Reference-book file names are "NN Chapter Title.pdf" (see the admin rename tooling) -- strip
   // the sort-order prefix and extension to get a clean display title.
@@ -11445,7 +11491,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any)) {
       return res.status(400).json({ error: "We couldn't determine your class. Please set it in the Revision syllabus setup first." });
     }
-    const subjects: Record<string, { fileName: string; title: string }[]> = { Maths: [], Science: [] };
+    const subjects: Record<string, { fileName: string; title: string }[]> = Object.fromEntries(REVISION_REFERENCE_SUBJECTS.map((s) => [s, []]));
     for (const subject of REVISION_REFERENCE_SUBJECTS) {
       const { data } = await supabase.storage.from(CHAPTER_NOTES_BUCKET).list(`${REVISION_REFERENCE_PREFIX}/${classKey}-${subject}`);
       subjects[subject] = (data || [])

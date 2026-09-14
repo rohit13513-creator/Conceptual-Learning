@@ -1008,7 +1008,7 @@ export default function App() {
   // Uploads one file (a chapter PDF, a whole-book PDF, or a zip of many) via the same
   // chunk-then-finalize flow used for revision submissions, since a real textbook or a zip of a
   // whole book's chapters is far past what a single Vercel request body can carry.
-  const uploadOneReferenceFile = async (classKey: string, subject: 'Maths' | 'Science', file: File): Promise<string> => {
+  const uploadOneReferenceFile = async (classKey: string, subject: string, file: File): Promise<string> => {
     if (!user) throw new Error('Not signed in.');
     const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
     const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1031,7 +1031,7 @@ export default function App() {
     return file.name;
   };
 
-  const handleUploadReferenceBooks = async (classKey: string, subject: 'Maths' | 'Science', files: FileList) => {
+  const handleUploadReferenceBooks = async (classKey: string, subject: string, files: FileList) => {
     if (!user || files.length === 0) return;
     const slotKey = `${classKey}-${subject}`;
     setReferenceBookError(null);
@@ -1126,7 +1126,7 @@ export default function App() {
   // mis-click shouldn't silently wipe, so removal always goes through this dialog (mirrors the
   // homework-submission delete-confirm pattern elsewhere in this file) rather than deleting on
   // the first click. `fileName` omitted means "clear every file for this class/subject".
-  const [deleteConfirmRefBook, setDeleteConfirmRefBook] = useState<{ classKey: string; subject: 'Maths' | 'Science'; fileName?: string; label: string } | null>(null);
+  const [deleteConfirmRefBook, setDeleteConfirmRefBook] = useState<{ classKey: string; subject: string; fileName?: string; label: string } | null>(null);
   const [deletingRefBook, setDeletingRefBook] = useState(false);
   const [deleteRefBookError, setDeleteRefBookError] = useState<string | null>(null);
 
@@ -9714,6 +9714,7 @@ export default function App() {
                         <option value="">All Subjects</option>
                         <option value="Maths">Maths</option>
                         <option value="Science">Science</option>
+                        <option value="Advanced Maths">Advanced Maths</option>
                       </select>
                       <input
                         type="text"
@@ -9783,7 +9784,10 @@ export default function App() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(['8th', '9th', '10th'] as const).flatMap((classKey) =>
-                  (['Maths', 'Science'] as const).map((subject) => {
+                  // Advanced Maths only exists as a Class 9 track (see REVISION_SUBJECTS in
+                  // server.ts) -- shown here, not just Maths/Science, so a bare array extension
+                  // doesn't wrongly offer an upload slot for Class 8/10 too.
+                  ([...['Maths', 'Science'], ...(classKey === '9th' ? ['Advanced Maths'] : [])] as const).map((subject) => {
                     const slotKey = `${classKey}-${subject}`;
                     const files = referenceBooks.filter((f) => f.slotKey === slotKey);
                     const uploading = referenceBookUploadKey === slotKey;

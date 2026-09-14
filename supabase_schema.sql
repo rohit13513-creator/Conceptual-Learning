@@ -138,6 +138,9 @@ create index chapter_notes_jobs_status_idx on chapter_notes_jobs (status);
 -- student sets a syllabus (typed or a photographed page) and optional exam dates for Maths and/or
 -- Science; each generated paper is a fresh, fixed-shape 30-mark CBSE-style paper for one chapter,
 -- timed, AI-graded on submission, with "Improve Score" resubmission (same shape as Homework).
+-- Note: cycle_number (int, defaults to 1, bumped each time a student's whole configured syllabus
+-- is completed -- see computeRevisionCycleReset in server.ts) is a live column on this table not
+-- reflected below; it was added directly against the DB and this file was never updated to match.
 create table revision_setups (
   student_email text primary key references users(email),
   maths_exam_date date,                        -- null = "just revising, no exam"
@@ -150,6 +153,13 @@ create table revision_setups (
   science_syllabus_image_path text,
   science_chapters jsonb not null default '[]',
   science_completed_chapters jsonb not null default '[]',
+  -- Advanced Maths: a separate, optional CBSE module, Class 9 only (see REVISION_SUBJECTS in
+  -- server.ts) -- same shape as maths_*/science_* above, tracked entirely independently.
+  advanced_maths_exam_date date,
+  advanced_maths_syllabus_text text,
+  advanced_maths_syllabus_image_path text,
+  advanced_maths_chapters jsonb not null default '[]',
+  advanced_maths_completed_chapters jsonb not null default '[]',
   fallback_class text,                         -- 8th/9th/10th; only used when the user has no student_class (admin self-test)
   updated_at timestamptz not null default now()
 );

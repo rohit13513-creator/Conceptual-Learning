@@ -40,7 +40,7 @@ interface RevisionQuestion {
 
 interface RevisionPaper {
   id: string;
-  subject: 'Maths' | 'Science';
+  subject: string;
   chapterName: string;
   totalMarks: number;
   timeAllottedMinutes: number;
@@ -72,6 +72,9 @@ interface RevisionSetup {
   scienceExamDate: string | null;
   scienceChapters: string[];
   scienceCompletedChapters: string[];
+  advancedMathsExamDate: string | null;
+  advancedMathsChapters: string[];
+  advancedMathsCompletedChapters: string[];
   fallbackClass?: string | null;
 }
 
@@ -83,6 +86,28 @@ interface RevisionProps {
 const SECTION_LABELS: Record<string, string> = { A: 'Section A -- Objective', B: 'Section B -- Short Answer', C: 'Section C -- Short Answer', D: 'Section D -- Competency Based', E: 'Section E -- Long Answer' };
 const CLASS_TO_TARGET_CLIENT: Record<string, string> = { VIII: '8th', IX: '9th', X: '10th' };
 const REVISION_SECTION_ORDER: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+
+// Mirrors the backend's REVISION_SUBJECTS (server.ts) -- same key/label/class-restriction shape,
+// duplicated client-side the same way CLASS_TO_TARGET_CLIENT already duplicates the server's class
+// mapping, since there's no existing mechanism for the backend to hand the frontend its subject
+// config at runtime. Adding a future subject (e.g. "Advanced Science") means one more entry here
+// to match the server's own new entry.
+interface RevisionSubjectClientConfig { key: 'maths' | 'science' | 'advancedMaths'; label: string; classKeys: string[] | null; }
+const REVISION_SUBJECTS_CLIENT: RevisionSubjectClientConfig[] = [
+  { key: 'maths', label: 'Maths', classKeys: null },
+  { key: 'science', label: 'Science', classKeys: null },
+  { key: 'advancedMaths', label: 'Advanced Maths', classKeys: ['9th'] },
+];
+function visibleRevisionSubjects(effectiveClassKey: string | null): RevisionSubjectClientConfig[] {
+  return REVISION_SUBJECTS_CLIENT.filter((s) => !s.classKeys || (effectiveClassKey != null && s.classKeys.includes(effectiveClassKey)));
+}
+function getSubjectSetup(setup: RevisionSetup, key: string): { examDate: string | null; chapters: string[]; completed: string[] } {
+  return {
+    examDate: (setup as any)[`${key}ExamDate`] ?? null,
+    chapters: (setup as any)[`${key}Chapters`] ?? [],
+    completed: (setup as any)[`${key}CompletedChapters`] ?? [],
+  };
+}
 
 const cardClass = (isLightMode: boolean) => `border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`;
 const inputClass = (isLightMode: boolean) => `w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`;
@@ -155,15 +180,16 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const generatingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Setup form fields
-  const [mathsSelectedChapters, setMathsSelectedChapters] = useState<string[]>([]);
-  const [mathsDropdownPick, setMathsDropdownPick] = useState('');
-  const [mathsNoExam, setMathsNoExam] = useState(false);
-  const [mathsExamDate, setMathsExamDate] = useState('');
-  const [scienceSelectedChapters, setScienceSelectedChapters] = useState<string[]>([]);
-  const [scienceDropdownPick, setScienceDropdownPick] = useState('');
-  const [scienceNoExam, setScienceNoExam] = useState(false);
-  const [scienceExamDate, setScienceExamDate] = useState('');
+  // Setup form fields -- one entry per subject key (maths/science/advancedMaths), collapsed into a
+  // single map instead of a separate useState pair per subject so a new subject never needs new
+  // state variables, just a new REVISION_SUBJECTS_CLIENT entry.
+  interface SubjectFormState { selected: string[]; dropdownPick: string; noExam: boolean; examDate: string; }
+  const emptySubjectForm = (): SubjectFormState => ({ selected: [], dropdownPick: '', noExam: false, examDate: '' });
+  const [subjectForm, setSubjectForm] = useState<Record<string, SubjectFormState>>(() =>
+    Object.fromEntries(REVISION_SUBJECTS_CLIENT.map((s) => [s.key, emptySubjectForm()]))
+  );
+  const patchSubjectForm = (key: string, patch: Partial<SubjectFormState>) =>
+    setSubjectForm((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   const [fallbackClass, setFallbackClass] = useState('');
   const [savingSetup, setSavingSetup] = useState(false);
 
@@ -173,7 +199,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // is the one class where old and new NCERT are both genuinely still in use in schools, so it
   // alone gets an "Old NCERT / New NCERT" choice that changes which chapter list is offered.
   const [ncertVersion, setNcertVersion] = useState<'new' | 'old'>('new');
-  const [chapterOptions, setChapterOptions] = useState<{ Maths: string[]; Science: string[] }>({ Maths: [], Science: [] });
+  const [chapterOptions, setChapterOptions] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(REVISION_SUBJECTS_CLIENT.map((s) => [s.label, []]))
+  );
   const [chapterOptionsLoading, setChapterOptionsLoading] = useState(false);
   const [chapterOptionsError, setChapterOptionsError] = useState<string | null>(null);
   const effectiveClassKey = user.studentClass ? CLASS_TO_TARGET_CLIENT[user.studentClass] : (fallbackClass || setup?.fallbackClass || null);
@@ -218,7 +246,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // and picks it themselves from their own syllabus, before anything is generated. pendingChoice
   // holds the just-tapped chapter while the "are you ready" confirmation is open; nothing is
   // generated until that's confirmed.
-  const [pendingChoice, setPendingChoice] = useState<{ subject: 'Maths' | 'Science'; chapterName: string } | null>(null);
+  const [pendingChoice, setPendingChoice] = useState<{ subject: string; chapterName: string } | null>(null);
 
   // Submission upload
   const [uploadMode, setUploadMode] = useState<'photos' | 'pdf'>('photos');
@@ -293,23 +321,23 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       // form is saved -- pass it straight through as an override so the chapter list appears
       // immediately after picking a class, not only after a full save-then-reload round trip.
       const classOverride = fallbackClass ? `&classKey=${fallbackClass}` : '';
-      const [mathsResp, scienceResp] = await Promise.all([
-        fetch(`/api/revision/chapter-options?subject=Maths&version=${version}${classOverride}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
-        fetch(`/api/revision/chapter-options?subject=Science&version=${version}${classOverride}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(async (r) => ({ ok: r.ok, data: await r.json() })),
-      ]);
-      if (!mathsResp.ok || !scienceResp.ok) {
-        throw new Error((!mathsResp.ok ? mathsResp.data.error : scienceResp.data.error) || 'Failed to load the chapter list.');
-      }
-      setChapterOptions({ Maths: mathsResp.data.chapters || [], Science: scienceResp.data.chapters || [] });
+      const subjects = visibleRevisionSubjects(fallbackClass || effectiveClassKey);
+      const results = await Promise.all(subjects.map((s) =>
+        fetch(`/api/revision/chapter-options?subject=${encodeURIComponent(s.label)}&version=${version}${classOverride}`, { headers: { Authorization: `Bearer ${user.token}` } })
+          .then(async (r) => ({ ok: r.ok, data: await r.json(), label: s.label }))
+      ));
+      const failed = results.find((r) => !r.ok);
+      if (failed) throw new Error(failed.data.error || 'Failed to load the chapter list.');
+      setChapterOptions(Object.fromEntries(results.map((r) => [r.label, r.data.chapters || []])));
     } catch (err: any) {
-      setChapterOptions({ Maths: [], Science: [] });
+      setChapterOptions(Object.fromEntries(REVISION_SUBJECTS_CLIENT.map((s) => [s.label, []])));
       setChapterOptionsError(err.message === 'We couldn\'t determine your class. Please pick a class in the revision setup.'
         ? 'Pick your class below first, then the chapter list will appear.'
         : 'Could not load the chapter list -- you can still type your chapters or upload a photo instead.');
     } finally {
       setChapterOptionsLoading(false);
     }
-  }, [user.token, fallbackClass]);
+  }, [user.token, fallbackClass, effectiveClassKey]);
 
   useEffect(() => {
     if (showSetupForm) fetchChapterOptions(ncertVersion);
@@ -323,12 +351,14 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // on save, since the date inputs always started blank/"no exam" regardless of what was stored.
   useEffect(() => {
     if (showSetupForm && setup) {
-      setMathsSelectedChapters(setup.mathsChapters || []);
-      setScienceSelectedChapters(setup.scienceChapters || []);
-      setMathsExamDate(setup.mathsExamDate || '');
-      setMathsNoExam(!setup.mathsExamDate);
-      setScienceExamDate(setup.scienceExamDate || '');
-      setScienceNoExam(!setup.scienceExamDate);
+      setSubjectForm((prev) => {
+        const next = { ...prev };
+        for (const s of REVISION_SUBJECTS_CLIENT) {
+          const sub = getSubjectSetup(setup, s.key);
+          next[s.key] = { ...next[s.key], selected: sub.chapters, examDate: sub.examDate || '', noExam: !sub.examDate };
+        }
+        return next;
+      });
     }
   }, [showSetupForm, setup]);
 
@@ -348,18 +378,19 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     // here: they filled in an exam date and the form let them save successfully with no chapters
     // added at all, silently producing a syllabus that could never do anything. Block it at the
     // source with a clear message instead of allowing an unusable setup to be saved.
-    if (mathsSelectedChapters.length === 0 && scienceSelectedChapters.length === 0) {
-      setError('Please add at least one chapter (Maths or Science) before saving your syllabus.');
+    const visibleSubjects = visibleRevisionSubjects(fallbackClass || effectiveClassKey);
+    if (visibleSubjects.every((s) => subjectForm[s.key].selected.length === 0)) {
+      setError(`Please add at least one chapter (${visibleSubjects.map((s) => s.label).join(' or ')}) before saving your syllabus.`);
       return;
     }
     setSavingSetup(true);
     setError(null);
     try {
       const form = new FormData();
-      form.append('mathsSyllabusChapters', JSON.stringify(mathsSelectedChapters));
-      form.append('mathsExamDate', mathsNoExam ? '' : mathsExamDate);
-      form.append('scienceSyllabusChapters', JSON.stringify(scienceSelectedChapters));
-      form.append('scienceExamDate', scienceNoExam ? '' : scienceExamDate);
+      for (const s of visibleSubjects) {
+        form.append(`${s.key}SyllabusChapters`, JSON.stringify(subjectForm[s.key].selected));
+        form.append(`${s.key}ExamDate`, subjectForm[s.key].noExam ? '' : subjectForm[s.key].examDate);
+      }
       if (fallbackClass) form.append('fallbackClass', fallbackClass);
       const result = await uploadWithRetry({ url: '/api/revision/setup', token: user.token, formData: form });
       if (!result.ok) throw new Error(result.data.error || 'Failed to save your syllabus.');
@@ -682,9 +713,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     );
   }
 
-  const mathsHasChapters = (setup?.mathsChapters?.length || 0) > 0;
-  const scienceHasChapters = (setup?.scienceChapters?.length || 0) > 0;
-  const hasAnySyllabus = mathsHasChapters || scienceHasChapters;
+  const visibleSubjectsForDisplay = visibleRevisionSubjects(effectiveClassKey);
+  const subjectHasChapters = (key: string) => ((setup ? getSubjectSetup(setup, key).chapters.length : 0) > 0);
+  const hasAnySyllabus = visibleSubjectsForDisplay.some((s) => subjectHasChapters(s.key));
 
   return (
     <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
@@ -736,24 +767,20 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
           {hasAnySyllabus && !showSetupForm && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
-              <div className={`p-3 rounded-xl border text-xs font-semibold ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
-                <span className={`block text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Maths</span>
-                {mathsHasChapters ? (
-                  <>
-                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.mathsChapters.length} chapter{setup!.mathsChapters.length === 1 ? '' : 's'} -- {setup!.mathsCompletedChapters.length} done this level</span>
-                    <span className="block text-amber-400 mt-0.5">{setup!.mathsExamDate ? `Exam: ${new Date(setup!.mathsExamDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No exam date -- just revising'}</span>
-                  </>
-                ) : <span className={isLightMode ? 'text-slate-400' : 'text-slate-600'}>Not set up</span>}
-              </div>
-              <div className={`p-3 rounded-xl border text-xs font-semibold ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
-                <span className={`block text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Science</span>
-                {scienceHasChapters ? (
-                  <>
-                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{setup!.scienceChapters.length} chapter{setup!.scienceChapters.length === 1 ? '' : 's'} -- {setup!.scienceCompletedChapters.length} done this level</span>
-                    <span className="block text-amber-400 mt-0.5">{setup!.scienceExamDate ? `Exam: ${new Date(setup!.scienceExamDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No exam date -- just revising'}</span>
-                  </>
-                ) : <span className={isLightMode ? 'text-slate-400' : 'text-slate-600'}>Not set up</span>}
-              </div>
+              {visibleSubjectsForDisplay.map((s) => {
+                const sub = getSubjectSetup(setup!, s.key);
+                return (
+                  <div key={s.key} className={`p-3 rounded-xl border text-xs font-semibold ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
+                    <span className={`block text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{s.label}</span>
+                    {sub.chapters.length > 0 ? (
+                      <>
+                        <span className={isLightMode ? 'text-slate-700' : 'text-slate-300'}>{sub.chapters.length} chapter{sub.chapters.length === 1 ? '' : 's'} -- {sub.completed.length} done this level</span>
+                        <span className="block text-amber-400 mt-0.5">{sub.examDate ? `Exam: ${new Date(sub.examDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No exam date -- just revising'}</span>
+                      </>
+                    ) : <span className={isLightMode ? 'text-slate-400' : 'text-slate-600'}>Not set up</span>}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -910,11 +937,19 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
               </div>
             )}
 
-            {([
-              { key: 'maths', label: 'Maths', selected: mathsSelectedChapters, setSelected: setMathsSelectedChapters, dropdownPick: mathsDropdownPick, setDropdownPick: setMathsDropdownPick, noExam: mathsNoExam, setNoExam: setMathsNoExam, examDate: mathsExamDate, setExamDate: setMathsExamDate },
-              { key: 'science', label: 'Science', selected: scienceSelectedChapters, setSelected: setScienceSelectedChapters, dropdownPick: scienceDropdownPick, setDropdownPick: setScienceDropdownPick, noExam: scienceNoExam, setNoExam: setScienceNoExam, examDate: scienceExamDate, setExamDate: setScienceExamDate },
-            ] as const).map((s) => {
-              const availableOptions = chapterOptions[s.label].filter((c) => !s.selected.includes(c));
+            {visibleRevisionSubjects(fallbackClass || effectiveClassKey).map((subj) => ({
+              key: subj.key,
+              label: subj.label,
+              selected: subjectForm[subj.key].selected,
+              setSelected: (v: string[]) => patchSubjectForm(subj.key, { selected: v }),
+              dropdownPick: subjectForm[subj.key].dropdownPick,
+              setDropdownPick: (v: string) => patchSubjectForm(subj.key, { dropdownPick: v }),
+              noExam: subjectForm[subj.key].noExam,
+              setNoExam: (v: boolean) => patchSubjectForm(subj.key, { noExam: v }),
+              examDate: subjectForm[subj.key].examDate,
+              setExamDate: (v: string) => patchSubjectForm(subj.key, { examDate: v }),
+            })).map((s) => {
+              const availableOptions = (chapterOptions[s.label] || []).filter((c) => !s.selected.includes(c));
               return (
               <div key={s.key} className={`p-4 rounded-xl border space-y-3 ${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                 <h4 className={`text-xs font-black uppercase tracking-wide ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>{s.label}</h4>
@@ -1001,10 +1036,9 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   <h3 className={`text-sm font-black uppercase tracking-wide ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Chapter</h3>
                   <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Pick which chapter from your own syllabus you want to be tested on next -- nothing is generated until you confirm.</p>
                 </div>
-                {([
-                  { subject: 'Maths' as const, chapters: setup!.mathsChapters, completed: setup!.mathsCompletedChapters },
-                  { subject: 'Science' as const, chapters: setup!.scienceChapters, completed: setup!.scienceCompletedChapters },
-                ]).filter((s) => s.chapters.length > 0).map((s) => (
+                {visibleRevisionSubjects(effectiveClassKey)
+                  .map((subj) => ({ subject: subj.label, ...getSubjectSetup(setup!, subj.key) }))
+                  .filter((s) => s.chapters.length > 0).map((s) => (
                   <div key={s.subject} className="space-y-2">
                     <h4 className={`text-[11px] font-black uppercase tracking-wide font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>{s.subject}</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
