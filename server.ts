@@ -474,7 +474,7 @@ const subjectSyllabusImageCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_syl
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
 // deletes the temp copies. Returns null if no photos were found for that session. `prefix`
 // defaults to the homework temp folder; Revision submissions pass REVISION_TEMP_PREFIX instead.
-async function mergeSessionPhotos(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX): Promise<Buffer | null> {
+async function mergeSessionPhotos(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX, deferCleanup: boolean = false): Promise<Buffer | null> {
   const folder = `${prefix}/${email}/${sessionId}`;
   const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
   if (listError || !fileList || fileList.length === 0) return null;
@@ -494,16 +494,34 @@ async function mergeSessionPhotos(email: string, sessionId: string, prefix: stri
 
   const merged = await mergeImagesToPdf(buffers);
 
-  // Best-effort cleanup -- a failure here shouldn't fail the submission itself.
-  await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+  // Best-effort cleanup -- a failure here shouldn't fail the submission itself. A caller that
+  // passes deferCleanup owns removing the temp files itself (removeSessionTempFiles) once its
+  // submission is durably saved.
+  if (!deferCleanup) {
+    await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+  }
 
   return merged;
+}
+
+// Deleting the temp uploads inside the merge itself meant a finalize request that merged fine but
+// then died before its submission row was saved (timeout, dropped connection, storage hiccup)
+// had already destroyed the student's photos -- the automatic retry then found nothing and
+// told them "No uploaded photos were found" even though the app had shown every photo as
+// uploaded (confirmed real case: a student submitting a fully uploaded 5-photo homework got
+// exactly this error). The student-facing finalize endpoints now defer the delete until after the
+// submission is saved, so a retry can simply re-merge the still-present photos.
+async function removeSessionTempFiles(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX): Promise<void> {
+  const folder = `${prefix}/${email}/${sessionId}`;
+  const { data: fileList } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
+  if (!fileList || fileList.length === 0) return;
+  await supabase.storage.from(HOMEWORK_BUCKET).remove(fileList.map((f) => `${folder}/${f.name}`)).catch(() => {});
 }
 
 // Same temp-then-assemble idea as mergeSessionPhotos, but for a single large file (e.g. one big
 // PDF) split into small byte chunks client-side -- each chunk upload stays tiny regardless of the
 // total file size, so a 4-5MB+ PDF never has to cross the server in one request either.
-async function concatenateSessionChunks(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX): Promise<Buffer | null> {
+async function concatenateSessionChunks(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX, deferCleanup: boolean = false): Promise<Buffer | null> {
   const folder = `${prefix}/${email}/${sessionId}`;
   const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
   if (listError || !fileList || fileList.length === 0) return null;
@@ -523,7 +541,9 @@ async function concatenateSessionChunks(email: string, sessionId: string, prefix
 
   const combined = Buffer.concat(chunks);
 
-  await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+  if (!deferCleanup) {
+    await supabase.storage.from(HOMEWORK_BUCKET).remove(sorted.map((f) => `${folder}/${f.name}`)).catch(() => {});
+  }
 
   return combined;
 }
@@ -8011,7 +8031,7 @@ function buildApp(): express.Express {
 
     let combined: Buffer | null;
     try {
-      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), HOMEWORK_TEMP_PREFIX, true);
     } catch (concatErr: any) {
       console.error("Error reassembling PDF chunks:", concatErr.message);
       return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
@@ -8043,6 +8063,8 @@ function buildApp(): express.Express {
       console.error("Error saving homework submission record:", upsertErr.message);
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
+
+    await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
 
     // The AI check itself is triggered as a separate follow-up request (see
     // POST /api/homework/check-mine below) rather than awaited right here -- this endpoint already
@@ -8076,7 +8098,7 @@ function buildApp(): express.Express {
 
     let merged: Buffer | null;
     try {
-      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), HOMEWORK_TEMP_PREFIX, true);
     } catch (mergeErr: any) {
       console.error("Error merging session photos:", mergeErr.message);
       return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
@@ -8108,6 +8130,8 @@ function buildApp(): express.Express {
       console.error("Error saving homework submission record:", upsertErr.message);
       return res.status(500).json({ error: "PDF created but failed to save the submission record." });
     }
+
+    await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
 
     // The AI check itself is triggered as a separate follow-up request (see
     // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
@@ -11035,7 +11059,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!paperId) return res.status(400).json({ error: "Missing revision paper reference." });
     let merged: Buffer | null;
     try {
-      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX, true);
     } catch (mergeErr: any) {
       console.error("Error merging revision session photos:", mergeErr.message);
       return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
@@ -11045,7 +11069,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late, submittedAt: justCreated.submitted_at } });
       return res.status(400).json({ error: "No uploaded photos were found. Please attach at least one photo and wait for it to finish uploading before submitting." });
     }
-    return finalizeRevisionSubmission(auth, String(paperId), merged, res);
+    await finalizeRevisionSubmission(auth, String(paperId), merged, res);
+    if (res.statusCode < 400) await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+    return;
   });
 
   app.post("/api/revision/finalize-pdf-submission", async (req, res) => {
@@ -11056,7 +11082,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!paperId) return res.status(400).json({ error: "Missing revision paper reference." });
     let combined: Buffer | null;
     try {
-      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+      combined = await concatenateSessionChunks(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX, true);
     } catch (concatErr: any) {
       console.error("Error reassembling revision PDF chunks:", concatErr.message);
       return res.status(500).json({ error: "Failed to reassemble the uploaded file." });
@@ -11066,7 +11092,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late, submittedAt: justCreated.submitted_at } });
       return res.status(400).json({ error: "No uploaded file pieces were found. Please attach a PDF and wait for it to finish uploading before submitting." });
     }
-    return finalizeRevisionSubmission(auth, String(paperId), combined, res);
+    await finalizeRevisionSubmission(auth, String(paperId), combined, res);
+    if (res.statusCode < 400) await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+    return;
   });
 
   app.post("/api/revision/check-mine", async (req, res) => {
