@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Award, Download, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConical, Sprout, Baby, Shield, Dna } from "lucide-react";
 import { GeneToTraitDiagram, ChromosomePairsDiagram } from "./heredity10Diagrams";
 
-// Class 10 Science, Ch 8 "Heredity" -- notes built from the NCERT chapter and the Heredity part of
+// Heredity notes built from the chapter and the Heredity part of
 // the teacher's notes (the Reproduction part belongs to the previous chapter).
 
 const IMG_BASE = "/diagrams/heredity10/";
@@ -48,7 +48,7 @@ const TOPICS: Topic[] = [
         <>Reproduction creates new individuals that are {b("similar but subtly different")}. Some variation appears even in {b("asexual")} reproduction (from small inaccuracies in DNA copying), and {b("sexual")} reproduction maximises the number of successful variations.</>,
         <>Inheritance from the previous generation gives the next generation both a {b("common basic body design")} and {b("subtle changes")} in it.</>,
       ] },
-      { t: "img", pic: { file: "variation-tree", alt: "Creation of diversity over generations: an original organism gives two slightly different individuals, each giving two more; the four in the bottom row all differ", caption: "Creation of diversity over succeeding generations (NCERT Fig. 8.1)" } },
+      { t: "img", pic: { file: "variation-tree", alt: "Creation of diversity over generations: an original organism gives two slightly different individuals, each giving two more; the four in the bottom row all differ", caption: "Creation of diversity over succeeding generations" } },
       { t: "ul", items: [
         <>The second generation has differences {b("inherited from the first generation")} plus {b("newly created differences")} -- so variation {b("accumulates")}. Each of the four individuals in the bottom row of the figure is different from the others.</>,
         <>A single bacterium that divides again and again gives very similar bacteria -- differing only through {b("small inaccuracies in DNA copying")}. A field of {b("sugarcane")} (vegetative propagation) shows very little variation.</>,
@@ -63,7 +63,6 @@ const TOPICS: Topic[] = [
         <>No. Different variations give different advantages in a given environment. {b("Bacteria that can withstand heat")} survive better in a heat wave; others may resist cold, drought or disease.</>,
         <>{b("Selection of variants by environmental factors")} forms the basis of evolution (natural selection) -- studied in the next chapter.</>,
       ] },
-      { t: "remember", title: "In-text question hints", body: <>(1) Trait A in 10% and trait B in 60% of an asexually reproducing population: {b("trait B")} is likely to have arisen earlier -- it has had more generations to spread. (2) Variations promote survival because if the environment changes, {b("some individuals may already have a suitable variation")} and survive, so the species continues.</> },
     ],
   },
   {
@@ -105,8 +104,8 @@ const TOPICS: Topic[] = [
         <>Inheritance serves two purposes: a {b("common basic body design")} of the species, and {b("subtle changes")} (variations) that bring diversity.</>,
         <>Both the father and the mother contribute {b("practically equal amounts of genetic material")} to the child, so each trait is influenced by paternal and maternal DNA -- there are {b("two versions of each trait")} in every child.</>,
       ] },
-      { t: "img", pic: { file: "earlobes", alt: "Free earlobe (a) and attached earlobe (b)", caption: "(a) Free and (b) attached earlobes -- two variants found in human populations (NCERT Fig. 8.2)" } },
-      { t: "activity", title: "Earlobes in the classroom (NCERT Activity 8.1)", aim: "To find a possible rule for the inheritance of free and attached earlobes.", steps: [
+      { t: "img", pic: { file: "earlobes", alt: "Free earlobe (a) and attached earlobe (b)", caption: "(a) Free and (b) attached earlobes -- two variants found in human populations" } },
+      { t: "activity", title: "Earlobes in the classroom", aim: "To find a possible rule for the inheritance of free and attached earlobes.", steps: [
         "Observe the ears of all students in the class and list who has free and who has attached earlobes.",
         "Calculate the percentage of students with each type.",
         "Find out the earlobe type of each student's parents.",
@@ -166,7 +165,7 @@ const TOPICS: Topic[] = [
         ["Written as a capital letter (T)", "Written as a small letter (t)"],
         ["Masks the recessive allele", "Masked in the presence of the dominant allele"],
       ] },
-      { t: "img", pic: { file: "pea-flower-colour-cross", alt: "Cross between purple-flowered and white-flowered pea plants: all F1 purple, F2 shows 3 purple to 1 white", caption: "Violet x white flowers: all F1 violet, F2 in the ratio 3 : 1 (NCERT Fig. 8.4) -- violet is dominant" } },
+      { t: "img", pic: { file: "pea-flower-colour-cross", alt: "Cross between purple-flowered and white-flowered pea plants: all F1 purple, F2 shows 3 purple to 1 white", caption: "Violet x white flowers: all F1 violet, F2 in the ratio 3 : 1 -- violet is dominant" } },
       { t: "remember", title: "Common mistake", body: <>Dominant does {b("not")} mean stronger or more common. It only means that the trait is expressed when the alleles are different.</> },
     ],
   },
@@ -217,7 +216,7 @@ const TOPICS: Topic[] = [
         <>{b("F1 generation:")} all plants are {b("tall (Tt)")} -- no 'medium-height' plants. Only one parental trait is seen; the other is hidden, not lost.</>,
         <>{b("F1 self-pollination:")} the tall F1 plants are allowed to self-pollinate. In the {b("F2 generation")} about one quarter of the plants are short -- the hidden trait reappears.</>,
       ] },
-      { t: "img", pic: { file: "monohybrid-cross-ncert", alt: "Tall (TT) crossed with short (tt) gives all tall (Tt) in F1; F1 x F1 gives tall (TT), tall (Tt), tall (Tt) and short (tt) in F2", caption: "Inheritance of traits over two generations (NCERT Fig. 8.3)" } },
+      { t: "img", pic: { file: "monohybrid-cross-ncert", alt: "Tall (TT) crossed with short (tt) gives all tall (Tt) in F1; F1 x F1 gives tall (TT), tall (Tt), tall (Tt) and short (tt) in F2", caption: "Inheritance of traits over two generations" } },
       { t: "imgs", pics: [{ file: "monohybrid-f1-punnett", alt: "Punnett square for TT x tt showing all Tt offspring", caption: "TT x tt: all offspring Tt, all tall" }, { file: "monohybrid-f2-punnett", alt: "Punnett square for Tt x Tt showing TT, Tt, Tt and tt", caption: "Tt x Tt (offspring = F2): 1 TT : 2 Tt : 1 tt = 3 tall : 1 short. (The picture's 'F1' label refers to the offspring of this cross, i.e. the F2 generation.)" }] },
       { t: "punnett", title: "Punnett square: F1 (Tt) x F1 (Tt)", corner: "Gametes", cols: ["T", "t"], rows: [["T", "TT (tall)", "Tt (tall)"], ["t", "Tt (tall)", "tt (short)"]] },
       { t: "facts", rows: [
@@ -225,7 +224,7 @@ const TOPICS: Topic[] = [
         ["F2 genotypic ratio", "1 TT : 2 Tt : 1 tt"],
         ["Conclusion", "Both tallness and shortness were inherited in the F1 plants, but only tallness was expressed. Two copies of the 'factor' (now called gene) control each trait; tall (T) is dominant and short (t) recessive."],
       ] },
-      { t: "activity", title: "Confirming the 1 : 2 : 1 ratio (NCERT Activity 8.2 idea)", aim: "To confirm that F2 tall plants are a mixture of TT and Tt.", steps: [
+      { t: "activity", title: "Confirming the 1 : 2 : 1 ratio", aim: "To confirm that F2 tall plants are a mixture of TT and Tt.", steps: [
         "Let each F2 tall plant self-pollinate on its own and collect its seeds.",
         "Grow the seeds of each plant and count tall and short offspring.",
         "A TT plant gives only tall offspring; a Tt plant gives both tall and short (about 3 : 1); a tt plant gives only short.",
@@ -253,7 +252,7 @@ const TOPICS: Topic[] = [
         ["Genotypic ratio", "1 : 2 : 2 : 4 : 1 : 2 : 1 : 2 : 1 (nine genotypes)"],
         ["Number of combinations", "16 boxes in the Punnett square (4 gametes x 4 gametes)"],
       ] },
-      { t: "img", pic: { file: "dihybrid-cross-ncert", alt: "Round green RRyy crossed with wrinkled yellow rrYY, F1 round yellow RrYy, F2 Punnett square and counts 315, 108, 101, 32", caption: "Independent inheritance of two separate traits, shape and colour of seeds (NCERT Fig. 8.5)" } },
+      { t: "img", pic: { file: "dihybrid-cross-ncert", alt: "Round green RRyy crossed with wrinkled yellow rrYY, F1 round yellow RrYy, F2 Punnett square and counts 315, 108, 101, 32", caption: "Independent inheritance of two separate traits, shape and colour of seeds" } },
       { t: "facts", rows: [
         ["Mendel's actual count (556 seeds)", "315 round yellow : 108 round green : 101 wrinkled yellow : 32 wrinkled green -- very close to 9 : 3 : 3 : 1"],
         ["New combinations", "Round green and wrinkled yellow appeared in F2 -- combinations that were not present in either parent or in F1"],
@@ -311,7 +310,6 @@ const TOPICS: Topic[] = [
         <>A germ cell takes {b("one chromosome from each pair")}, which may be of maternal or paternal origin. When a sperm and egg combine, the {b("normal number of chromosomes is restored")} in the zygote, keeping the DNA of the species stable.</>,
       ] },
       { t: "svg", key: "chrom", caption: "Body cell → germ cells → zygote: how the two parental sets are ensured" },
-      { t: "remember", title: "Exercise Q4 in one line", body: <>Equal genetic contribution of both parents is ensured because each parent's germ cell has {b("one copy of every chromosome")} (half the body-cell number), and the zygote gets {b("one set from the father and one from the mother")}.</> },
       { t: "ul", items: [
         <>Asexually reproducing organisms follow similar rules of inheritance too -- the offspring get the parent's DNA copy, with only tiny variations.</>,
       ] },
@@ -335,7 +333,7 @@ const TOPICS: Topic[] = [
         <>Humans have {b("46 chromosomes = 23 pairs")}. {b("22 pairs")} (autosomes) are perfect pairs in both sexes.</>,
         <>The {b("23rd pair")} is the {b("sex chromosomes")}. {b("Women")} have a perfect pair, both called {b("X")} (XX). {b("Men")} have a mismatched pair -- one normal-sized {b("X")} and one short {b("Y")} (XY).</>,
       ] },
-      { t: "img", pic: { file: "sex-determination-ncert", alt: "Male XY and female XX, gametes X and Y and X, zygote XX or XY, offspring female or male", caption: "Sex determination in human beings (NCERT Fig. 8.6)" } },
+      { t: "img", pic: { file: "sex-determination-ncert", alt: "Male XY and female XX, gametes X and Y and X, zygote XX or XY, offspring female or male", caption: "Sex determination in human beings" } },
       { t: "img", pic: { file: "sex-chromosomes-notes", alt: "Father XY and mother XX with four children XX, XY, XX, XY", caption: "Inheritance of sex chromosomes: half the children are girls, half are boys" } },
       { t: "punnett", title: "Punnett square: father (XY) x mother (XX)", corner: "Mother's egg", cols: ["X", "X"], rows: [["X", "XX (girl)", "XX (girl)"], ["Y", "XY (boy)", "XY (boy)"]] },
       { t: "ul", items: [
@@ -347,25 +345,8 @@ const TOPICS: Topic[] = [
     ],
   },
   {
-    id: "activities",
-    title: "13. NCERT Questions Corner",
-    category: "Practical",
-    heading: "Exercise Ideas and Projects",
-    sub: "Investigations from the NCERT exercises.",
-    blocks: [
-      { t: "activity", title: "Finding the dominant coat colour in dogs (NCERT Exercise Q3)", aim: "To find which coat colour is dominant in dogs.", steps: [
-        "Choose dogs of two clearly different coat colours (say black and brown), each a pure-breeding line that always gives puppies of its own colour.",
-        "Cross a pure black dog with a pure brown dog and record the colour of all puppies (F1).",
-        "Cross two F1 dogs together and record the colours in the F2 puppies.",
-        "Repeat with many pairs to get large numbers and count how many puppies show each colour.",
-      ], observation: "The colour seen in all F1 puppies is the dominant one; the colour that disappears in F1 and reappears in about one quarter of the F2 puppies is recessive (about 3 : 1).", conclusion: "The trait expressed in the whole F1 generation is the dominant coat colour." },
-      { t: "remember", title: "Exercise Q1: the genotype of the tall violet parent", body: <>Tall violet x short white gives progeny that are all violet but about half tall and half short. All violet means the violet parent is {b("WW")}; half short (tt) means the tall parent must be {b("Tt")}. So the parent is {b("TtWW")}, option (c).</> },
-      { t: "remember", title: "In-text Q3 (blood groups)", body: <>A man of blood group A marries a woman of group O and their daughter has group O. This does {b("not")} by itself show which trait is dominant: the daughter is O, so the father must carry a hidden O allele (he is A with an O allele), but you cannot tell from one family which is dominant. (Blood group A is in fact dominant over O.)</> },
-    ],
-  },
-  {
     id: "mindmap",
-    title: "14. Quick Glossary & Mind Map",
+    title: "13. Quick Glossary & Mind Map",
     category: "Revision",
     heading: "Quick Glossary and Mind Map",
     sub: "The whole chapter on one page.",
@@ -395,10 +376,10 @@ const TOPICS: Topic[] = [
   },
   {
     id: "competitive-concepts",
-    title: "15. Competitive Corner: Extra Concepts",
+    title: "14. Competitive Corner: Extra Concepts",
     category: "Advanced",
     heading: "Competitive Corner",
-    sub: "NCERT gives the fundamentals. Olympiads, NTSE and foundation-level exams push these ideas a step further.",
+    sub: "The earlier topics cover the fundamentals. Competitive exams push these ideas a step further.",
     blocks: [
       { t: "h", text: "Extending Mendel's Rules" },
       { t: "card", title: "Test Cross", body: [
@@ -445,7 +426,7 @@ const TOPICS: Topic[] = [
   },
   {
     id: "competitive-solved",
-    title: "16. Competitive Corner: Solved Questions",
+    title: "15. Competitive Corner: Solved Questions",
     category: "Advanced",
     heading: "Solved Competitive Questions",
     sub: "Application-style genetics problems -- work them out on paper first.",

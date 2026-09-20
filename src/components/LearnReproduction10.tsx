@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Award, Download, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConical, Sprout, Heart, Baby, Shield, Dna } from "lucide-react";
 
-// Class 10 Science, Ch 7 "How do Organisms Reproduce?" -- notes built from the NCERT chapter and
+// Reproduction notes built from the chapter and
 // the teacher's Reproduction notes (the Heredity portion of those notes belongs to the next
 // chapter and is deliberately excluded).
 
@@ -131,7 +131,7 @@ const TOPICS: Topic[] = [
         <>In {b("Amoeba")}, division can occur in any plane. In {b("Leishmania")} (which causes kala-azar) the cell has a whip-like {b("flagellum")} at one end, so binary fission takes place in a definite orientation in relation to that structure.</>,
       ] },
       { t: "img", pic: { file: "amoeba-binary-fission", alt: "Binary fission in Amoeba: parent, nucleus elongation, groove, division into two daughter cells", caption: "Binary fission in Amoeba" } },
-      { t: "img", pic: { file: "leishmania-binary-fission", alt: "Binary fission in Leishmania shown in stages a to f", caption: "Binary fission in Leishmania (NCERT Fig. 7.1 b) -- division follows the whip-like flagellum" } },
+      { t: "img", pic: { file: "leishmania-binary-fission", alt: "Binary fission in Leishmania shown in stages a to f", caption: "Binary fission in Leishmania -- division follows the whip-like flagellum" } },
       { t: "ul", items: [
         <>Steps: {b("nucleus divides (DNA copied) → cell elongates → cytoplasm constricts → two daughter cells")}.</>,
       ] },
@@ -164,13 +164,8 @@ const TOPICS: Topic[] = [
         <>It is carried out by specialised cells that {b("proliferate (divide repeatedly)")} to make a mass of cells; these then {b("change into different cell types and tissues")} in an organised sequence.</>,
       ] },
       { t: "img", pic: { file: "spirogyra-fragmentation", alt: "Fragmentation in Spirogyra: a filament breaks into fragments that each grow", caption: "Fragmentation in Spirogyra" } },
-      { t: "imgs", pics: [{ file: "planaria-regeneration", alt: "Regeneration in Planaria: a cut worm regrows into complete worms", caption: "Regeneration in Planaria (NCERT Fig. 7.3)" }, { file: "hydra-regeneration", alt: "Regeneration in Hydra: after amputation the pieces regrow", caption: "Regeneration in Hydra" }] },
+      { t: "imgs", pics: [{ file: "planaria-regeneration", alt: "Regeneration in Planaria: a cut worm regrows into complete worms", caption: "Regeneration in Planaria" }, { file: "hydra-regeneration", alt: "Regeneration in Hydra: after amputation the pieces regrow", caption: "Regeneration in Hydra" }] },
       { t: "remember", title: "Regeneration ≠ reproduction", body: <>Most organisms cannot be cut up and still reproduce -- regeneration is a repair/regrowth ability, not a normal way of reproducing for them. Hydra normally reproduces by {b("budding")}; Planaria normally reproduces sexually.</> },
-      { t: "h", text: "Why can't complex organisms (like humans) reproduce by regeneration?" },
-      { t: "ul", items: [
-        <>Complex organisms are made of {b("organised tissues and organs")}, not just similar cells.</>,
-        <>Regeneration needs special cells that can multiply and specialise in a coordinated way; in complex organisms these abilities are {b("highly restricted")} and body design is not simply rebuilt from a piece.</>,
-      ] },
     ],
   },
   {
@@ -241,7 +236,7 @@ const TOPICS: Topic[] = [
         ["Grafting", "The cut stem (scion) of one plant is fixed on the rooted stock of a related plant; tissues join (mango, apple, lemon)"],
         ["Tissue culture", "A few cells/tissue taken from the tip of a plant are grown on a nutrient medium in sterile conditions; the callus is moved to hormone medium, then to soil (orchids, ornamental plants, banana)"],
       ] },
-      { t: "h", text: "Why practise vegetative propagation?" },
+      { t: "h", text: "Advantages of Vegetative Propagation" },
       { t: "ul", items: [
         <>Plants raised by it bear {b("flowers and fruits earlier")} than those grown from seeds.</>,
         <>It lets us grow plants that have {b("lost the capacity to produce viable seeds")} -- banana, orange, rose, jasmine.</>,
@@ -284,7 +279,7 @@ const TOPICS: Topic[] = [
         <>{b("Angiosperms")} (flowering plants) bear seeds enclosed in fruits; {b("gymnosperms")} bear seeds without fruits (cones are their reproductive structures).</>,
         <>Flower parts (from outside): {b("sepals")} (green, protect the bud), {b("petals")} (coloured, attract insects and protect inner parts), {b("stamens")} (male), {b("carpel/pistil")} (female).</>,
       ] },
-      { t: "img", pic: { file: "flower-ls-ncert", alt: "Longitudinal section of a flower with stigma, style, ovary, anther, filament, petal and sepal labelled", caption: "Longitudinal section of a flower (NCERT Fig. 7.7)" } },
+      { t: "img", pic: { file: "flower-ls-ncert", alt: "Longitudinal section of a flower with stigma, style, ovary, anther, filament, petal and sepal labelled", caption: "Longitudinal section of a flower" } },
       { t: "img", pic: { file: "flower-ls-notes", alt: "Flower L.S. with stamen (anther, filament) and pistil (stigma, style, ovary), petal and sepal", caption: "Parts of a flower" } },
       { t: "facts", rows: [
         ["Stamen (male part)", "Anther -- swollen top, makes pollen grains (yellowish powder) that carry male gametes; Filament -- stalk holding the anther"],
@@ -312,14 +307,14 @@ const TOPICS: Topic[] = [
         ["Pollen goes to the stigma of the same flower (or another flower of the same plant)", "Pollen goes to a flower of a different plant of the same species"],
         ["No variation; needs no agent (peas, tomato)", "Produces variation and healthier offspring (apple, sunflower)"],
       ] },
-      { t: "imgs", pics: [{ file: "pollen-tube-ncert", alt: "Germination of pollen on stigma: pollen grain, stigma, male germ-cell, pollen tube, ovary, female germ-cell", caption: "Germination of pollen on the stigma (NCERT Fig. 7.8)" }, { file: "pollen-tube-notes", alt: "Pollen tube growing through the style to the ovule", caption: "Pollen tube reaching the ovule" }] },
+      { t: "imgs", pics: [{ file: "pollen-tube-ncert", alt: "Germination of pollen on stigma: pollen grain, stigma, male germ-cell, pollen tube, ovary, female germ-cell", caption: "Germination of pollen on the stigma" }, { file: "pollen-tube-notes", alt: "Pollen tube growing through the style to the ovule", caption: "Pollen tube reaching the ovule" }] },
       { t: "h", text: "Fertilisation" },
       { t: "ul", items: [
         <>After landing on a suitable stigma, the pollen grain grows a {b("pollen tube")} down through the style to the ovary and ovule.</>,
         <>The tube carries the {b("male gametes")}; in the ovule one of them fuses with the {b("egg cell")} -- this is {b("fertilisation")}, forming a {b("zygote")} (diploid).</>,
         <>{b("Pollination ≠ fertilisation")}: pollination is the transfer of pollen (an external event); fertilisation is the fusion of gametes.</>,
       ] },
-      { t: "remember", title: "Extra (beyond NCERT): double fertilisation", body: <>In flowering plants a second male gamete fuses with two polar nuclei in the ovule (triple fusion) to form the food-storing {b("endosperm")}. This together with syngamy (egg + male gamete) is called double fertilisation.</> },
+      { t: "remember", title: "Extra: double fertilisation", body: <>In flowering plants a second male gamete fuses with two polar nuclei in the ovule (triple fusion) to form the food-storing {b("endosperm")}. This together with syngamy (egg + male gamete) is called double fertilisation.</> },
       { t: "h", text: "After Fertilisation" },
       { t: "facts", rows: [
         ["Zygote", "Divides repeatedly to form the embryo inside the ovule"],
@@ -341,16 +336,16 @@ const TOPICS: Topic[] = [
         <>{b("Germination")} is the development of the embryo in the seed into a seedling, under suitable conditions (water, air, warmth). The seed swells by absorbing water, the {b("radicle")} grows down into the root, and the {b("plumule")} grows up into the shoot.</>,
         <>Seeds germinate to give a new plant, and the {b("fruit")} protects the seed and helps in dispersal.</>,
       ] },
-      { t: "imgs", pics: [{ file: "seed-development", alt: "After fertilisation the ovule becomes the seed and the ovary the fruit; inside a seed the plumule, radicle and cotyledons", caption: "Ovule → seed, ovary → fruit; parts inside a seed" }, { file: "seed-germination-ncert", alt: "Germination: cotyledon (food store), plumule (future shoot), radicle (future root)", caption: "Seed and germination (NCERT Fig. 7.9)" }] },
+      { t: "imgs", pics: [{ file: "seed-development", alt: "After fertilisation the ovule becomes the seed and the ovary the fruit; inside a seed the plumule, radicle and cotyledons", caption: "Ovule → seed, ovary → fruit; parts inside a seed" }, { file: "seed-germination-ncert", alt: "Germination: cotyledon (food store), plumule (future shoot), radicle (future root)", caption: "Seed and germination" }] },
       { t: "compare", left: "Monocot (one cotyledon)", right: "Dicot (two cotyledons)", rows: [
         ["Parallel leaf veins", "Net-like leaf veins"],
         ["Grass, maize, lilies, orchids", "Beans, gram, sunflower, rose"],
       ] },
-      { t: "activity", title: "Observing a germinating seed (NCERT 7.7)", aim: "To see the parts of a soaked seed.", steps: [
+      { t: "activity", title: "Observing a germinating seed", aim: "To see the parts of a soaked seed.", steps: [
         "Soak a few gram or pea seeds overnight.",
         "Drain the water and cover the seeds with a wet cloth; leave them for a day.",
         "Cut open a soaked seed and identify its parts.",
-        "Compare with the figure of the seed in the textbook.",
+        "Compare with the diagram of a seed shown above.",
       ], observation: "A seed has a seed coat, an embryo with plumule and radicle, and cotyledons that store food.", conclusion: "The embryo grows into a new plant on germination, using stored food in the cotyledons." },
     ],
   },
@@ -384,7 +379,7 @@ const TOPICS: Topic[] = [
     heading: "The Human Male Reproductive System",
     sub: "Making and delivering sperm.",
     blocks: [
-      { t: "img", pic: { file: "male-system-ncert", alt: "Human male reproductive system with testis, scrotum, vas deferens, seminal vesicle, prostate gland, urethra, penis, bladder and ureter labelled", caption: "Human male reproductive system (NCERT Fig. 7.10)" } },
+      { t: "img", pic: { file: "male-system-ncert", alt: "Human male reproductive system with testis, scrotum, vas deferens, seminal vesicle, prostate gland, urethra, penis, bladder and ureter labelled", caption: "Human male reproductive system" } },
       { t: "img", pic: { file: "male-system-notes", alt: "Male reproductive system with urethra, penis, seminal vesicles, prostate, ejaculatory ducts, bulbourethral glands, vas deferens, epididymis, scrotum and testicles labelled", caption: "Male reproductive system (detailed)" } },
       { t: "facts", rows: [
         ["Testes (2)", "Primary sex organs; produce sperm and the hormone testosterone. Lie outside the abdomen in the scrotum, where the temperature is lower -- sperm formation needs a temperature lower than normal body temperature"],
@@ -409,7 +404,7 @@ const TOPICS: Topic[] = [
     heading: "The Human Female Reproductive System",
     sub: "Making eggs and nurturing the developing baby.",
     blocks: [
-      { t: "img", pic: { file: "female-system-ncert", alt: "Human female reproductive system with oviduct, ovary, uterus, cervix and vagina labelled", caption: "Human female reproductive system (NCERT Fig. 7.11)" } },
+      { t: "img", pic: { file: "female-system-ncert", alt: "Human female reproductive system with oviduct, ovary, uterus, cervix and vagina labelled", caption: "Human female reproductive system" } },
       { t: "imgs", pics: [{ file: "female-system-notes", alt: "Female reproductive system with fallopian tube, ovary, uterus, cervix and vagina", caption: "Female reproductive system" }, { file: "ovum", alt: "Ovum (egg cell) surrounded by protective layers", caption: "Ovum (egg cell)" }] },
       { t: "facts", rows: [
         ["Ovaries (2)", "Primary sex organs; produce eggs (ova) and hormones (oestrogen, progesterone). At birth they already hold thousands of immature eggs; from puberty one egg matures and is released about every month (ovulation)"],
@@ -461,7 +456,6 @@ const TOPICS: Topic[] = [
         <>If the egg is {b("not fertilised")}, it lives for about {b("one day")}. The thickened lining is no longer needed, so it {b("breaks down and comes out of the vagina as blood and mucus")}. This is {b("menstruation")}.</>,
         <>The cycle repeats roughly {b("every month")}, and the bleeding lasts about {b("2 to 8 days")}.</>,
       ] },
-      { t: "remember", title: "Why does menstruation occur?", body: <>Because the uterine lining prepared for a possible pregnancy is not needed when the egg is not fertilised -- the lining is shed. If fertilisation occurs, menstruation stops during pregnancy.</> },
     ],
   },
   {
@@ -490,7 +484,7 @@ const TOPICS: Topic[] = [
         ["Intrauterine devices (Copper-T / loop)", "Placed in the uterus to prevent implantation; may cause irritation or side effects"],
         ["Surgical methods", "Vasectomy (vas deferens blocked in men) and tubectomy (fallopian tubes blocked in women) -- permanent; risk of infection if not done properly"],
       ] },
-      { t: "h", text: "Why adopt contraception?" },
+      { t: "h", text: "Need for Contraception" },
       { t: "ul", items: [
         <>To {b("space or delay pregnancies")}, avoid unwanted pregnancy, protect the mother's health, control population growth and (for condoms) reduce STD risk.</>,
       ] },
@@ -499,25 +493,25 @@ const TOPICS: Topic[] = [
   },
   {
     id: "activities",
-    title: "19. NCERT Activities",
+    title: "19. Hands-On Activities",
     category: "Practical",
-    heading: "NCERT Activities (Chapter 7)",
-    sub: "The hands-on experiments you must know.",
+    heading: "Hands-On Activities",
+    sub: "The simple experiments you should know and be able to describe.",
     blocks: [
-      { t: "activity", title: "Rhizopus on bread (Activity 7.2)", aim: "To observe the growth of bread mould and its spores.", steps: [
+      { t: "activity", title: "Rhizopus on bread", aim: "To observe the growth of bread mould and its spores.", steps: [
         "Moisten a slice of bread and keep it in a cool, moist, dark place for a few days.",
         "Observe the thread-like growth with a magnifying glass.",
         "Later, observe the small blob-like sporangia; a slide can be viewed under a microscope.",
       ], observation: "Cotton-like hyphae spread on the bread; small black round sporangia appear on stalks and contain spores.", conclusion: "Rhizopus reproduces by spore formation; spores germinate on damp surfaces." },
-      { t: "activity", title: "Yeast budding (Activity 7.1 style)", aim: "To see budding in yeast.", steps: [
+      { t: "activity", title: "Yeast budding", aim: "To see budding in yeast.", steps: [
         "Dissolve about 10 g sugar in 100 mL warm water and add a pinch of yeast.",
         "Keep in a warm place for an hour, then put a drop on a slide and view under a microscope.",
       ], observation: "Small outgrowths (buds) on the yeast cells in various stages of separation.", conclusion: "Yeast reproduces by budding." },
-      { t: "activity", title: "Vegetative propagation in a potato / money plant (Activity 7.5/7.6)", aim: "To see how a piece of a plant grows into a new plant.", steps: [
+      { t: "activity", title: "Vegetative propagation in a potato / money plant", aim: "To see how a piece of a plant grows into a new plant.", steps: [
         "Cut a piece of potato with an 'eye' or a stem piece of a money plant with a node.",
         "Keep them in moist soil / water for a few days.",
       ], observation: "Roots and shoots develop from the node/eye.", conclusion: "Buds/nodes give rise to new plants -- vegetative propagation." },
-      { t: "activity", title: "Studying a flower (Activity 7.7)", aim: "To identify the parts of a flower.", steps: [
+      { t: "activity", title: "Studying a flower", aim: "To identify the parts of a flower.", steps: [
         "Take a hibiscus or mustard flower.",
         "Separate the sepals, petals, stamens and carpel carefully.",
         "Cut the ovary lengthwise and observe the ovules with a hand lens.",
@@ -556,7 +550,7 @@ const TOPICS: Topic[] = [
     title: "21. Competitive Corner: Extra Concepts",
     category: "Advanced",
     heading: "Competitive Corner",
-    sub: "NCERT gives the fundamentals. Olympiads, NTSE and foundation-level exams push these same ideas a step further.",
+    sub: "The earlier topics cover the fundamentals. Competitive exams push these same ideas a step further.",
     blocks: [
       { t: "h", text: "Cell Division Behind Reproduction" },
       { t: "card", title: "Mitosis vs Meiosis", body: [
@@ -590,7 +584,7 @@ const TOPICS: Topic[] = [
         <>{b("Oxytocin")} makes the uterine muscles contract during birth and helps release milk during breast-feeding; {b("prolactin")} makes the breasts produce milk.</>,
         <>{b("Identical twins:")} one zygote splits into two -- genetically identical. {b("Fraternal twins:")} two different eggs fertilised by two different sperm -- as different as ordinary siblings.</>,
       ] },
-      { t: "h", text: "Beyond the Textbook: Plants" },
+      { t: "h", text: "Beyond the Basics: Plants" },
       { t: "card", title: "Double Fertilisation in Detail", body: [
         <>A pollen grain contains a {b("tube cell")} and a {b("generative cell")}; the generative cell divides to give {b("two male gametes")}.</>,
         <>The mature embryo sac in the ovule has {b("7 cells and 8 nuclei")}: the egg with two synergids, three antipodal cells, and a large central cell with {b("two polar nuclei")}.</>,
