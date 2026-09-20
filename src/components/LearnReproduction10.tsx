@@ -1,12 +1,14 @@
 import React, { useState } from "react";
-import { Award, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConical, Sprout, Heart, Baby, Shield, Dna } from "lucide-react";
-import { BinaryFissionDiagram, BuddingHydraDiagram, FlowerLSDiagram, PollenTubeDiagram, SpermDiagram } from "./reproduction10Diagrams";
+import { Award, Download, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConical, Sprout, Heart, Baby, Shield, Dna } from "lucide-react";
 
 // Class 10 Science, Ch 7 "How do Organisms Reproduce?" -- notes built from the NCERT chapter and
 // the teacher's Reproduction notes (the Heredity portion of those notes belongs to the next
 // chapter and is deliberately excluded).
 
-type DiagramKey = "fission" | "budding" | "flower" | "pollen" | "sperm";
+const IMG_BASE = "/diagrams/reproduction10/";
+const NOTES_PDF_URL = "/Class-10-Reproduction-Notes.pdf";
+const NOTES_PDF_NAME = "Class-10-Reproduction-Notes.pdf";
+interface Pic { file: string; alt: string; caption: string; }
 
 type Block =
   | { t: "card"; title: string; body: React.ReactNode[] }
@@ -15,7 +17,9 @@ type Block =
   | { t: "facts"; rows: [string, React.ReactNode][] }
   | { t: "compare"; left: string; right: string; rows: [string, string][] }
   | { t: "remember"; title: string; body: React.ReactNode }
-  | { t: "diagram"; key: DiagramKey; caption: string }
+  | { t: "img"; pic: Pic }
+  | { t: "imgs"; pics: Pic[] }
+  | { t: "exq"; n: number; q: string; a: string }
   | { t: "activity"; title: string; aim: string; steps: string[]; observation: string; conclusion: string }
   | { t: "p"; body: React.ReactNode };
 
@@ -67,6 +71,7 @@ const TOPICS: Topic[] = [
         <>{b("DNA (Deoxyribonucleic Acid)")} is found in the nucleus of a cell (in the chromosomes). It carries the information for making {b("proteins")}; different proteins give different body designs. If the information changes, different proteins are made and the body design can change.</>,
         <>DNA has a {b("double-helix")} structure -- two strands joined by pairs of bases (A with T, C with G).</>,
       ] },
+      { t: "img", pic: { file: "dna", alt: "DNA double helix with the four bases and the sugar-phosphate backbone", caption: "DNA: double helix, base pairs (A-T, C-G) and sugar-phosphate backbone" } },
       { t: "ul", items: [
         <>A basic event in reproduction is the {b("creation of a DNA copy")}. Cells use {b("chemical reactions")} to build copies of their DNA.</>,
         <>Keeping one copy in the old cell and pushing the other out would not work -- the pushed-out copy would have no {b("organised cellular apparatus")}. So DNA copying is accompanied by making {b("additional cell machinery")}, then the DNA copies separate, each with its own cell apparatus. A cell effectively {b("divides into two cells")}.</>,
@@ -125,11 +130,13 @@ const TOPICS: Topic[] = [
         <>The parent cell divides into {b("two equal halves")}. Seen in {b("Amoeba, Paramecium, bacteria")}.</>,
         <>In {b("Amoeba")}, division can occur in any plane. In {b("Leishmania")} (which causes kala-azar) the cell has a whip-like {b("flagellum")} at one end, so binary fission takes place in a definite orientation in relation to that structure.</>,
       ] },
-      { t: "diagram", key: "fission", caption: "Binary fission in Amoeba" },
+      { t: "img", pic: { file: "amoeba-binary-fission", alt: "Binary fission in Amoeba: parent, nucleus elongation, groove, division into two daughter cells", caption: "Binary fission in Amoeba" } },
+      { t: "img", pic: { file: "leishmania-binary-fission", alt: "Binary fission in Leishmania shown in stages a to f", caption: "Binary fission in Leishmania (NCERT Fig. 7.1 b) -- division follows the whip-like flagellum" } },
       { t: "ul", items: [
         <>Steps: {b("nucleus divides (DNA copied) → cell elongates → cytoplasm constricts → two daughter cells")}.</>,
       ] },
       { t: "h", text: "Multiple Fission" },
+      { t: "img", pic: { file: "multiple-fission-cyst", alt: "Multiple fission: parent cell forms a cyst with many nuclei, cyst breaks and releases daughter cells", caption: "Multiple fission (as in Plasmodium)" } },
       { t: "ul", items: [
         <>A single cell divides into {b("many daughter cells at the same time")}. Seen in {b("Plasmodium")} (the malarial parasite).</>,
         <>Under unfavourable conditions the organism forms a protective {b("cyst")} around itself; when conditions improve, many daughter cells are formed inside and released.</>,
@@ -156,6 +163,8 @@ const TOPICS: Topic[] = [
         <>{b("Regeneration")} is the ability of a fully differentiated organism to give rise to a new individual from its cut or broken body parts. Examples: {b("Planaria")} and {b("Hydra")} -- cut into pieces, each piece regrows into a complete organism.</>,
         <>It is carried out by specialised cells that {b("proliferate (divide repeatedly)")} to make a mass of cells; these then {b("change into different cell types and tissues")} in an organised sequence.</>,
       ] },
+      { t: "img", pic: { file: "spirogyra-fragmentation", alt: "Fragmentation in Spirogyra: a filament breaks into fragments that each grow", caption: "Fragmentation in Spirogyra" } },
+      { t: "imgs", pics: [{ file: "planaria-regeneration", alt: "Regeneration in Planaria: a cut worm regrows into complete worms", caption: "Regeneration in Planaria (NCERT Fig. 7.3)" }, { file: "hydra-regeneration", alt: "Regeneration in Hydra: after amputation the pieces regrow", caption: "Regeneration in Hydra" }] },
       { t: "remember", title: "Regeneration ≠ reproduction", body: <>Most organisms cannot be cut up and still reproduce -- regeneration is a repair/regrowth ability, not a normal way of reproducing for them. Hydra normally reproduces by {b("budding")}; Planaria normally reproduces sexually.</> },
       { t: "h", text: "Why can't complex organisms (like humans) reproduce by regeneration?" },
       { t: "ul", items: [
@@ -175,7 +184,8 @@ const TOPICS: Topic[] = [
         <>In {b("budding")}, a {b("bud")} develops as an outgrowth at a specific site on the parent, due to repeated cell division at that site. The bud grows into a tiny individual and, when mature, {b("detaches")} and lives independently.</>,
         <>Budding uses special (regenerative) cells and occurs in unicellular ({b("yeast")}) and multicellular ({b("Hydra")}) organisms.</>,
       ] },
-      { t: "diagram", key: "budding", caption: "Budding in Hydra" },
+      { t: "img", pic: { file: "hydra-budding", alt: "Budding in Hydra: parent Hydra, developing bud, new bud, new Hydra", caption: "Budding in Hydra" } },
+      { t: "img", pic: { file: "yeast-budding", alt: "Budding in yeast: parent cell, forming bud, cytoplasm divides, chain of yeast cells", caption: "Budding in yeast" } },
       { t: "ul", items: [
         <>Steps: {b("growth of bud → development → separation → new independent organism")}.</>,
         <>{b("Yeast")}: in warm, sugar-rich (about 10% sugar) solution, yeast cells form small buds that separate and grow into new yeast cells.</>,
@@ -198,6 +208,7 @@ const TOPICS: Topic[] = [
         <>{b("Rhizopus")} grows on a moist slice of bread kept in a cool, moist, dark place. The thread-like structures on the bread are {b("hyphae")} -- they are {b("not")} reproductive.</>,
         <>The small blob-on-a-stick structures are {b("sporangia")}; they contain many tiny cells called {b("spores")}. When the sporangium bursts, spores are dispersed by air and, on a moist surface, {b("germinate into new Rhizopus")}.</>,
       ] },
+      { t: "img", pic: { file: "rhizopus-spores", alt: "Rhizopus showing hypha, sporangium and spores", caption: "Spore formation in Rhizopus (bread mould)" } },
       { t: "ul", items: [
         <>Spores are covered by a {b("thick protective wall")} that helps them survive unfavourable conditions until they land on a suitable moist surface.</>,
         <>{b("Benefit")}: a very large number of spores is produced; they are easily spread by air; they survive harsh conditions -- so the organism can spread quickly and widely.</>,
@@ -220,7 +231,10 @@ const TOPICS: Topic[] = [
         ["Stem", "Potato (eyes/nodes), ginger, onion, grasses -- buds on stems/tubers sprout"],
         ["Root", "Sweet potato, Dahlia -- buds on roots develop into new plants"],
       ] },
+      { t: "imgs", pics: [{ file: "bryophyllum-leaf-buds", alt: "Bryophyllum leaf with small plantlets growing at the leaf margin", caption: "Bryophyllum: buds on the leaf margin" }, { file: "potato-eyes", alt: "Potato with eyes sprouting shoots and roots", caption: "Potato: eyes (buds) give shoots and roots" }, { file: "root-adventitious-buds", alt: "Root tuber with adventitious buds growing into young plants", caption: "Roots: adventitious buds (e.g. sweet potato)" }] },
       { t: "h", text: "Artificial Vegetative Propagation" },
+      { t: "imgs", pics: [{ file: "stem-cutting", alt: "Stem cutting cut at a slant, dipped in rooting hormone and grown into a plant", caption: "Cutting" }, { file: "layering", alt: "Layering: a branch bent into soil forms roots while attached to the parent", caption: "Layering" }] },
+      { t: "imgs", pics: [{ file: "grafting", alt: "Grafting: scion joined to the stock and tied", caption: "Grafting (scion and stock)" }, { file: "tissue-culture", alt: "Tissue culture in five steps from explant to plantlets in soil", caption: "Tissue culture: steps" }] },
       { t: "facts", rows: [
         ["Cutting", "A stem piece with nodes is cut and planted in moist soil -- roots form (rose, sugarcane, money plant)"],
         ["Layering", "A branch is bent and covered with soil while still attached to the parent; roots form, then it is separated (jasmine, mint, strawberry)"],
@@ -270,7 +284,8 @@ const TOPICS: Topic[] = [
         <>{b("Angiosperms")} (flowering plants) bear seeds enclosed in fruits; {b("gymnosperms")} bear seeds without fruits (cones are their reproductive structures).</>,
         <>Flower parts (from outside): {b("sepals")} (green, protect the bud), {b("petals")} (coloured, attract insects and protect inner parts), {b("stamens")} (male), {b("carpel/pistil")} (female).</>,
       ] },
-      { t: "diagram", key: "flower", caption: "Longitudinal section (L.S.) of a flower" },
+      { t: "img", pic: { file: "flower-ls-ncert", alt: "Longitudinal section of a flower with stigma, style, ovary, anther, filament, petal and sepal labelled", caption: "Longitudinal section of a flower (NCERT Fig. 7.7)" } },
+      { t: "img", pic: { file: "flower-ls-notes", alt: "Flower L.S. with stamen (anther, filament) and pistil (stigma, style, ovary), petal and sepal", caption: "Parts of a flower" } },
       { t: "facts", rows: [
         ["Stamen (male part)", "Anther -- swollen top, makes pollen grains (yellowish powder) that carry male gametes; Filament -- stalk holding the anther"],
         ["Carpel / Pistil (female part)", "Stigma -- sticky tip that receives pollen; Style -- tube joining stigma and ovary; Ovary -- swollen base containing ovules"],
@@ -297,7 +312,7 @@ const TOPICS: Topic[] = [
         ["Pollen goes to the stigma of the same flower (or another flower of the same plant)", "Pollen goes to a flower of a different plant of the same species"],
         ["No variation; needs no agent (peas, tomato)", "Produces variation and healthier offspring (apple, sunflower)"],
       ] },
-      { t: "diagram", key: "pollen", caption: "Pollen tube growth after pollination" },
+      { t: "imgs", pics: [{ file: "pollen-tube-ncert", alt: "Germination of pollen on stigma: pollen grain, stigma, male germ-cell, pollen tube, ovary, female germ-cell", caption: "Germination of pollen on the stigma (NCERT Fig. 7.8)" }, { file: "pollen-tube-notes", alt: "Pollen tube growing through the style to the ovule", caption: "Pollen tube reaching the ovule" }] },
       { t: "h", text: "Fertilisation" },
       { t: "ul", items: [
         <>After landing on a suitable stigma, the pollen grain grows a {b("pollen tube")} down through the style to the ovary and ovule.</>,
@@ -326,6 +341,7 @@ const TOPICS: Topic[] = [
         <>{b("Germination")} is the development of the embryo in the seed into a seedling, under suitable conditions (water, air, warmth). The seed swells by absorbing water, the {b("radicle")} grows down into the root, and the {b("plumule")} grows up into the shoot.</>,
         <>Seeds germinate to give a new plant, and the {b("fruit")} protects the seed and helps in dispersal.</>,
       ] },
+      { t: "imgs", pics: [{ file: "seed-development", alt: "After fertilisation the ovule becomes the seed and the ovary the fruit; inside a seed the plumule, radicle and cotyledons", caption: "Ovule → seed, ovary → fruit; parts inside a seed" }, { file: "seed-germination-ncert", alt: "Germination: cotyledon (food store), plumule (future shoot), radicle (future root)", caption: "Seed and germination (NCERT Fig. 7.9)" }] },
       { t: "compare", left: "Monocot (one cotyledon)", right: "Dicot (two cotyledons)", rows: [
         ["Parallel leaf veins", "Net-like leaf veins"],
         ["Grass, maize, lilies, orchids", "Beans, gram, sunflower, rose"],
@@ -368,6 +384,8 @@ const TOPICS: Topic[] = [
     heading: "The Human Male Reproductive System",
     sub: "Making and delivering sperm.",
     blocks: [
+      { t: "img", pic: { file: "male-system-ncert", alt: "Human male reproductive system with testis, scrotum, vas deferens, seminal vesicle, prostate gland, urethra, penis, bladder and ureter labelled", caption: "Human male reproductive system (NCERT Fig. 7.10)" } },
+      { t: "img", pic: { file: "male-system-notes", alt: "Male reproductive system with urethra, penis, seminal vesicles, prostate, ejaculatory ducts, bulbourethral glands, vas deferens, epididymis, scrotum and testicles labelled", caption: "Male reproductive system (detailed)" } },
       { t: "facts", rows: [
         ["Testes (2)", "Primary sex organs; produce sperm and the hormone testosterone. Lie outside the abdomen in the scrotum, where the temperature is lower -- sperm formation needs a temperature lower than normal body temperature"],
         ["Testosterone", "Regulates sperm production and brings about the changes seen in boys at puberty"],
@@ -378,7 +396,7 @@ const TOPICS: Topic[] = [
         ["Penis", "Organ that delivers sperm into the female reproductive tract"],
       ] },
       { t: "h", text: "The Sperm" },
-      { t: "diagram", key: "sperm", caption: "Structure of a sperm" },
+      { t: "img", pic: { file: "sperm-structure", alt: "Sperm with acrosome, nucleus (head), mitochondria in the middle piece and tail", caption: "Structure of a sperm" } },
       { t: "ul", items: [
         <>A tiny, motile male gamete with a {b("head")} (nucleus with DNA; the tip holds enzymes), a {b("middle piece")} rich in mitochondria (energy) and a long {b("tail")} for swimming.</>,
       ] },
@@ -391,6 +409,8 @@ const TOPICS: Topic[] = [
     heading: "The Human Female Reproductive System",
     sub: "Making eggs and nurturing the developing baby.",
     blocks: [
+      { t: "img", pic: { file: "female-system-ncert", alt: "Human female reproductive system with oviduct, ovary, uterus, cervix and vagina labelled", caption: "Human female reproductive system (NCERT Fig. 7.11)" } },
+      { t: "imgs", pics: [{ file: "female-system-notes", alt: "Female reproductive system with fallopian tube, ovary, uterus, cervix and vagina", caption: "Female reproductive system" }, { file: "ovum", alt: "Ovum (egg cell) surrounded by protective layers", caption: "Ovum (egg cell)" }] },
       { t: "facts", rows: [
         ["Ovaries (2)", "Primary sex organs; produce eggs (ova) and hormones (oestrogen, progesterone). At birth they already hold thousands of immature eggs; from puberty one egg matures and is released about every month (ovulation)"],
         ["Oviducts / Fallopian tubes", "Tubes with a funnel-shaped opening that catch the egg and carry it to the uterus; fertilisation normally occurs here"],
@@ -408,11 +428,13 @@ const TOPICS: Topic[] = [
     heading: "From Fertilisation to Birth",
     sub: "How a zygote becomes a baby.",
     blocks: [
+      { t: "img", pic: { file: "fertilisation", alt: "Sperm fuses with the egg in fertilisation to form a zygote", caption: "Fertilisation: sperm + egg → zygote" } },
       { t: "ul", items: [
         <>During sexual intercourse sperm are deposited in the {b("vagina")}, travel through the cervix and uterus into the {b("oviduct")}, where one sperm may fuse with the egg -- {b("fertilisation")} -- to form a {b("zygote")} (this is internal fertilisation).</>,
         <>The zygote divides repeatedly to form an {b("embryo")}, which gets {b("implanted")} in the thick, blood-rich lining of the uterus about 6-8 days after fertilisation.</>,
       ] },
       { t: "h", text: "Placenta" },
+      { t: "img", pic: { file: "placenta-foetus", alt: "Foetus in the uterus with the placenta, umbilical cord, uterus and cervix labelled", caption: "Foetus, placenta and umbilical cord in the uterus" } },
       { t: "ul", items: [
         <>The {b("placenta")} is a special disc-like tissue embedded in the uterine wall. It has many {b("villi")} on the embryo's side and blood spaces on the mother's side.</>,
         <>It provides a large surface area for the exchange of {b("glucose, oxygen, nutrients")} from the mother to the embryo and for the removal of {b("waste (e.g. carbon dioxide)")} from the embryo to the mother's blood. The embryo is connected to the placenta by the {b("umbilical cord")}.</>,
@@ -529,9 +551,121 @@ const TOPICS: Topic[] = [
       ] },
     ],
   },
+  {
+    id: "competitive-concepts",
+    title: "21. Competitive Corner: Extra Concepts",
+    category: "Advanced",
+    heading: "Competitive Corner",
+    sub: "NCERT gives the fundamentals. Olympiads, NTSE and foundation-level exams push these same ideas a step further.",
+    blocks: [
+      { t: "h", text: "Cell Division Behind Reproduction" },
+      { t: "card", title: "Mitosis vs Meiosis", body: [
+        <>{b("Mitosis")} makes two genetically identical daughter cells from one body cell (same chromosome number). It is the cell division behind growth, repair and all {b("asexual reproduction")}.</>,
+        <>{b("Meiosis")} (the reduction division) happens only in reproductive organs. One cell gives {b("four")} cells with {b("half")} the chromosome number -- the gametes. During meiosis, parts of chromosomes are exchanged (crossing over), which adds {b("new combinations")} and more variation.</>,
+        <>In humans a body cell has {b("46")} chromosomes; a sperm or egg has {b("23")}; fertilisation restores {b("46")} in the zygote.</>,
+      ] },
+      { t: "compare", left: "Mitosis", right: "Meiosis", rows: [
+        ["Body (somatic) cells", "Reproductive organs only (to form gametes)"],
+        ["1 cell → 2 identical cells", "1 cell → 4 cells, each with half the chromosomes"],
+        ["Chromosome number stays the same", "Chromosome number is halved"],
+        ["Growth, repair, asexual reproduction", "Formation of gametes; more variation"],
+      ] },
+      { t: "h", text: "Making the Gametes" },
+      { t: "card", title: "Spermatogenesis and Oogenesis (overview)", body: [
+        <>{b("Sperm")} are formed continuously from puberty in the coiled tubules of the testes. Cells of the testes called {b("Leydig cells")} make testosterone; {b("Sertoli cells")} nourish the developing sperm. One cell gives {b("four")} sperm.</>,
+        <>{b("Egg (ovum)")} formation begins before birth. A girl is born with about 1-2 million immature eggs, of which only about {b("400")} mature and are released in her life. One cell gives {b("one")} functional egg (the other products are tiny polar bodies) -- so the egg keeps nearly all the stored food.</>,
+        <>The ovum is the {b("largest cell")} in the human body, about 0.1 mm across; a sperm is only about 0.05 mm long and mostly nucleus plus tail.</>,
+      ] },
+      { t: "h", text: "Hormones and the Menstrual Cycle" },
+      { t: "card", title: "The 28-day cycle in four steps", body: [
+        <>{b("1. Menstruation (about days 1-5):")} the uterine lining is shed.</>,
+        <>{b("2. Follicular phase:")} FSH from the pituitary gland makes a follicle in the ovary grow; the follicle releases {b("oestrogen")}, which rebuilds and thickens the uterine lining.</>,
+        <>{b("3. Ovulation (about day 14):")} a surge of {b("LH")} makes the follicle release the egg.</>,
+        <>{b("4. Luteal phase:")} the empty follicle becomes the {b("corpus luteum")}, which secretes {b("progesterone")} to maintain the lining. If there is no fertilisation, the corpus luteum degenerates, hormone levels fall, and the lining is shed -- the next menstruation.</>,
+      ] },
+      { t: "remember", title: "Why the period stops in pregnancy", body: <>After implantation the embryo and placenta secrete {b("hCG")} (human chorionic gonadotropin). It keeps the corpus luteum alive, so progesterone stays high, the lining is kept and menstruation does not occur. hCG is what a pregnancy test detects.</> },
+      { t: "h", text: "Pregnancy, Birth and Twins" },
+      { t: "ul", items: [
+        <>The {b("placenta")} also works as a temporary endocrine gland: it secretes progesterone and oestrogen for the rest of the pregnancy.</>,
+        <>{b("Oxytocin")} makes the uterine muscles contract during birth and helps release milk during breast-feeding; {b("prolactin")} makes the breasts produce milk.</>,
+        <>{b("Identical twins:")} one zygote splits into two -- genetically identical. {b("Fraternal twins:")} two different eggs fertilised by two different sperm -- as different as ordinary siblings.</>,
+      ] },
+      { t: "h", text: "Beyond the Textbook: Plants" },
+      { t: "card", title: "Double Fertilisation in Detail", body: [
+        <>A pollen grain contains a {b("tube cell")} and a {b("generative cell")}; the generative cell divides to give {b("two male gametes")}.</>,
+        <>The mature embryo sac in the ovule has {b("7 cells and 8 nuclei")}: the egg with two synergids, three antipodal cells, and a large central cell with {b("two polar nuclei")}.</>,
+        <>{b("Syngamy:")} male gamete + egg → diploid zygote (2n) → embryo. {b("Triple fusion:")} male gamete + two polar nuclei → triploid (3n) cell → {b("endosperm")}. Double fertilisation is a special feature of flowering plants.</>,
+      ] },
+      { t: "facts", rows: [
+        ["Wind-pollinated flowers", "Small, dull, no scent or nectar; very light, dry pollen made in huge amounts; feathery or large stigma (maize, grasses)"],
+        ["Insect-pollinated flowers", "Bright petals, scent and nectar; sticky or spiny pollen (mustard, sunflower)"],
+        ["Water-pollinated plants", "Pollen carried by water (Vallisneria, Hydrilla)"],
+        ["Emasculation and bagging", "Plant breeders remove anthers of a flower and cover it to control pollination when making hybrids"],
+        ["Epigeal germination", "Cotyledons come above the soil (bean, castor)"],
+        ["Hypogeal germination", "Cotyledons stay below the soil (pea, gram, maize)"],
+        ["True fruit vs false fruit", "True fruit develops only from the ovary (mango); in a false fruit other parts help, e.g. the thalamus in apple and pear"],
+        ["Parthenocarpic fruit", "A fruit that develops without fertilisation and is seedless (banana, some grapes)"],
+      ] },
+      { t: "card", title: "Vegetative Propagation: Special Structures", body: [
+        <>{b("Runner")} -- grass, strawberry. {b("Sucker")} -- banana, pineapple. {b("Rhizome")} -- ginger, turmeric. {b("Tuber")} -- potato. {b("Bulb")} -- onion, garlic, tulip. {b("Corm")} -- Colocasia. {b("Offset")} -- water hyacinth.</>,
+        <>Water hyacinth spreads so fast by vegetative propagation that it can choke ponds and lakes; it is called the "terror of Bengal".</>,
+        <>{b("Tissue culture")} works because plant cells are {b("totipotent")}: a single cell can grow into a whole plant. Culturing a growing tip (meristem) can give {b("virus-free")} plants.</>,
+      ] },
+      { t: "h", text: "Development Without Fertilisation" },
+      { t: "ul", items: [
+        <>{b("Parthenogenesis:")} an egg develops into an individual without being fertilised -- e.g. drone honeybees develop from unfertilised eggs; some lizards and insects also do this.</>,
+        <>{b("Apomixis:")} some plants form seeds without fertilisation, so the seeds carry exactly the parent's characters. Scientists study it as a way of keeping useful hybrid crops true to type.</>,
+      ] },
+      { t: "h", text: "Reproductive Health: Science, Law and Society" },
+      { t: "card", title: "Assisted Reproductive Technologies (ART)", body: [
+        <>{b("IVF (in-vitro fertilisation):")} eggs are fertilised by sperm in a laboratory dish and the early embryo is placed in the mother's uterus -- the "test-tube baby" method. The first IVF baby in the world (Louise Brown) was born in 1978; India's first (Durga, in Kolkata) was born a few months later in 1978.</>,
+        <>{b("Artificial insemination:")} semen is placed directly into the female reproductive tract.</>,
+        <>{b("Amniocentesis")} tests the fluid around the foetus for certain disorders, but using it to find the sex of the foetus is illegal.</>,
+      ] },
+      { t: "facts", rows: [
+        ["PCPNDT Act, 1994", "Prohibits prenatal sex determination and sex-selective abortion in India"],
+        ["MTP Act, 1971 (amended 2021)", "Allows medical termination of pregnancy only under specified conditions, by registered doctors"],
+        ["Sex ratio (Census 2011)", "About 943 females per 1000 males overall; child sex ratio (0-6 years) about 919"],
+        ["Beti Bachao Beti Padhao", "National campaign launched in 2015 to improve the child sex ratio and girls' education"],
+        ["HIV", "Attacks the body's immune (helper T) cells. Spreads by unprotected sex, infected blood or needles and from mother to child -- NOT by touch, mosquitoes or sharing food"],
+        ["Bacteria vs viruses", "Gonorrhoea and syphilis (bacteria) can be treated with antibiotics; HIV and warts (viruses) are not cured by antibiotics"],
+        ["HPV and Hepatitis B vaccines", "Vaccines exist that protect against some cancer-causing HPV types and against hepatitis B"],
+      ] },
+      { t: "h", text: "Numbers Worth Remembering" },
+      { t: "facts", rows: [
+        ["Lifespan of gametes", "Sperm can survive in the female tract for a few days; an egg can be fertilised for only about 12-24 hours after release"],
+        ["Implantation", "About 6-8 days after fertilisation"],
+        ["Duration of pregnancy", "About 266 days from fertilisation (about 280 days / 40 weeks from the last menstrual period)"],
+        ["Normal sperm count", "Above about 15 million per mL of semen"],
+        ["Chromosomes", "Body cell 46; sperm or egg 23; zygote 46"],
+      ] },
+      { t: "remember", title: "Watch for these traps", body: <>(1) Regeneration is repair; reproduction makes offspring. (2) Pollination is transfer of pollen; fertilisation is fusion of gametes. (3) Budding is an outgrowth; binary fission is an equal split. (4) Vegetative propagation gives plants identical to the parent, so no variation -- unlike seeds from sexual reproduction. (5) A copper-T prevents pregnancy but not STIs; only condoms give partial STI protection.</> },
+    ],
+  },
+  {
+    id: "competitive-solved",
+    title: "22. Competitive Corner: Solved Questions",
+    category: "Advanced",
+    heading: "Solved Competitive Questions",
+    sub: "Application-style questions on the ideas above.",
+    blocks: [
+      { t: "exq", n: 1, q: "A human zygote has 46 chromosomes although the sperm and egg that formed it each carry 23. Explain.", a: "Gametes are formed by meiosis, which halves the chromosome number, so each carries 23. At fertilisation the two nuclei fuse, and 23 + 23 = 46 restores the normal number in the zygote. Without this halving, the number would double in every generation." },
+      { t: "exq", n: 2, q: "In banana cultivation, why does a disease that attacks one plant often destroy the whole plantation?", a: "Banana is propagated vegetatively (by suckers), so all plants are genetically identical to the parent. With no variation, every plant is equally susceptible, so a disease that can infect one can infect all -- the same reason variation matters for the survival of a species." },
+      { t: "exq", n: 3, q: "A boy is born with testes that never moved down into the scrotum. Why is he likely to have very low sperm production?", a: "Sperm formation needs a temperature lower than normal body temperature. The scrotum provides this; testes kept inside the abdominal cavity stay at body temperature, so sperm formation is greatly reduced." },
+      { t: "exq", n: 4, q: "A woman's pregnancy test uses a urine sample. Which hormone does it detect, and why is it a reliable sign?", a: "It detects hCG. Only an implanted embryo (through the placenta) produces hCG, so its presence shows that implantation has occurred." },
+      { t: "exq", n: 5, q: "Before menstruation the level of progesterone in the blood falls sharply. Why, and what is the result?", a: "If the egg is not fertilised, the corpus luteum degenerates and stops secreting progesterone. Without progesterone the thickened uterine lining cannot be maintained, so it breaks down and is shed as menstrual flow." },
+      { t: "exq", n: 6, q: "Identical twins look exactly alike, while fraternal twins do not. How does the way they form explain this?", a: "Identical twins come from a single zygote that splits into two, so they carry the same genetic material. Fraternal twins come from two different eggs fertilised by two different sperm, so they are genetically as different as any other siblings." },
+      { t: "exq", n: 7, q: "Explain why a pea seed's cotyledons stay below the soil while a bean seed's cotyledons come above the ground.", a: "In pea (hypogeal germination) the part of the stem below the cotyledons stays short, so the cotyledons remain in the soil. In bean (epigeal germination) that part elongates and pushes the cotyledons above the ground." },
+      { t: "exq", n: 8, q: "Why can a condom reduce the risk of STIs, while an oral pill or a copper-T cannot?", a: "A condom is a physical barrier that stops semen and body fluids from passing between the partners, so it also blocks many disease-causing microbes. Pills act by changing hormones and a copper-T acts inside the uterus; neither creates a barrier against microbes." },
+      { t: "exq", n: 9, q: "Why does an ovum contain much more stored food and cytoplasm than a sperm although both carry the same amount of DNA?", a: "The ovum must nourish the zygote and early embryo until it is implanted, so it is large and rich in food. The sperm only has to reach and enter the egg, so it is tiny and motile, made mostly of a nucleus, mitochondria for energy and a tail." },
+      { t: "exq", n: 10, q: "Give one reason why the seeds of an apomictic plant are useful to a farmer growing a hybrid crop.", a: "Apomictic seeds are formed without fertilisation, so each seed is a copy of the parent plant. The farmer can save seeds every year and still get plants with the same useful characters, instead of buying fresh hybrid seed." },
+      { t: "exq", n: 11, q: "Wind-pollinated plants produce far more pollen than insect-pollinated plants. Why?", a: "Wind carries pollen at random, so most of it is lost. Producing huge quantities of light, dry pollen raises the chance that some grains land on a stigma of the same species. Insects, in contrast, carry pollen directly from flower to flower." },
+      { t: "exq", n: 12, q: "How does grafting differ from layering, and why is it used to grow mango varieties?", a: "In layering, a branch forms roots while still attached to the parent and is cut off later. In grafting, the cut shoot (scion) of one plant is joined to the rooted stock of another. Grafting is used for mango because it lets a good-quality variety grow on a strong root system and fruit earlier, with the parent's characters preserved." },
+    ],
+  },
 ];
 
-const ICONS: Record<string, React.ElementType> = { Fundamentals: Dna, "Asexual Reproduction": Leaf, "Sexual Reproduction": Sprout, "Human Reproduction": Heart, Practical: FlaskConical, Revision: Shield };
+const ICONS: Record<string, React.ElementType> = { Fundamentals: Dna, "Asexual Reproduction": Leaf, "Sexual Reproduction": Sprout, "Human Reproduction": Heart, Practical: FlaskConical, Revision: Shield, Advanced: Award };
 
 const InfoCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="bg-[#0f1a12] border border-green-500/15 p-5 rounded-2xl space-y-3 shadow-md">
@@ -565,15 +699,20 @@ const CompareTable: React.FC<{ left: string; right: string; rows: [string, strin
     </div>
   </div>
 );
-const DiagramCard: React.FC<{ caption: string; children: React.ReactNode; isLightMode: boolean }> = ({ caption, children, isLightMode }) => (
-  <div className="space-y-2">
-    <div className={`rounded-2xl border p-3 shadow-lg ${isLightMode ? "bg-white border-slate-200" : "bg-[#0b1710] border-slate-800"}`}>{children}</div>
-    <p className="text-center text-[13px] font-bold text-slate-500">{caption}</p>
+const PicCard: React.FC<{ pic: Pic; isLightMode: boolean }> = ({ pic, isLightMode }) => (
+  <figure className="space-y-2 m-0">
+    <div className={`rounded-2xl border p-3 shadow-lg bg-white flex items-center justify-center ${isLightMode ? "border-slate-200" : "border-slate-700"}`}>
+      <img src={IMG_BASE + pic.file + ".webp"} alt={pic.alt} loading="lazy" className="w-auto h-auto max-w-full max-h-[440px] object-contain" />
+    </div>
+    <figcaption className="text-center text-[13px] font-bold text-slate-500">{pic.caption}</figcaption>
+  </figure>
+);
+const ExampleQ: React.FC<{ n: number; q: string; a: string }> = ({ n, q, a }) => (
+  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-2">
+    <p className="text-sm font-bold leading-relaxed"><span className="text-green-400 font-mono">Q{n}.</span> {q}</p>
+    <p className="text-sm font-semibold leading-relaxed"><span className="text-emerald-400 font-black">Answer: </span>{a}</p>
   </div>
 );
-const DIAGRAMS: Record<DiagramKey, React.ReactElement> = {
-  fission: <BinaryFissionDiagram />, budding: <BuddingHydraDiagram />, flower: <FlowerLSDiagram />, pollen: <PollenTubeDiagram />, sperm: <SpermDiagram />,
-};
 
 function renderBlock(block: Block, i: number, isLightMode: boolean) {
   switch (block.t) {
@@ -584,7 +723,9 @@ function renderBlock(block: Block, i: number, isLightMode: boolean) {
     case "facts": return <div key={i} className="grid grid-cols-1 gap-2.5">{block.rows.map(([l, r], j) => <FactRow key={j} label={l}>{r}</FactRow>)}</div>;
     case "compare": return <CompareTable key={i} left={block.left} right={block.right} rows={block.rows} isLightMode={isLightMode} />;
     case "remember": return <RememberBox key={i} title={block.title}>{block.body}</RememberBox>;
-    case "diagram": return <DiagramCard key={i} caption={block.caption} isLightMode={isLightMode}>{DIAGRAMS[block.key]}</DiagramCard>;
+    case "img": return <PicCard key={i} pic={block.pic} isLightMode={isLightMode} />;
+    case "imgs": return <div key={i} className={`grid grid-cols-1 gap-4 ${block.pics.length > 1 ? "sm:grid-cols-2" : ""}`}>{block.pics.map((p) => <PicCard key={p.file} pic={p} isLightMode={isLightMode} />)}</div>;
+    case "exq": return <ExampleQ key={i} n={block.n} q={block.q} a={block.a} />;
     case "activity": return (
       <div key={i} className={`rounded-2xl border p-5 space-y-4 shadow-md ${isLightMode ? "bg-white border-slate-200" : "bg-[#0f1a12] border-green-500/15"}`}>
         <div className="flex items-start gap-2.5"><FlaskConical className="w-5 h-5 text-green-400 shrink-0 mt-0.5" /><h3 className="text-base font-black leading-snug">{block.title}</h3></div>
@@ -613,15 +754,25 @@ export function LearnReproduction10({ isLightMode = false, onCompleteNotes, onGo
   return (
     <div className={`flex-1 flex flex-col md:flex-row overflow-hidden h-full transition-colors duration-300 ${isLightMode ? "bg-slate-50" : "bg-[#060b14]"}`} id="learn-repro10-container">
       <div className={`sticky top-0 shrink-0 z-20 p-3 md:hidden w-full ${isLightMode ? "bg-white/95 border-b border-slate-200" : "bg-[#0d1424]/95 border-b border-slate-800"}`}>
-        <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`w-full rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
-          {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`flex-1 min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
+            {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+          <a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`shrink-0 flex items-center gap-1 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg ${isLightMode ? "bg-green-600 text-white" : "bg-green-500 text-slate-950"}`}>
+            <Download className="w-3 h-3" />
+            PDF
+          </a>
+        </div>
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Sprout className="w-5 h-5 text-green-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>How do Organisms Reproduce?</h3></div>
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Asexual and sexual reproduction, plants and humans, reproductive health.</p>
+          <a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${isLightMode ? "bg-green-600 hover:bg-green-700 text-white" : "bg-green-500 hover:bg-green-400 text-slate-950"}`}>
+            <Download className="w-3.5 h-3.5" />
+            Download Notes
+          </a>
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t) => (

@@ -12174,7 +12174,8 @@ async function startServer() {
 
 // On Vercel, requests are routed directly to the exported `app` as a serverless
 // function -- there's no long-running process to start.
-if (!process.env.VERCEL) {
+// LOCAL_DEV_LISTEN lets a local dev run listen even when a `vercel env pull` left VERCEL=1 in .env.
+if (!process.env.VERCEL || process.env.LOCAL_DEV_LISTEN) {
   startServer();
 }
 
