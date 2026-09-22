@@ -153,8 +153,9 @@ const TOPICS: Topic[] = [
         <>The {b("epidermis")} forms the outermost layer of the plant, a tightly packed single layer of flat, rectangular cells. It protects the plant from injury, water loss, germs and harsh weather.</>,
         <>A waxy layer called {b("cuticle")} covers the epidermis. Plants in very dry places may have a thicker cuticle, to cut down water loss.</>,
         <>In roots, epidermal cells grow hair-like {b("root hairs")} that increase the surface area for taking up water and minerals.</>,
-        <>In leaves, the epidermis has pores called {b("stomata")}. These let gases in and out, and let water vapour escape (transpiration).</>,
+        <>In leaves, the epidermis has pores called {b("stomata")}. Each stoma is enclosed by two {b("guard cells")}, which open and close the pore. Stomata let gases in and out, and let water vapour escape (transpiration).</>,
         <>Transpiration also helps pull water up through the xylem and helps remove waste from the plant.</>,
+        <>As a stem grows old, some cells below the epidermis turn into a lateral meristem called the {b("cork cambium")}. It keeps producing {b("cork")}: dead, tightly packed cells with a waterproof substance called {b("suberin")} in their walls. Cork forms the {b("bark")} of an old tree and stops water and gases from passing through.</>,
       ] },
       { t: "h", text: "Simple Permanent Tissues (Supporting Tissues)" },
       { t: "img", pic: { file: "permanent-tissues", alt: "Microscope views of parenchyma with thin walls, collenchyma with thick corners, and sclerenchyma with thick lignified walls", caption: "(a) Parenchyma (b) Collenchyma (c) Sclerenchyma" } },
@@ -162,6 +163,10 @@ const TOPICS: Topic[] = [
         ["Parenchyma", "Living cells, thin walls, loosely packed with gaps between them. Stores food, does photosynthesis in green parts. In water plants, forms air spaces that help the plant float"],
         ["Collenchyma", "Living cells, unevenly thickened corners (from a flexible chemical called pectin). Gives support and flexibility, so stems and tendrils bend without breaking"],
         ["Sclerenchyma", "Mostly dead cells with thick, hard walls (from a chemical called lignin). Gives strength and forms the woody, hard parts: stems, leaf veins, coconut husk, walnut shell"],
+      ] },
+      { t: "facts", rows: [
+        ["Chlorenchyma", "Parenchyma cells with chlorophyll in them, so they can do photosynthesis. Gives the green colour to a stem or an aerial root"],
+        ["Aerenchyma", "Parenchyma with big air spaces inside it. Found in water plants (like rice roots) and helps the plant float and store air"],
       ] },
       { t: "remember", title: "Why some fibres are hard and some are soft", body: <>Coconut husk fibre is hard and brittle because it is made of {b("sclerenchyma")} (dead, thick-walled cells). A coriander leaf stalk is soft and flexible because it is made mostly of living {b("parenchyma")} and {b("collenchyma")} cells with thin or only slightly thickened walls.</> },
     ],
@@ -248,6 +253,17 @@ const TOPICS: Topic[] = [
         ["Absorption (e)", "Single layer of tall, pillar-like cells, often with hair-like structures. Lines the small intestine, for taking up nutrients and water"],
       ] },
       { t: "remember", title: "Why so thin?", body: <>A lining that is only one or a few cells thick lets substances move across it quickly. This quick exchange is exactly what gas exchange in the lungs, or absorption in the intestine, needs.</> },
+      { t: "h", text: "Naming Epithelium by Cell Shape" },
+      { t: "ul", items: [
+        <>Epithelial tissue is also named by the {b("shape")} of its cells and by whether it has one layer or many.</>,
+      ] },
+      { t: "facts", rows: [
+        ["Squamous epithelium", "Flat, thin cells. A single layer (simple squamous) lines blood vessels and air sacs of the lungs; many layers (stratified squamous) protect the skin, mouth and food pipe"],
+        ["Cuboidal epithelium", "Cube-shaped cells with a round central nucleus. Lines kidney tubules and the ducts of salivary and sweat glands, for secretion and absorption"],
+        ["Columnar epithelium", "Tall, pillar-like cells. Lines the stomach and intestine, for secretion and absorption"],
+        ["Ciliated epithelium", "Columnar or cuboidal cells with hair-like cilia on top. Lines the windpipe (trachea) and bronchi, where the cilia sweep dust-trapping mucus up and out"],
+        ["Glandular epithelium", "Cells folded inward to form a gland. Makes and releases substances like sweat, tears and digestive juices"],
+      ] },
     ],
   },
   {
@@ -279,6 +295,11 @@ const TOPICS: Topic[] = [
         ["Tendon", "Connects muscle to bone. Brings about movement"],
         ["Ligament", "Connects bone to bone. Gives stability, limits movement and helps prevent dislocation"],
       ] },
+      { t: "h", text: "Two More Connective Tissues" },
+      { t: "facts", rows: [
+        ["Areolar tissue", "A loosely packed connective tissue with fibres running through a gel-like matrix. Fills the space between skin and muscles, and around blood vessels and nerves. It cushions and supports organs and helps repair tissues"],
+        ["Adipose tissue", "Made of fat cells that store fat. Found below the skin and around organs. Stores energy, insulates the body against cold and heat, and cushions organs like the kidneys"],
+      ] },
     ],
   },
   {
@@ -295,6 +316,7 @@ const TOPICS: Topic[] = [
         ["Smooth muscle", "Spindle-shaped cells, one nucleus, no stripes. Found in the stomach and intestine. Involuntary, gives slow, continuous movement like digestion"],
         ["Cardiac muscle", "Cylindrical, branched fibres, one nucleus, faint stripes. Found only in the heart. Involuntary, works tirelessly and rhythmically without ever getting tired"],
       ] },
+      { t: "remember", title: "What makes a muscle contract?", body: <>Muscle cells (also called muscle fibres) have two proteins, {b("actin")} and {b("myosin")}, arranged along their length. These proteins slide over each other to make the muscle contract and relax. Skeletal muscle alone makes up roughly {b("30 to 40 percent")} of an adult's body weight. Like cardiac muscle, smooth muscle also does not get tired.</> },
     ],
   },
   {
@@ -315,6 +337,7 @@ const TOPICS: Topic[] = [
         ["Dendrites", "Receive signals from other neurons"],
         ["Axon", "A long fibre that carries the message away from the cell, ending at axon terminals which pass it on"],
       ] },
+      { t: "remember", title: "Passing the message on", body: <>A message moving along a neuron is called a {b("nerve impulse")}. The tiny gap between one neuron's axon terminals and the next neuron is called a {b("synapse")}. Many neurons joined together form a nerve fibre, and many nerve fibres together form a nerve.</> },
     ],
   },
   {
@@ -408,11 +431,12 @@ const TOPICS: Topic[] = [
     blocks: [
       { t: "card", title: "More on Meristem and Growth", body: [
         <>{b("Stem cells")} in bone marrow can divide and make new blood cells throughout life. In a bone marrow transplant, stem cells from a healthy donor are given to patients with blood disorders such as leukaemia or thalassaemia.</>,
-        <>In young stems, the outer layer is a single-layered epidermis. As the plant ages, some cells below the epidermis become a lateral meristem called the {b("cork cambium")}. It produces dead, tightly packed cork cells that are impermeable to water and gases, forming the {b("bark")} of a tree.</>,
+        <>The lateral meristem that makes xylem and phloem is also called the {b("vascular cambium")}. Not every plant relies on it: a palm tree has almost no lateral meristem activity, which is why its trunk does not keep growing thicker like a mango or teak tree does.</>,
       ] },
       { t: "card", title: "More on Xylem, Phloem and Movement", body: [
         <>Water moves up dead xylem cells mainly through {b("transpiration pull")}: water vapour escaping from leaf stomata creates a suction that pulls the whole water column upward, like sipping through a straw.</>,
-        <>Phloem transport needs {b("living cells")} and energy, since companion cells actively load and unload sugars into the sieve tubes.</>,
+        <>Of the four xylem cell types, only {b("tracheids")} and {b("vessels")} carry water. Tracheids are single, tapering cells with walls that are not perforated. Vessels are wider tubes made of many "vessel members" joined end to end, with perforated end walls, so they carry water more easily.</>,
+        <>Phloem transport needs {b("living cells")} and energy, since companion cells actively load and unload sugars into the sieve tubes. Sieve tubes have small holes called {b("sieve plates")} between cells; some plants also have simpler {b("sieve cells")}, an older kind of phloem cell with no sieve plates. A sieve tube cell and its companion cell come from the same parent cell, so they are often called sister cells.</>,
       ] },
       { t: "card", title: "More on Animal Tissue", body: [
         <>Cartilage exists in a few forms: the flexible kind cushioning joints, and tougher, more fibrous kinds elsewhere in the body (such as between spinal discs).</>,
@@ -426,6 +450,7 @@ const TOPICS: Topic[] = [
         ["Bone remodelling", "Bone tissue keeps being broken down and rebuilt throughout life, helped by minerals like calcium and phosphorus"],
         ["Companion cells", "Named because they sit right beside the sieve tube cells they support and control"],
         ["Cork vs cork cambium", "Cork is the dead protective layer; cork cambium is the living meristem that keeps producing it"],
+        ["Lymph", "A pale fluid connective tissue that leaks out of blood vessels, flows through the lymphatic system, and carries white blood cells that fight infection"],
       ] },
       { t: "remember", title: "Exam traps", body: <>(1) Meristematic tissue divides; permanent tissue does not. (2) Xylem cells that transport water are mostly dead; phloem cells that transport food are mostly alive. (3) Cartilage cushions and cushions joints; it is not the same as bone. (4) A tendon joins muscle to bone; a ligament joins bone to bone. (5) Voluntary movement uses skeletal muscle; involuntary movement uses smooth or cardiac muscle.</> },
     ],
