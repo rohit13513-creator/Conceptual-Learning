@@ -1233,6 +1233,13 @@ export default function App() {
   // shows up in "Your Submissions" once ready.
   const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState('');
+  // A failed upload only ever showed as a small inline red box near the submit button -- easy to
+  // miss on a phone, especially if the student doesn't scroll back down after tapping submit. A
+  // student who reported "I've uploaded 3-4 times and it still shows incomplete" turned out to
+  // have zero new files in storage after that first check, meaning every one of those later
+  // attempts failed silently from her point of view. Mirroring the success case with an equally
+  // unmissable pop-up means a failed attempt can never look like nothing happened.
+  const [showUploadErrorModal, setShowUploadErrorModal] = useState(false);
   const [mySubmissions, setMySubmissions] = useState<any[]>([]);
   const [homeworkLoading, setHomeworkLoading] = useState(false);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
@@ -2853,6 +2860,7 @@ export default function App() {
       }
     } catch (err: any) {
       setHomeworkError(err.message);
+      setShowUploadErrorModal(true);
     } finally {
       setHomeworkUploading(false);
       setHomeworkUploadProgress(0);
@@ -4491,6 +4499,27 @@ export default function App() {
               className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition"
             >
               OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showUploadErrorModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowUploadErrorModal(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-2xl border shadow-2xl p-6 space-y-4 text-center ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0c1324] border-slate-800'}`}
+          >
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isLightMode ? 'bg-red-100' : 'bg-red-500/10'}`}>
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            </div>
+            <h3 className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Upload Did Not Go Through</h3>
+            <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{homeworkError || 'Something went wrong while saving your homework. Please try again.'}</p>
+            <button
+              onClick={() => setShowUploadErrorModal(false)}
+              className="w-full py-2.5 bg-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl hover:bg-red-400 cursor-pointer transition"
+            >
+              OK, I'll Try Again
             </button>
           </div>
         </div>
