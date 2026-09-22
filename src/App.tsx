@@ -18,6 +18,7 @@ import { LearnPhysics9 } from './components/LearnPhysics9';
 import { LearnForces9 } from './components/LearnForces9';
 import { LearnEnergy9 } from './components/LearnEnergy9';
 import { LearnSound9 } from './components/LearnSound9';
+import { LearnFoundations9 } from './components/LearnFoundations9';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { LearnMaths8SquareCube } from './components/LearnMaths8SquareCube';
 import { LearnScience8 } from './components/LearnScience8';
@@ -200,6 +201,10 @@ import { SOUND9_MCQS } from './data/sound9_mcq';
 import { SOUND9_VERY_SHORT, SOUND9_SHORT } from './data/sound9_short';
 import { SOUND9_LONG, SOUND9_COMPETENCY } from './data/sound9_long';
 import { SOUND9_NCERT_SOLVED, SOUND9_SELF_ASSESSMENT } from './data/sound9_practice';
+import { FOUNDATIONS9_MCQS } from './data/foundations9_mcq';
+import { FOUNDATIONS9_VERY_SHORT, FOUNDATIONS9_SHORT } from './data/foundations9_short';
+import { FOUNDATIONS9_LONG, FOUNDATIONS9_COMPETENCY } from './data/foundations9_long';
+import { FOUNDATIONS9_NCERT_SOLVED, FOUNDATIONS9_SELF_ASSESSMENT } from './data/foundations9_practice';
 import {
   Home,
   BookOpen,
@@ -605,10 +610,10 @@ export default function App() {
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -3060,7 +3065,7 @@ export default function App() {
   const [preparingFor, setPreparingFor] = useState<'8th' | '9th' | '10th' | '11th' | '12th'>('10th');
   // Class X now has two subjects (Physics/Optics and Chemistry) for Solve NCERT, Question Bank,
   // and Self Assessment -- this tracks which one is currently active, alongside `preparingFor`.
-  const [qbSubject, setQbSubject] = useState<'physics' | 'chemistry' | 'biology' | 'maths' | 'science'>('physics');
+  const [qbSubject, setQbSubject] = useState<'physics' | 'chemistry' | 'biology' | 'maths' | 'science' | 'foundations'>('physics');
   // Class X Biology now has two chapters -- this tracks which one is active whenever qbSubject === 'biology'.
   const [physicsChapter9, setPhysicsChapter9] = useState<'motion' | 'forces' | 'energy' | 'sound'>('motion');
   const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination' | 'reproduction' | 'heredity'>('life-processes');
@@ -3309,6 +3314,16 @@ export default function App() {
         long: PHYSICS9_LONG,
         assertion: PHYSICS9_ASSERTION_REASON,
         competency: PHYSICS9_COMPETENCY,
+      };
+    } else if (preparingFor === '9th' && qbSubject === 'foundations') {
+      return {
+        ncert: FOUNDATIONS9_NCERT_SOLVED,
+        mcqs: FOUNDATIONS9_MCQS,
+        veryshort: FOUNDATIONS9_VERY_SHORT,
+        short: FOUNDATIONS9_SHORT,
+        long: FOUNDATIONS9_LONG,
+        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        competency: FOUNDATIONS9_COMPETENCY,
       };
     } else if (preparingFor === '9th') {
       return {
@@ -3953,6 +3968,7 @@ export default function App() {
               { label: 'Class 8 (Science)', grade: '8th', onClick: () => { setPreparingFor('8th'); setQbSubject('science'); changeView('scienceNotes8'); } },
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('bioNotes'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('physicsNotes9'); } },
+              { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('foundationsNotes9'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('learn'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('chemNotes'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('bioNotes10'); } },
@@ -3968,7 +3984,7 @@ export default function App() {
                     setOpenMenu(openMenu === 'notes' ? null : 'notes');
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'mathsNotes8' || activeView === 'scienceNotes8' || activeView === 'competitive')
+                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'foundationsNotes9' || activeView === 'mathsNotes8' || activeView === 'scienceNotes8' || activeView === 'competitive')
                       ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
                       : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
                   }`}
@@ -4067,6 +4083,7 @@ export default function App() {
               { label: 'Class 8 (Science)', grade: '8th', onClick: () => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); } },
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('ncert'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('ncert'); } },
+              { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('ncert'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('ncert'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); } },
@@ -4121,6 +4138,7 @@ export default function App() {
               { label: 'Class 8 (Science)', grade: '8th', onClick: () => { setPreparingFor('8th'); setQbSubject('science'); changeView('qbank'); } },
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('qbank'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('qbank'); } },
+              { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('qbank'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('qbank'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('qbank'); } },
@@ -4176,6 +4194,7 @@ export default function App() {
               { label: 'Class 8 (Science)', grade: '8th', onClick: () => { setPreparingFor('8th'); setQbSubject('science'); changeView('assessment'); } },
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('assessment'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('assessment'); } },
+              { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('assessment'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('assessment'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('assessment'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('assessment'); } },
@@ -6005,6 +6024,14 @@ export default function App() {
         </div>
       )}
 
+      {activeView === 'foundationsNotes9' && (
+        <LearnFoundations9
+          isLightMode={isLightMode}
+          onCompleteNotes={() => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('ncert'); }}
+          onGoToSelfAssessment={() => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('assessment'); }}
+        />
+      )}
+
       {activeView === 'mathsNotes8' && (
         <div className="flex-1 flex flex-col overflow-hidden h-full">
           <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
@@ -6220,7 +6247,7 @@ export default function App() {
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
                     ? `Search & study official ${bioChapter10 === 'heredity' ? 'Heredity' : bioChapter10 === 'reproduction' ? 'How do Organisms Reproduce?' : bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
-                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
+                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -6485,7 +6512,7 @@ export default function App() {
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-cyan-400 bg-cyan-400/10 px-2.5 py-0.5 rounded border border-cyan-500/20">Next Chapter Milestone</span>
                 <h4 className="text-base font-bold text-slate-100 mt-1">{preparingFor === '9th' || (preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science')) || (preparingFor === '10th' && qbSubject === 'biology') ? 'Solved Textbook Exercises Completed!' : 'Solved NCERT Exercises Completed!'}</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'sound' : physicsChapter9 === 'energy' ? 'work and energy' : physicsChapter9 === 'forces' ? 'forces' : 'motion') : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'heredity' : bioChapter10 === 'reproduction' ? 'how do organisms reproduce' : bioChapter10 === 'control-coordination' ? 'control & coordination' : 'life processes') : preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'squares and cubes' : 'quadrilateral') : preparingFor === '8th' && qbSubject === 'science' ? 'scientific method' : 'optics'} concepts to the test in the Question Bank.</p>
+                <p className="text-xs text-slate-400 font-semibold">You have thoroughly reviewed all solved steps. Next, put your {preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'sound' : physicsChapter9 === 'energy' ? 'work and energy' : physicsChapter9 === 'forces' ? 'forces' : 'motion') : qbSubject === 'foundations' ? 'science' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'heredity' : bioChapter10 === 'reproduction' ? 'how do organisms reproduce' : bioChapter10 === 'control-coordination' ? 'control & coordination' : 'life processes') : preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'squares and cubes' : 'quadrilateral') : preparingFor === '8th' && qbSubject === 'science' ? 'scientific method' : 'optics'} concepts to the test in the Question Bank.</p>
               </div>
               <button
                 onClick={() => changeView('qbank')}
@@ -7310,7 +7337,7 @@ export default function App() {
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] uppercase font-mono font-black text-amber-500 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/25">Final Chapter Milestone</span>
                 <h4 className="text-base font-bold text-slate-100 mt-1">Question Bank Completed!</h4>
-                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'sound' : physicsChapter9 === 'energy' ? 'work and energy' : physicsChapter9 === 'forces' ? 'forces' : 'motion') : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'heredity' : bioChapter10 === 'reproduction' ? 'how do organisms reproduce' : bioChapter10 === 'control-coordination' ? 'control & coordination' : 'life processes') : preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'squares and cubes' : 'quadrilateral') : preparingFor === '8th' && qbSubject === 'science' ? 'scientific method' : 'optics'} scoring badge.</p>
+                <p className="text-xs text-slate-400 font-semibold">You have practiced MCQ trivia and CBSE derivations. Next, complete your Self-Assessment to earn your {preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'sound' : physicsChapter9 === 'energy' ? 'work and energy' : physicsChapter9 === 'forces' ? 'forces' : 'motion') : qbSubject === 'foundations' ? 'science' : 'biology') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'chemistry' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'heredity' : bioChapter10 === 'reproduction' ? 'how do organisms reproduce' : bioChapter10 === 'control-coordination' ? 'control & coordination' : 'life processes') : preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'squares and cubes' : 'quadrilateral') : preparingFor === '8th' && qbSubject === 'science' ? 'scientific method' : 'optics'} scoring badge.</p>
               </div>
               <button
                 onClick={() => changeView('assessment')}
@@ -7410,7 +7437,7 @@ export default function App() {
                   Interactive Self Assessment Desk
                 </h2>
                 <p className="text-sm font-semibold text-slate-300 font-sans">
-                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Science (Invisible Living World)' : scienceChapter8 === 'health' ? 'Science (Health)' : scienceChapter8 === 'matter' ? 'Science (Particulate Matter)' : scienceChapter8 === 'elements-compounds' ? 'Science (Elements & Compounds)' : 'Science (Investigative World)') : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Physics (Sound)' : physicsChapter9 === 'energy' ? 'Physics (Work and Energy)' : physicsChapter9 === 'forces' ? 'Physics (Forces)' : 'Class IX (Physics)') : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Biology (Heredity)' : bioChapter10 === 'reproduction' ? 'Biology (How do Organisms Reproduce?)' : bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
+                  Examining conceptual depth for <span className="text-cyan-400 font-extrabold">{preparingFor === '8th' && qbSubject === 'maths' ? 'Class 8 (Maths)' : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Science (Invisible Living World)' : scienceChapter8 === 'health' ? 'Science (Health)' : scienceChapter8 === 'matter' ? 'Science (Particulate Matter)' : scienceChapter8 === 'elements-compounds' ? 'Science (Elements & Compounds)' : 'Science (Investigative World)') : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Physics (Sound)' : physicsChapter9 === 'energy' ? 'Physics (Work and Energy)' : physicsChapter9 === 'forces' ? 'Physics (Forces)' : 'Class IX (Physics)') : qbSubject === 'foundations' ? 'Foundations of Science' : 'Class IX (Biology)') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Class X (Chemistry)' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Biology (Heredity)' : bioChapter10 === 'reproduction' ? 'Biology (How do Organisms Reproduce?)' : bioChapter10 === 'control-coordination' ? 'Biology (Control & Coordination)' : 'Biology (Life Processes)') : preparingFor === '10th' ? 'Class X' : 'Competitions'}</span>. Answer questions to track your metrics.
                 </p>
               </div>
               <span className="px-3 py-1 bg-cyan-950/40 border border-cyan-800/30 text-cyan-400 rounded-lg text-xs font-black font-mono select-none shrink-0 text-center">
@@ -7535,14 +7562,14 @@ export default function App() {
                     : preparingFor === '8th'
                     ? CLASSVIII_SELF_ASSESSMENT
                     : preparingFor === '9th'
-                    ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? SOUND9_SELF_ASSESSMENT : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : BIOLOGY9_SELF_ASSESSMENT)
+                    ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? SOUND9_SELF_ASSESSMENT : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : qbSubject === 'foundations' ? FOUNDATIONS9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT)
                     : preparingFor === '10th'
                     ? (qbSubject === 'chemistry' ? CHEMISTRY10_SELF_ASSESSMENT : qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT)
                     : COMPETITION_SELF_ASSESSMENT
                 }
-                subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : 'Biology Self-Assessment') : undefined}
-                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Ready to test your knowledge of Heredity? (80 questions, 50 minutes)' : bioChapter10 === 'reproduction' ? 'Ready to test your knowledge of How do Organisms Reproduce? (80 questions, 50 minutes)' : bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Ready to test your knowledge of Sound? (80 questions, 50 minutes)' : physicsChapter9 === 'energy' ? 'Ready to test your knowledge of Work, Energy and Simple Machines? (80 questions, 50 minutes)' : physicsChapter9 === 'forces' ? 'Ready to test your knowledge of Forces? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Motion?') : 'Ready to test your knowledge of the Cell?') : undefined}
-                durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter' || scienceChapter8 === 'elements-compounds') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'reproduction' || bioChapter10 === 'heredity' ? 3000 : 1800) : preparingFor === '9th' && qbSubject === 'physics' && (physicsChapter9 === 'forces' || physicsChapter9 === 'energy' || physicsChapter9 === 'sound') ? 3000 : undefined}
+                subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : qbSubject === 'foundations' ? 'Science Self-Assessment' : 'Biology Self-Assessment') : undefined}
+                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Ready to test your knowledge of Chemical Reactions and Equations?' : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Ready to test your knowledge of Heredity? (80 questions, 50 minutes)' : bioChapter10 === 'reproduction' ? 'Ready to test your knowledge of How do Organisms Reproduce? (80 questions, 50 minutes)' : bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Ready to test your knowledge of Sound? (80 questions, 50 minutes)' : physicsChapter9 === 'energy' ? 'Ready to test your knowledge of Work, Energy and Simple Machines? (80 questions, 50 minutes)' : physicsChapter9 === 'forces' ? 'Ready to test your knowledge of Forces? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Motion?') : qbSubject === 'foundations' ? 'Ready to test your knowledge of How Science Works? (80 questions, 50 minutes)' : 'Ready to test your knowledge of the Cell?') : undefined}
+                durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter' || scienceChapter8 === 'elements-compounds') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'reproduction' || bioChapter10 === 'heredity' ? 3000 : 1800) : preparingFor === '9th' && qbSubject === 'physics' && (physicsChapter9 === 'forces' || physicsChapter9 === 'energy' || physicsChapter9 === 'sound') ? 3000 : preparingFor === '9th' && qbSubject === 'foundations' ? 3000 : undefined}
                 isLightMode={isLightMode}
               />
             </div>

@@ -38,7 +38,7 @@ const TOPICS: Topic[] = [
       { t: "card", title: "Core Idea", body: [
         <>Sound helps us know what is happening around us: voices, birds, waves, leaves rustling, phones ringing, horns, music and thunder.</>,
         <>Sound is a form of {b("energy")}. Energy cannot be created or destroyed, it only changes form. So some other form of energy must change into sound energy.</>,
-        <>In this chapter we find out {b("how sound is made")}, {b("how it travels")} and {b("how we use it")}.</>,
+        <>Here we find out {b("how sound is made")}, {b("how it travels")} and {b("how we use it")}.</>,
       ] },
       { t: "img", pic: { file: "space-astronauts", alt: "Two astronauts working outside a space station above the Earth", caption: "Can astronauts talk to each other during a spacewalk?" } },
       { t: "h", text: "Think About These" },
@@ -469,8 +469,8 @@ const TOPICS: Topic[] = [
     id: "mindmap",
     title: "14. Mind Map",
     category: "Revision",
-    heading: "Mind Map of the Chapter",
-    sub: "The whole chapter on one page.",
+    heading: "Mind Map of the Topic",
+    sub: "The whole topic on one page.",
     blocks: [
       { t: "svg", key: "mind", caption: "Mind map: sound" },
       { t: "h", text: "Formulas at a Glance" },
@@ -490,7 +490,7 @@ const TOPICS: Topic[] = [
     title: "15. Competitive Corner: Ideas",
     category: "Advanced",
     heading: "Competitive Corner",
-    sub: "The main chapter is enough for school exams. These ideas take you one step further.",
+    sub: "The main topic is enough for school exams. These ideas take you one step further.",
     blocks: [
       { t: "card", title: "Speed of sound in air and temperature", body: [
         <>For air, the speed rises by about 0.6 m/s for each 1 °C rise in temperature. That fits 331 m/s at 0 °C and about 344 m/s at 22 °C.</>,
@@ -537,9 +537,9 @@ const TOPICS: Topic[] = [
   },
   {
     id: "complete",
-    title: "17. Chapter Complete",
+    title: "17. Topic Complete",
     category: "Complete",
-    heading: "Chapter Complete",
+    heading: "Topic Complete",
     sub: "Well done. Check what you can now do.",
     blocks: [
       { t: "done", items: [
@@ -559,7 +559,7 @@ const TOPICS: Topic[] = [
         ["Audible range", "20 Hz to 20 kHz"],
         ["Echo needs", "A gap of 0.1 s, a wall at least 17 m away"],
       ] },
-      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the chapter. If you make mistakes, come back to the topic and read it again.</> },
+      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the topic. If you make mistakes, come back to the topic and read it again.</> },
     ],
   },
 ];

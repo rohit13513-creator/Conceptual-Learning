@@ -295,11 +295,11 @@ const TOPICS: Topic[] = [
     id: "mindmap",
     title: "9. Mind Map",
     category: "Revision",
-    heading: "Mind Map of the Chapter",
-    sub: "The whole chapter on one page.",
+    heading: "Mind Map of the Topic",
+    sub: "The whole topic on one page.",
     blocks: [
       { t: "svg", key: "mind", caption: "Mind map: forces and motion" },
-      { t: "h", text: "Chapter at a Glance" },
+      { t: "h", text: "Topic at a Glance" },
       { t: "facts", rows: [
         ["Force", "A push or a pull, measured in newton (N). Has size and direction"],
         ["Net force", "Same direction: add. Opposite direction: subtract"],
@@ -316,7 +316,7 @@ const TOPICS: Topic[] = [
     title: "10. Competitive Corner: Ideas",
     category: "Advanced",
     heading: "Competitive Corner",
-    sub: "The main chapter is enough for school exams. These ideas take you one step further.",
+    sub: "The main topic is enough for school exams. These ideas take you one step further.",
     blocks: [
       { t: "card", title: "Momentum and Impulse", body: [
         <>{b("Momentum")} p = m × v. It is a vector, in the direction of velocity. Unit: kg m/s.</>,
@@ -364,9 +364,9 @@ const TOPICS: Topic[] = [
   },
   {
     id: "complete",
-    title: "12. Chapter Complete",
+    title: "12. Topic Complete",
     category: "Complete",
-    heading: "Chapter Complete",
+    heading: "Topic Complete",
     sub: "Well done. Check what you can now do.",
     blocks: [
       { t: "done", items: [
@@ -386,7 +386,7 @@ const TOPICS: Topic[] = [
         ["Weight", "W = m × g, with g = 9.8 m/s²"],
         ["System", "a = F / (m1 + m2)"],
       ] },
-      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the chapter. If you make mistakes, come back to the topic and read it again.</> },
+      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the topic. If you make mistakes, come back to the topic and read it again.</> },
     ],
   },
 ];

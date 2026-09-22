@@ -185,7 +185,7 @@ const TOPICS: Topic[] = [
         <>A solar panel changes light energy into electrical energy.</>,
         <>Green leaves change light energy into chemical energy (photosynthesis).</>,
       ] },
-      { t: "remember", title: "Focus of this chapter", body: <>We study {b("mechanical energy")} closely because it is directly connected to the forces and motions you have already learnt.</> },
+      { t: "remember", title: "Focus of this topic", body: <>We study {b("mechanical energy")} closely because it is directly connected to the forces and motions you have already learnt.</> },
     ],
   },
   {
@@ -252,7 +252,7 @@ const TOPICS: Topic[] = [
       { t: "h", text: "Gravitational Potential Energy" },
       { t: "ul", items: [
         <>A ball and the Earth attract each other. Lift the ball and let go: the ball and Earth rush towards each other and gain kinetic energy. So a ball lifted above the ground stores energy.</>,
-        <>The Earth is so massive that it hardly moves. So we just call this the potential energy of the ball. In this chapter, potential energy usually means gravitational potential energy.</>,
+        <>The Earth is so massive that it hardly moves. So we just call this the potential energy of the ball. Here, potential energy usually means gravitational potential energy.</>,
       ] },
       { t: "img", pic: { file: "earth-ball-system", alt: "A ball above the ground with the gravitational force between the ball and the Earth", caption: "The ball and the Earth form one system" } },
       { t: "activity", title: "Activity: Ball and sand", aim: "To see that a higher ball has more energy.", steps: [
@@ -308,7 +308,7 @@ const TOPICS: Topic[] = [
         <>Child of mass m at the top of a slide of height h: PE = mgh.</>,
         <>At the bottom (ignoring friction), all of it becomes KE: ½ m v² = mgh.</>,
         <>So {b("v = √(2gh)")}.</>,
-        <>The speed depends only on the height h. It does {b("not depend on the mass")} of the child or on the {b("shape")} of the slide. That answers the questions at the start of the chapter: a taller slide gives a bigger speed at the bottom.</>,
+        <>The speed depends only on the height h. It does {b("not depend on the mass")} of the child or on the {b("shape")} of the slide. That answers the questions we started with: a taller slide gives a bigger speed at the bottom.</>,
       ] },
       { t: "img", pic: { file: "escape-ramp", alt: "An escape ramp beside a highway", caption: "An escape ramp filled with sand or gravel" } },
       { t: "ul", items: [
@@ -528,8 +528,8 @@ const TOPICS: Topic[] = [
     id: "mindmap",
     title: "15. Mind Map",
     category: "Revision",
-    heading: "Mind Map of the Chapter",
-    sub: "The whole chapter on one page.",
+    heading: "Mind Map of the Topic",
+    sub: "The whole topic on one page.",
     blocks: [
       { t: "svg", key: "mind", caption: "Mind map: work, energy and simple machines" },
       { t: "h", text: "Formulas at a Glance" },
@@ -551,7 +551,7 @@ const TOPICS: Topic[] = [
     title: "16. Competitive Corner: Ideas",
     category: "Advanced",
     heading: "Competitive Corner",
-    sub: "The main chapter is enough for school exams. These ideas take you one step further.",
+    sub: "The main topic is enough for school exams. These ideas take you one step further.",
     blocks: [
       { t: "card", title: "Work when force is at an angle", body: [
         <>If a force F acts at an angle θ to the displacement s, the work done is {b("W = F s cos θ")}. At θ = 0 the work is F s (maximum). At θ = 90° the work is zero. At θ = 180° the work is -F s.</>,
@@ -600,9 +600,9 @@ const TOPICS: Topic[] = [
   },
   {
     id: "complete",
-    title: "18. Chapter Complete",
+    title: "18. Topic Complete",
     category: "Complete",
-    heading: "Chapter Complete",
+    heading: "Topic Complete",
     sub: "Well done. Check what you can now do.",
     blocks: [
       { t: "done", items: [
@@ -622,7 +622,7 @@ const TOPICS: Topic[] = [
         ["Power", "W / t"],
         ["Machine rule", "A machine changes force and distance, never the total work"],
       ] },
-      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the chapter. If you make mistakes, come back to the topic and read it again.</> },
+      { t: "remember", title: "What to do next", body: <>Go to the Question Bank for practice. Then take the Self Assessment quiz to check how well you know the topic. If you make mistakes, come back to the topic and read it again.</> },
     ],
   },
 ];
