@@ -17,7 +17,17 @@ interface PhotoUploaderProps {
   token: string;
   sessionId: string;
   isLightMode: boolean;
-  onChange: (tempPaths: string[], isUploading: boolean) => void;
+  // hasError is true whenever any attached photo is sitting in a failed, not-yet-retried state --
+  // distinct from isUploading (which only reflects photos still actively in flight). A photo that
+  // fails and stays failed is not "uploading" anymore, so a caller that only gates its submit
+  // button on isUploading lets the student submit with that page silently missing from the final
+  // PDF (mergeSessionPhotos on the server only ever sees the photos that actually made it into
+  // storage -- a failed one just isn't there, with no error at submit time). A real, confirmed
+  // case had a student's homework submission end up with fewer pages than she'd attached because
+  // one photo's upload failed, showed only as a small red retry icon easy to miss in a crowded
+  // photo grid, and nothing stopped her from tapping Submit anyway. Every caller must fold this
+  // into its own submit-disabled condition, not just isUploading.
+  onChange: (tempPaths: string[], isUploading: boolean, hasError: boolean) => void;
   disabled?: boolean;
   accent?: 'cyan' | 'amber';
   // Which endpoint each photo is POSTed to (and DELETEd from) -- defaults to the homework upload
@@ -63,7 +73,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
   useEffect(() => {
     const done = photos.filter((p) => p.status === 'done').map((p) => p.tempPath!) as string[];
     const isUploading = photos.some((p) => p.status === 'uploading');
-    onChange(done, isUploading);
+    const hasError = photos.some((p) => p.status === 'error');
+    onChange(done, isUploading, hasError);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos]);
 
@@ -239,8 +250,12 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
 
       {photos.length > 0 && (
         <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-          {photos.filter((p) => p.status === 'done').length} of {photos.length} photo{photos.length === 1 ? '' : 's'} uploaded
-          {photos.some((p) => p.status === 'error') ? ' -- tap Retry on any that failed.' : '.'} Pages will appear in the order added.
+          {photos.filter((p) => p.status === 'done').length} of {photos.length} photo{photos.length === 1 ? '' : 's'} uploaded. Pages will appear in the order added.
+        </p>
+      )}
+      {photos.some((p) => p.status === 'error') && (
+        <p className="text-[11px] font-black text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          A photo above failed to upload -- tap Retry on it (or remove it) before submitting, or that page won't be included at all.
         </p>
       )}
     </div>

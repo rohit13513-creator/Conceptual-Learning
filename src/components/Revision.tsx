@@ -253,6 +253,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [photoTempPaths, setPhotoTempPaths] = useState<string[]>([]);
   const [photosUploading, setPhotosUploading] = useState(false);
+  const [photoHasError, setPhotoHasError] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1161,7 +1162,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                       disabled={uploading}
                       accent="cyan"
                       endpoint="/api/revision/upload-photo"
-                      onChange={(paths, isUp) => { setPhotoTempPaths(paths); setPhotosUploading(isUp); }}
+                      onChange={(paths, isUp, hasError) => { setPhotoTempPaths(paths); setPhotosUploading(isUp); setPhotoHasError(hasError); }}
                     />
                   ) : (
                     <input
@@ -1181,10 +1182,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   )}
                   <button
                     type="submit"
-                    disabled={uploading || photosUploading || (uploadMode === 'photos' ? photoTempPaths.length === 0 : !pdfFile)}
+                    disabled={uploading || photosUploading || (uploadMode === 'photos' && photoHasError) || (uploadMode === 'photos' ? photoTempPaths.length === 0 : !pdfFile)}
                     className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {uploading ? (checkingNow ? 'Checking...' : 'Uploading...') : 'Submit Answers'}
+                    {uploading ? (checkingNow ? 'Checking...' : 'Uploading...') : (uploadMode === 'photos' && photoHasError) ? 'Fix failed photo first' : 'Submit Answers'}
                   </button>
                 </form>
 

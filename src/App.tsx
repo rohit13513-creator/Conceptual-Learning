@@ -1214,6 +1214,7 @@ export default function App() {
   const [editSessionId, setEditSessionId] = useState(() => crypto.randomUUID());
   const [editPhotoTempPaths, setEditPhotoTempPaths] = useState<string[]>([]);
   const [editPhotosUploading, setEditPhotosUploading] = useState(false);
+  const [editPhotoHasError, setEditPhotoHasError] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -1223,6 +1224,7 @@ export default function App() {
   const [homeworkSessionId, setHomeworkSessionId] = useState(() => crypto.randomUUID());
   const [homeworkPhotoTempPaths, setHomeworkPhotoTempPaths] = useState<string[]>([]);
   const [homeworkPhotosUploading, setHomeworkPhotosUploading] = useState(false);
+  const [homeworkPhotoHasError, setHomeworkPhotoHasError] = useState(false);
   const [homeworkPdfFile, setHomeworkPdfFile] = useState<File | null>(null);
   const [homeworkUploading, setHomeworkUploading] = useState(false);
   const [homeworkUploadProgress, setHomeworkUploadProgress] = useState(0);
@@ -1259,6 +1261,7 @@ export default function App() {
   const [assignSessionId, setAssignSessionId] = useState(() => crypto.randomUUID());
   const [assignPhotoTempPaths, setAssignPhotoTempPaths] = useState<string[]>([]);
   const [assignPhotosUploading, setAssignPhotosUploading] = useState(false);
+  const [assignPhotoHasError, setAssignPhotoHasError] = useState(false);
   const [assignUploading, setAssignUploading] = useState(false);
   const [assignUploadProgress, setAssignUploadProgress] = useState(0);
   const [assignError, setAssignError] = useState<string | null>(null);
@@ -1274,6 +1277,7 @@ export default function App() {
   const [adminUploadSessionId, setAdminUploadSessionId] = useState(() => crypto.randomUUID());
   const [adminUploadPhotoTempPaths, setAdminUploadPhotoTempPaths] = useState<string[]>([]);
   const [adminUploadPhotosUploading, setAdminUploadPhotosUploading] = useState(false);
+  const [adminUploadPhotoHasError, setAdminUploadPhotoHasError] = useState(false);
   const [adminUploadPdfFile, setAdminUploadPdfFile] = useState<File | null>(null);
   const [adminUploadUploading, setAdminUploadUploading] = useState(false);
   const [adminUploadProgress, setAdminUploadProgress] = useState(0);
@@ -5004,7 +5008,7 @@ export default function App() {
                       isLightMode={isLightMode}
                       disabled={editSaving}
                       accent="cyan"
-                      onChange={(paths, uploading) => { setEditPhotoTempPaths(paths); setEditPhotosUploading(uploading); }}
+                      onChange={(paths, uploading, hasError) => { setEditPhotoTempPaths(paths); setEditPhotosUploading(uploading); setEditPhotoHasError(hasError); }}
                     />
                   </div>
                   <div className="flex gap-2">
@@ -5018,10 +5022,10 @@ export default function App() {
                     </button>
                     <button
                       type="submit"
-                      disabled={editSaving || editPhotosUploading}
+                      disabled={editSaving || editPhotosUploading || editPhotoHasError}
                       className="flex-1 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {editSaving ? 'Saving...' : editPhotosUploading ? 'Photos still uploading...' : 'Save Changes'}
+                      {editSaving ? 'Saving...' : editPhotosUploading ? 'Photos still uploading...' : editPhotoHasError ? 'Fix failed photo first' : 'Save Changes'}
                     </button>
                   </div>
                 </form>
@@ -5623,7 +5627,7 @@ export default function App() {
                       isLightMode={isLightMode}
                       disabled={homeworkUploading}
                       accent="cyan"
-                      onChange={(paths, uploading) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); }}
+                      onChange={(paths, uploading, hasError) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); setHomeworkPhotoHasError(hasError); }}
                     />
                   ) : (
                     <input
@@ -5644,10 +5648,10 @@ export default function App() {
                 )}
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : (homeworkMode === 'photos' && homeworkPhotoHasError) ? 'Fix failed photo first' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
                 </>
                   );
@@ -8007,7 +8011,7 @@ export default function App() {
                         isLightMode={isLightMode}
                         disabled={homeworkUploading}
                         accent="cyan"
-                        onChange={(paths, uploading) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); }}
+                        onChange={(paths, uploading, hasError) => { setHomeworkPhotoTempPaths(paths); setHomeworkPhotosUploading(uploading); setHomeworkPhotoHasError(hasError); }}
                       />
                       <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Attach one photo per page -- use the camera button on a phone, or add photos from your gallery.</p>
                     </>
@@ -8033,10 +8037,10 @@ export default function App() {
                 )}
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
+                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
+                  {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : (homeworkMode === 'photos' && homeworkPhotoHasError) ? 'Fix failed photo first' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
                 </button>
                 </>
                   );
@@ -9087,7 +9091,7 @@ export default function App() {
                             isLightMode={isLightMode}
                             disabled={assignUploading}
                             accent="amber"
-                            onChange={(paths, uploading) => { setAssignPhotoTempPaths(paths); setAssignPhotosUploading(uploading); }}
+                            onChange={(paths, uploading, hasError) => { setAssignPhotoTempPaths(paths); setAssignPhotosUploading(uploading); setAssignPhotoHasError(hasError); }}
                           />
                         ) : (
                           <input
@@ -9110,12 +9114,13 @@ export default function App() {
                     <div className="flex gap-2">
                       <button
                         type="submit"
-                        disabled={assignUploading || assignPhotosUploading || !assignTitle.trim()}
+                        disabled={assignUploading || assignPhotosUploading || assignPhotoHasError || !assignTitle.trim()}
                         className="flex-1 py-2 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50"
                       >
                         {assignUploading
                           ? (editingAssignmentId ? 'Saving...' : 'Posting...')
                           : assignPhotosUploading ? 'Photos still uploading...'
+                          : assignPhotoHasError ? 'Fix failed photo first'
                           : editingAssignmentId ? 'Save Changes' : 'Post Assignment'}
                       </button>
                       {editingAssignmentId && (
@@ -9443,7 +9448,7 @@ export default function App() {
                           isLightMode={isLightMode}
                           disabled={adminUploadUploading}
                           accent="amber"
-                          onChange={(paths, uploading) => { setAdminUploadPhotoTempPaths(paths); setAdminUploadPhotosUploading(uploading); }}
+                          onChange={(paths, uploading, hasError) => { setAdminUploadPhotoTempPaths(paths); setAdminUploadPhotosUploading(uploading); setAdminUploadPhotoHasError(hasError); }}
                         />
                       ) : (
                         <input
@@ -9476,10 +9481,10 @@ export default function App() {
 
                     <button
                       type="submit"
-                      disabled={adminUploadUploading || adminUploadPhotosUploading || !adminUploadStudentEmail || !adminUploadAssignmentId || (adminUploadMode === 'photos' ? adminUploadPhotoTempPaths.length === 0 : !adminUploadPdfFile)}
+                      disabled={adminUploadUploading || adminUploadPhotosUploading || (adminUploadMode === 'photos' && adminUploadPhotoHasError) || !adminUploadStudentEmail || !adminUploadAssignmentId || (adminUploadMode === 'photos' ? adminUploadPhotoTempPaths.length === 0 : !adminUploadPdfFile)}
                       className="w-full py-2.5 bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {adminUploadUploading ? 'Uploading...' : adminUploadPhotosUploading ? 'Photos still uploading...' : 'Upload & Submit'}
+                      {adminUploadUploading ? 'Uploading...' : adminUploadPhotosUploading ? 'Photos still uploading...' : (adminUploadMode === 'photos' && adminUploadPhotoHasError) ? 'Fix failed photo first' : 'Upload & Submit'}
                     </button>
                   </form>
                 );
