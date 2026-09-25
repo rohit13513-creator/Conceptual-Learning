@@ -7937,6 +7937,22 @@ function buildApp(): express.Express {
   // submission/assignment. Used by both students (homework) and admins (assignment question
   // sheets) -- each call is a small, single-file request, so it can never hit the platform's
   // request-body size limit no matter how many photos the user attaches in total.
+  // Lists whatever photos already made it into Storage for a given session -- used by the client
+  // to recover a photo grid that got wiped by a reload (see the "hw-photo-session" comment in
+  // App.tsx) without the student needing to re-photograph pages that are already safely uploaded.
+  app.get("/api/homework/upload-photo", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const sessionId = req.query.sessionId;
+    if (!sessionId || typeof sessionId !== "string") return res.status(400).json({ error: "Missing upload session." });
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const folder = `${HOMEWORK_TEMP_PREFIX}/${auth.email}/${safeSessionId}`;
+    const { data: fileList } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
+    if (!fileList || fileList.length === 0) return res.json({ photos: [] });
+    const sorted = fileList.slice().sort((a, b) => (parseInt(a.name.split("-")[0], 10) || 0) - (parseInt(b.name.split("-")[0], 10) || 0));
+    return res.json({ photos: sorted.map((f) => ({ tempPath: `${folder}/${f.name}` })) });
+  });
+
   app.post("/api/homework/upload-photo", (req, res, next) => {
     homeworkUpload.single("photo")(req, res, (err: any) => {
       if (err) return res.status(400).json({ error: err.message || "Failed to process the photo." });
@@ -10968,6 +10984,20 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       .eq("id", paperId);
     if (updateError) return res.status(500).json({ error: "Failed to start the paper. Please try again." });
     return res.json({ startedAt: startedAt.toISOString(), deadlineAt: deadlineAt.toISOString() });
+  });
+
+  // Same recovery listing as GET /api/homework/upload-photo above, for the Revision answer-photo flow.
+  app.get("/api/revision/upload-photo", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const sessionId = req.query.sessionId;
+    if (!sessionId || typeof sessionId !== "string") return res.status(400).json({ error: "Missing upload session." });
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const folder = `${REVISION_TEMP_PREFIX}/${auth.email}/${safeSessionId}`;
+    const { data: fileList } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
+    if (!fileList || fileList.length === 0) return res.json({ photos: [] });
+    const sorted = fileList.slice().sort((a, b) => (parseInt(a.name.split("-")[0], 10) || 0) - (parseInt(b.name.split("-")[0], 10) || 0));
+    return res.json({ photos: sorted.map((f) => ({ tempPath: `${folder}/${f.name}` })) });
   });
 
   app.post("/api/revision/upload-photo", (req, res, next) => {

@@ -251,6 +251,31 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   // Submission upload
   const [uploadMode, setUploadMode] = useState<'photos' | 'pdf'>('photos');
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  // Same reload-recovery reasoning as the homework upload flow (see the matching comment in
+  // App.tsx) -- opening the native camera on a phone can cause the tab to be reloaded in the
+  // background, wiping this session id and orphaning any photos already uploaded under it.
+  // Restoring the same id after a reload lets the server's own finalize-time storage listing pick
+  // those photos back up automatically.
+  useEffect(() => {
+    if (!user?.email) return;
+    try {
+      const saved = sessionStorage.getItem('rev-photo-session');
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && parsed.email === user.email && parsed.id) {
+        setSessionId(parsed.id);
+      } else {
+        sessionStorage.setItem('rev-photo-session', JSON.stringify({ email: user.email, id: sessionId }));
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
+  const startNewRevisionSession = () => {
+    const id = crypto.randomUUID();
+    setSessionId(id);
+    try {
+      if (user?.email) sessionStorage.setItem('rev-photo-session', JSON.stringify({ email: user.email, id }));
+    } catch {}
+  };
   const [photoTempPaths, setPhotoTempPaths] = useState<string[]>([]);
   const [photosUploading, setPhotosUploading] = useState(false);
   const [photoHasError, setPhotoHasError] = useState(false);
@@ -532,7 +557,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       if (!result.ok) throw new Error(result.data.error || 'Failed to upload your answers.');
       const submissionId = result.data.submission?.id;
       setPhotoTempPaths([]);
-      setSessionId(crypto.randomUUID());
+      startNewRevisionSession();
       setPdfFile(null);
       setCurrentPaper((p) => (p ? { ...p, status: 'submitted' } : p));
       setCurrentSubmission({ id: submissionId, revisionPaperId: currentPaper.id, status: 'pending', aiScore: null, aiFeedback: null, isLate: !!result.data.submission?.isLate, submittedAt: result.data.submission?.submittedAt });

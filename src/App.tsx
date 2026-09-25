@@ -1222,6 +1222,31 @@ export default function App() {
   const [homeworkSubject, setHomeworkSubject] = useState('');
   const [homeworkMode, setHomeworkMode] = useState<'photos' | 'pdf'>('photos');
   const [homeworkSessionId, setHomeworkSessionId] = useState(() => crypto.randomUUID());
+  // Restores an in-progress photo session across an accidental page reload -- on a phone, opening
+  // the native camera app via the "Camera" button can cause Android Chrome to reclaim and reload
+  // the whole tab in the background (common on lower-RAM devices, especially after a few photos
+  // have already pushed memory pressure up), which wipes every React state including this session
+  // id. Without this, each photo already sitting in Storage under the OLD (now-forgotten) session
+  // id becomes permanently orphaned -- the next photo taken starts a brand-new session, and
+  // finalize only ever sees whatever landed under THAT session, silently submitting a homework
+  // with only the pages taken after the reload. A real, confirmed case had a student's whole
+  // submission collapse to a single early page this way. Keeping the same session id across a
+  // reload means finalize's own storage listing (which already looks up everything under a given
+  // session id, not just what the current page load remembers) naturally recovers every photo that
+  // made it to Storage before the reload, with no other change needed.
+  useEffect(() => {
+    if (!user?.email) return;
+    try {
+      const saved = sessionStorage.getItem('hw-photo-session');
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && parsed.email === user.email && parsed.id) {
+        setHomeworkSessionId(parsed.id);
+      } else {
+        sessionStorage.setItem('hw-photo-session', JSON.stringify({ email: user.email, id: homeworkSessionId }));
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
   const [homeworkPhotoTempPaths, setHomeworkPhotoTempPaths] = useState<string[]>([]);
   const [homeworkPhotosUploading, setHomeworkPhotosUploading] = useState(false);
   const [homeworkPhotoHasError, setHomeworkPhotoHasError] = useState(false);
@@ -2764,6 +2789,17 @@ export default function App() {
     }
   }, [activeView, user]);
 
+  // Starts a deliberately fresh photo session (switching upload mode, or right after a successful
+  // submit) -- always paired with resetting the sessionStorage record too, so the recovery effect
+  // above doesn't resurrect an intentionally-abandoned session on the next reload.
+  const startNewHomeworkSession = () => {
+    const id = crypto.randomUUID();
+    setHomeworkSessionId(id);
+    try {
+      if (user?.email) sessionStorage.setItem('hw-photo-session', JSON.stringify({ email: user.email, id }));
+    } catch {}
+  };
+
   const handleHomeworkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -2831,7 +2867,7 @@ export default function App() {
       if (!result.ok) throw new Error(result.data.error || 'Failed to upload homework.');
       const submissionId = result.data.submission?.id;
       setHomeworkPhotoTempPaths([]);
-      setHomeworkSessionId(crypto.randomUUID());
+      startNewHomeworkSession();
       setHomeworkPdfFile(null);
       setHomeworkSubject('');
       setSelectedAssignmentId('');
@@ -5616,8 +5652,8 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('photos'); startNewHomeworkSession(); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); startNewHomeworkSession(); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <PhotoUploader
@@ -7999,8 +8035,8 @@ export default function App() {
                 <div className="space-y-2">
                   <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Homework Photos or a PDF</label>
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => { setHomeworkMode('photos'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
-                    <button type="button" onClick={() => { setHomeworkMode('pdf'); setHomeworkSessionId(crypto.randomUUID()); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
+                    <button type="button" onClick={() => { setHomeworkMode('photos'); startNewHomeworkSession(); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'photos' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>Photos</button>
+                    <button type="button" onClick={() => { setHomeworkMode('pdf'); startNewHomeworkSession(); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer transition ${homeworkMode === 'pdf' ? 'bg-cyan-500 text-slate-950' : (isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400')}`}>PDF</button>
                   </div>
                   {homeworkMode === 'photos' ? (
                     <>

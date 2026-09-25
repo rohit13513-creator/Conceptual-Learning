@@ -68,6 +68,46 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const nextOrderRef = useRef(0);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  // Recovers photos already sitting in Storage for this session -- covers the case where a page
+  // reload (e.g. the native camera app backgrounding this tab and Android reclaiming it) wiped
+  // this component's own state after some photos already finished uploading. Without this, those
+  // earlier photos would look gone from the grid even though they're safe server-side and will
+  // still be included by finalize -- confusing the student into re-photographing pages they
+  // already did, or just leaving them unsure whether anything survived at all.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${endpoint}?sessionId=${encodeURIComponent(sessionId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data.photos) || data.photos.length === 0) return;
+        setPhotos((prev) => {
+          if (prev.length > 0) return prev; // this mount already has photos (e.g. recovery raced with a fresh upload) -- don't clobber them
+          return data.photos.map((p: { tempPath: string }) => {
+            const order = nextOrderRef.current++;
+            return {
+              id: `recovered-${order}-${Math.random().toString(36).slice(2)}`,
+              file: new File([], `page-${order + 1}.jpg`),
+              previewUrl: '',
+              status: 'done' as const,
+              tempPath: p.tempPath,
+              order,
+              progress: 100,
+            };
+          });
+        });
+      } catch {
+        // No connection right this moment -- not fatal, the photos (if any) are still safe in
+        // Storage and finalize will pick them up regardless of what this grid shows.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -158,7 +198,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
         body: JSON.stringify({ tempPath: item.tempPath }),
       }).catch(() => {});
     }
-    URL.revokeObjectURL(item.previewUrl);
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
     setPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -172,7 +212,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {photos.map((p) => (
             <div key={p.id} className={`relative aspect-square rounded-lg overflow-hidden border ${isLightMode ? 'border-slate-200 bg-slate-100' : 'border-slate-800 bg-slate-950'}`}>
-              <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+              {p.previewUrl ? (
+                <img src={p.previewUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className={`w-full h-full flex flex-col items-center justify-center gap-1 ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-[9px] font-black uppercase">Page {p.order + 1}</span>
+                  <span className="text-[8px] font-semibold">Recovered</span>
+                </div>
+              )}
               {p.status === 'uploading' && (
                 <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1">
                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
