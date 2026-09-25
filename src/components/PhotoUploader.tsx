@@ -51,9 +51,15 @@ async function compressPhoto(file: File, maxDimension = 1600, quality = 0.75): P
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
+    if (!ctx) { bitmap.close(); return file; }
     ctx.drawImage(bitmap, 0, 0, width, height);
+    // A full-size phone photo decodes to tens of MB and was never released, so after a handful of
+    // photos a low-RAM phone could run out of memory and the browser would silently kill or reload
+    // the tab mid-homework. Free the decoded bitmap and canvas as soon as the JPEG is produced.
+    bitmap.close();
     const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    canvas.width = 0;
+    canvas.height = 0;
     if (!blob || blob.size >= file.size) return file;
     return new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' });
   } catch {
