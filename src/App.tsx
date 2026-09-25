@@ -2822,6 +2822,9 @@ export default function App() {
             sessionId: homeworkSessionId,
             subject: homeworkSubject,
             assignmentId: selectedAssignmentId || undefined,
+            // How many photos this screen shows as uploaded -- the server refuses to build the PDF
+            // if fewer than this actually reached it, instead of silently submitting fewer pages.
+            expectedPhotoCount: homeworkPhotoTempPaths.length,
           },
         });
       } else {
@@ -2876,7 +2879,7 @@ export default function App() {
       // A pop-up here, right when the file is confirmed saved, is unmissable in a way an inline
       // line of text was not -- several students reported uploading successfully but not
       // realizing it, because the confirmation was easy to scroll past or miss.
-      setUploadSuccessMessage("Your homework has been uploaded successfully. It's being checked now -- your score will appear in \"Your Submissions\" shortly.");
+      setUploadSuccessMessage(`Your homework has been uploaded successfully${typeof result.data.pageCount === 'number' ? ` (${result.data.pageCount} page${result.data.pageCount === 1 ? '' : 's'} received)` : ''}. It's being checked now -- your score will appear in "Your Submissions" shortly. If the page count is lower than the pages you wrote, tap Improve Score and send the missing pages.`);
       setShowUploadSuccessModal(true);
 
       // The file itself is already safely saved at this point -- the AI check runs as its own

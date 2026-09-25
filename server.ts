@@ -474,10 +474,19 @@ const subjectSyllabusImageCol = (s: RevisionSubjectConfig) => `${s.dbPrefix}_syl
 // Lists, downloads, and merges every photo uploaded for one session into a single PDF, then
 // deletes the temp copies. Returns null if no photos were found for that session. `prefix`
 // defaults to the homework temp folder; Revision submissions pass REVISION_TEMP_PREFIX instead.
-async function mergeSessionPhotos(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX, deferCleanup: boolean = false): Promise<Buffer | null> {
+// expectedCount is how many photos the student's own screen showed as uploaded at the moment they
+// tapped Submit. If fewer than that are actually in Storage, pages went missing somewhere between
+// the phone and here -- fail loudly instead of quietly building a shorter PDF, which then gets
+// graded as if the missing pages were never attempted (several real students were told they had
+// skipped whole questions this way). More files than expected is tolerated (a retried upload can
+// leave a harmless duplicate).
+async function mergeSessionPhotos(email: string, sessionId: string, prefix: string = HOMEWORK_TEMP_PREFIX, deferCleanup: boolean = false, expectedCount?: number): Promise<Buffer | null> {
   const folder = `${prefix}/${email}/${sessionId}`;
   const { data: fileList, error: listError } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
   if (listError || !fileList || fileList.length === 0) return null;
+  if (typeof expectedCount === "number" && expectedCount > 0 && fileList.length < expectedCount) {
+    throw new Error(`PHOTO_COUNT_MISMATCH:${fileList.length}:${expectedCount}`);
+  }
 
   const sorted = fileList.slice().sort((a, b) => {
     const orderA = parseInt(a.name.split("-")[0], 10) || 0;
@@ -487,8 +496,9 @@ async function mergeSessionPhotos(email: string, sessionId: string, prefix: stri
 
   const buffers: { buffer: Buffer }[] = [];
   for (const f of sorted) {
-    const { data: blob } = await supabase.storage.from(HOMEWORK_BUCKET).download(`${folder}/${f.name}`);
-    if (blob) buffers.push({ buffer: Buffer.from(await blob.arrayBuffer()) });
+    const { data: blob, error: dlError } = await supabase.storage.from(HOMEWORK_BUCKET).download(`${folder}/${f.name}`);
+    if (!blob) throw new Error(`Could not read uploaded page ${f.name}: ${dlError?.message || "unknown error"}`);
+    buffers.push({ buffer: Buffer.from(await blob.arrayBuffer()) });
   }
   if (buffers.length === 0) return null;
 
@@ -8100,7 +8110,7 @@ function buildApp(): express.Express {
   app.post("/api/homework/finalize-submission", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { sessionId, subject, assignmentId } = req.body;
+    const { sessionId, subject, assignmentId, expectedPhotoCount } = req.body;
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
     if (!assignmentId || !String(assignmentId).trim()) {
       return res.status(400).json({ error: "Please choose which homework assignment this submission is for." });
@@ -8116,9 +8126,11 @@ function buildApp(): express.Express {
 
     let merged: Buffer | null;
     try {
-      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), HOMEWORK_TEMP_PREFIX, true);
+      merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), HOMEWORK_TEMP_PREFIX, true, Number(expectedPhotoCount) || undefined);
     } catch (mergeErr: any) {
       console.error("Error merging session photos:", mergeErr.message);
+      const m = /^PHOTO_COUNT_MISMATCH:(\d+):(\d+)/.exec(mergeErr.message || "");
+      if (m) return res.status(409).json({ error: `Only ${m[1]} of your ${m[2]} photos reached our server, so nothing was submitted. Please wait a few seconds and tap Submit again. If it says the same thing, remove the photos and add them again.` });
       return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });
     }
     if (!merged) {
@@ -8151,10 +8163,13 @@ function buildApp(): express.Express {
 
     await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
 
+    let pageCount: number | undefined;
+    try { pageCount = (await PDFDocument.load(merged)).getPageCount(); } catch { /* count is only shown to the student, never essential */ }
+
     // The AI check itself is triggered as a separate follow-up request (see
     // POST /api/homework/check-mine below) rather than awaited right here -- see the matching
     // comment in finalize-pdf-submission above for why.
-    return res.json({ success: true, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
+    return res.json({ success: true, pageCount, submission: mapHomeworkRowForStudent(upserted.row), priorMissingQuestions: upserted.priorMissingQuestions });
   });
 
   // The follow-up half of a submission: runs the actual AI check, as its own request with its own
