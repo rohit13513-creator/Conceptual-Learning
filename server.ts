@@ -7958,6 +7958,7 @@ function buildApp(): express.Express {
     if (!sessionId || typeof sessionId !== "string") return res.status(400).json({ error: "Missing upload session." });
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
     const folder = `${HOMEWORK_TEMP_PREFIX}/${auth.email}/${safeSessionId}`;
+    res.setHeader("Cache-Control", "no-store");
     const { data: fileList } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
     if (!fileList || fileList.length === 0) return res.json({ photos: [] });
     const sorted = fileList.slice().sort((a, b) => (parseInt(a.name.split("-")[0], 10) || 0) - (parseInt(b.name.split("-")[0], 10) || 0));
@@ -7977,6 +7978,9 @@ function buildApp(): express.Express {
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
     if (req.file.mimetype === "application/pdf") {
       return res.status(400).json({ error: "This endpoint only accepts photos. Upload a PDF separately as a single file." });
+    }
+    if (req.file.buffer.length < 1024) {
+      return res.status(400).json({ error: "That photo didn't fully load on your device (it came through empty). Please retake it and try again." });
     }
 
     const orderNum = parseInt(order, 10) || 0;
@@ -11010,6 +11014,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!sessionId || typeof sessionId !== "string") return res.status(400).json({ error: "Missing upload session." });
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "");
     const folder = `${REVISION_TEMP_PREFIX}/${auth.email}/${safeSessionId}`;
+    res.setHeader("Cache-Control", "no-store");
     const { data: fileList } = await supabase.storage.from(HOMEWORK_BUCKET).list(folder);
     if (!fileList || fileList.length === 0) return res.json({ photos: [] });
     const sorted = fileList.slice().sort((a, b) => (parseInt(a.name.split("-")[0], 10) || 0) - (parseInt(b.name.split("-")[0], 10) || 0));
@@ -11029,6 +11034,9 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!sessionId) return res.status(400).json({ error: "Missing upload session." });
     if (req.file.mimetype === "application/pdf") {
       return res.status(400).json({ error: "This endpoint only accepts photos. Upload a PDF separately as a single file." });
+    }
+    if (req.file.buffer.length < 1024) {
+      return res.status(400).json({ error: "That photo didn't fully load on your device (it came through empty). Please retake it and try again." });
     }
     const orderNum = parseInt(order, 10) || 0;
     const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, "");

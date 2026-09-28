@@ -85,8 +85,12 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({ token, sessionId, 
     let cancelled = false;
     (async () => {
       try {
+        // no-store: this list changes as photos upload, and a stale cached response here would
+        // make the grid (and the count sent to finalize) claim more photos are safely uploaded
+        // than actually exist in Storage -- the opposite of what this recovery check is for.
         const res = await fetch(`${endpoint}?sessionId=${encodeURIComponent(sessionId)}`, {
           headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
         });
         if (!res.ok || cancelled) return;
         const data = await res.json();
