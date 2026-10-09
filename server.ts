@@ -581,6 +581,25 @@ async function findJustCreatedSubmission(studentEmail: string, assignmentId: str
   return ageMs >= 0 && ageMs < 3 * 60 * 1000 ? data : null;
 }
 
+// Supabase/PostgREST silently caps every select at 1000 rows no matter what .limit() says -- an
+// unpaginated "read all submissions" returns the first 1000 in arbitrary order and drops the rest
+// without any error. That is exactly how students who HAD submitted showed up as "not submitted"
+// in the admin report (the table crossed 1000 rows) and why class rankings could silently omit
+// scores. Any read that must see every row goes through this, which pages with .range() in a
+// stable order (callers must include a unique tiebreaker such as .order("id") in the query).
+async function selectAllRows(buildQuery: () => any, maxRows = 20000): Promise<{ data: any[] }> {
+  const pageSize = 1000;
+  const all: any[] = [];
+  for (let from = 0; from < maxRows; from += pageSize) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return { data: all };
+}
+
 // Sonnet 5 -- reverted from a Haiku 4.5 cost-cutting change that turned out to produce unreliable
 // arithmetic verification. Real submissions showed the same fixed MCQ (a Heron's-formula area
 // calculation) "corrected" to four different wrong values across different students' checks --
@@ -8877,7 +8896,7 @@ function buildApp(): express.Express {
     if (!checkAdminAuth(req, res)) return;
 
     const [{ data: rows }, { data: userRows }, { data: assignmentRows }] = await Promise.all([
-      supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).limit(2000),
+      selectAllRows(() => supabase.from("homework_submissions").select("*").order("submitted_at", { ascending: false }).order("id"), 2000),
       supabase.from("users").select("email, name, student_class"),
       supabase.from("homework_assignments").select("id, title, deadline"),
     ]);
@@ -9105,7 +9124,7 @@ function buildApp(): express.Express {
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
       supabase.from("users").select("email, name, student_class, role, status, student_type"),
-      supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at, admin_notes"),
+      selectAllRows(() => supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at, admin_notes").order("id")),
     ]);
 
     // Online (self-study) students are never assigned homework, so they're excluded from the roster.
@@ -9215,10 +9234,12 @@ function buildApp(): express.Express {
 
     let submissionRows: any[] = [];
     if (assignments.length > 0) {
-      const { data } = await supabase
+      const assignmentIds = assignments.map((a) => a.id);
+      const { data } = await selectAllRows(() => supabase
         .from("homework_submissions")
         .select("student_email, assignment_id, status, ai_score, submitted_at, admin_notes")
-        .in("assignment_id", assignments.map((a) => a.id));
+        .in("assignment_id", assignmentIds)
+        .order("id"));
       submissionRows = data || [];
     }
     // Keyed by "assignmentId|studentEmail" -- the upsert-per-assignment model means at most one
@@ -9285,11 +9306,12 @@ function buildApp(): express.Express {
     // triple-count those. Ordering by submitted_at and folding into a Map keyed by
     // "assignment|student" so a later row always overwrites an earlier one for the same pair keeps
     // exactly one (the latest) row per assignment per student, regardless of how many exist.
-    const { data: submissions } = await supabase
+    const { data: submissions } = await selectAllRows(() => supabase
       .from("homework_submissions")
       .select("student_email, assignment_id, status, ai_score, submitted_at")
       .in("student_email", emails)
-      .order("submitted_at", { ascending: true });
+      .order("submitted_at", { ascending: true })
+      .order("id"));
 
     const latestByPair = new Map<string, { student_email: string; assignment_id: string; status: string; ai_score: number | null }>();
     for (const s of submissions || []) {
@@ -11209,10 +11231,10 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const emails = roster.map((u: any) => u.email);
     if (emails.length === 0) return { classLabel, mostAttempted: [], highestPercentage: [], topImprovers: [] };
 
-    const { data: papers } = await supabase.from("revision_papers").select("id, total_marks").in("student_email", emails);
+    const { data: papers } = await selectAllRows(() => supabase.from("revision_papers").select("id, total_marks").in("student_email", emails).order("id"));
     const maxByPaper = new Map((papers || []).map((p: any) => [p.id, p.total_marks || REVISION_TOTAL_MARKS]));
 
-    const { data: submissions } = await supabase.from("revision_submissions").select("student_email, revision_paper_id, ai_score, first_attempt_score, submitted_at").in("student_email", emails);
+    const { data: submissions } = await selectAllRows(() => supabase.from("revision_submissions").select("student_email, revision_paper_id, ai_score, first_attempt_score, submitted_at").in("student_email", emails).order("id"));
 
     const attemptedCount = new Map<string, number>();
     const improveSum = new Map<string, number>();
@@ -11342,7 +11364,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const paperIds = (paperRows || []).map((p: any) => p.id);
     let submissionRows: any[] = [];
     if (paperIds.length > 0) {
-      const { data } = await supabase.from("revision_submissions").select("revision_paper_id, student_email, ai_score, is_late, submitted_at").in("revision_paper_id", paperIds);
+      const { data } = await selectAllRows(() => supabase.from("revision_submissions").select("revision_paper_id, student_email, ai_score, is_late, submitted_at").in("revision_paper_id", paperIds).order("id"));
       submissionRows = data || [];
     }
     const submissionByPaper = new Map(submissionRows.map((s: any) => [s.revision_paper_id, s]));
