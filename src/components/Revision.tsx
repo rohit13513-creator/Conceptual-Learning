@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import html2pdf from 'html2pdf.js';
 import { PhotoUploader } from './PhotoUploader';
+import { shrinkPdf, PDF_SHRINK_THRESHOLD_BYTES, PDF_MAX_UPLOAD_BYTES } from '../utils/shrinkPdf';
 import { RevisionLeaderboard } from './RevisionLeaderboard';
 import { fetchJsonWithRetry, uploadWithRetry } from '../utils/uploadWithRetry';
 import {
@@ -280,6 +281,26 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
   const [photosUploading, setPhotosUploading] = useState(false);
   const [photoHasError, setPhotoHasError] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfPrep, setPdfPrep] = useState<string | null>(null);
+  // Same reasoning as the homework upload: a big scanner-app PDF is shrunk here, before upload,
+  // instead of being rejected as "too large" only after the whole file has been sent.
+  const handlePdfPicked = async (file: File | null) => {
+    setError(null);
+    setPdfFile(null);
+    if (!file) return;
+    if (file.size <= PDF_SHRINK_THRESHOLD_BYTES) { setPdfFile(file); return; }
+    const mb = Math.round(file.size / (1024 * 1024));
+    setPdfPrep(`Your PDF is large (${mb} MB). Reducing its size so it can upload -- please wait and keep this screen open...`);
+    try {
+      const small = await shrinkPdf(file, (done, total) => setPdfPrep(`Your PDF is large (${mb} MB). Reducing its size: page ${Math.min(done + 1, total)} of ${total}...`));
+      if (small.size > PDF_MAX_UPLOAD_BYTES) throw new Error('still too large');
+      setPdfFile(small);
+    } catch {
+      setError('This PDF is too large and could not be reduced automatically. Please scan at a lower quality, or add photos of the pages instead.');
+    } finally {
+      setPdfPrep(null);
+    }
+  };
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [checkingNow, setCheckingNow] = useState(false);
@@ -1193,9 +1214,12 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                     <input
                       type="file"
                       accept="application/pdf"
-                      onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                      onChange={(e) => handlePdfPicked(e.target.files?.[0] || null)}
                       className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                     />
+                  )}
+                  {pdfPrep && uploadMode === 'pdf' && (
+                    <p className={`text-[11px] font-bold ${isLightMode ? 'text-cyan-700' : 'text-cyan-400'}`}>{pdfPrep}</p>
                   )}
                   {uploading && (
                     <div className="space-y-1">
@@ -1207,7 +1231,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                   )}
                   <button
                     type="submit"
-                    disabled={uploading || photosUploading || (uploadMode === 'photos' && photoHasError) || (uploadMode === 'photos' ? photoTempPaths.length === 0 : !pdfFile)}
+                    disabled={uploading || !!pdfPrep || photosUploading || (uploadMode === 'photos' && photoHasError) || (uploadMode === 'photos' ? photoTempPaths.length === 0 : !pdfFile)}
                     className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {uploading ? (checkingNow ? 'Checking...' : 'Uploading...') : (uploadMode === 'photos' && photoHasError) ? 'Fix failed photo first' : 'Submit Answers'}

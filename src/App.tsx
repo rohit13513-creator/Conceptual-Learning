@@ -29,6 +29,7 @@ import { LearnScience8Matter } from './components/LearnScience8Matter';
 import { LearnScience8ElementsCompounds } from './components/LearnScience8ElementsCompounds';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
+import { shrinkPdf, PDF_SHRINK_THRESHOLD_BYTES, PDF_MAX_UPLOAD_BYTES } from './utils/shrinkPdf';
 import { Revision } from './components/Revision';
 import { RevisionLeaderboard, CategoryCard as RevisionCategoryCard } from './components/RevisionLeaderboard';
 import { HomeworkLeaderboard, LeaderboardTable as HomeworkLeaderboardTable } from './components/HomeworkLeaderboard';
@@ -1251,6 +1252,7 @@ export default function App() {
   const [homeworkPhotosUploading, setHomeworkPhotosUploading] = useState(false);
   const [homeworkPhotoHasError, setHomeworkPhotoHasError] = useState(false);
   const [homeworkPdfFile, setHomeworkPdfFile] = useState<File | null>(null);
+  const [homeworkPdfPrep, setHomeworkPdfPrep] = useState<string | null>(null);
   const [homeworkUploading, setHomeworkUploading] = useState(false);
   const [homeworkUploadProgress, setHomeworkUploadProgress] = useState(0);
   const [homeworkError, setHomeworkError] = useState<string | null>(null);
@@ -2798,6 +2800,27 @@ export default function App() {
     try {
       if (user?.email) sessionStorage.setItem('hw-photo-session', JSON.stringify({ email: user.email, id }));
     } catch {}
+  };
+
+  // A PDF over the storage limit used to upload to the very end and only then fail with "file too
+  // large" (students with 50-180MB scanner-app PDFs just gave up). Big PDFs are now shrunk right
+  // here, before upload, by re-rendering each page as a lighter image.
+  const handleHomeworkPdfPicked = async (file: File | null) => {
+    setHomeworkError(null);
+    setHomeworkPdfFile(null);
+    if (!file) return;
+    if (file.size <= PDF_SHRINK_THRESHOLD_BYTES) { setHomeworkPdfFile(file); return; }
+    const mb = Math.round(file.size / (1024 * 1024));
+    setHomeworkPdfPrep(`Your PDF is large (${mb} MB). Reducing its size so it can upload -- please wait and keep this screen open...`);
+    try {
+      const small = await shrinkPdf(file, (done, total) => setHomeworkPdfPrep(`Your PDF is large (${mb} MB). Reducing its size: page ${Math.min(done + 1, total)} of ${total}...`));
+      if (small.size > PDF_MAX_UPLOAD_BYTES) throw new Error('still too large');
+      setHomeworkPdfFile(small);
+    } catch {
+      setHomeworkError('This PDF is too large and could not be reduced automatically. Please scan at a lower quality, or add photos of the pages instead.');
+    } finally {
+      setHomeworkPdfPrep(null);
+    }
   };
 
   const handleHomeworkUpload = async (e: React.FormEvent) => {
@@ -5672,11 +5695,14 @@ export default function App() {
                     <input
                       type="file"
                       accept="application/pdf"
-                      onChange={(e) => setHomeworkPdfFile(e.target.files?.[0] || null)}
+                      onChange={(e) => handleHomeworkPdfPicked(e.target.files?.[0] || null)}
                       className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                     />
                   )}
                 </div>
+                {homeworkPdfPrep && homeworkMode === 'pdf' && (
+                  <p className={`text-[11px] font-bold ${isLightMode ? 'text-cyan-700' : 'text-cyan-400'}`}>{homeworkPdfPrep}</p>
+                )}
                 {homeworkUploading && homeworkMode === 'pdf' && (
                   <div className="space-y-1">
                     <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
@@ -5687,7 +5713,7 @@ export default function App() {
                 )}
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
+                  disabled={homeworkUploading || !!homeworkPdfPrep || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : (homeworkMode === 'photos' && homeworkPhotoHasError) ? 'Fix failed photo first' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
@@ -8059,13 +8085,16 @@ export default function App() {
                       <input
                         type="file"
                         accept="application/pdf"
-                        onChange={(e) => setHomeworkPdfFile(e.target.files?.[0] || null)}
+                        onChange={(e) => handleHomeworkPdfPicked(e.target.files?.[0] || null)}
                         className={`w-full text-xs font-semibold file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-black file:uppercase file:cursor-pointer cursor-pointer ${isLightMode ? 'text-slate-600 file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200' : 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700'}`}
                       />
                       <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Scan your pages into one PDF with your phone's scanner app (e.g. Google Drive or Adobe Scan) and upload it here -- no page limit.</p>
                     </>
                   )}
                 </div>
+                {homeworkPdfPrep && homeworkMode === 'pdf' && (
+                  <p className={`text-[11px] font-bold ${isLightMode ? 'text-cyan-700' : 'text-cyan-400'}`}>{homeworkPdfPrep}</p>
+                )}
                 {homeworkUploading && homeworkMode === 'pdf' && (
                   <div className="space-y-1">
                     <div className={`h-2 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
@@ -8076,7 +8105,7 @@ export default function App() {
                 )}
                 <button
                   type="submit"
-                  disabled={homeworkUploading || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
+                  disabled={homeworkUploading || !!homeworkPdfPrep || homeworkPhotosUploading || (homeworkMode === 'photos' && homeworkPhotoHasError) || (homeworkMode === 'photos' ? homeworkPhotoTempPaths.length === 0 : !homeworkPdfFile) || !selectedAssignmentId}
                   className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {homeworkUploading ? 'Uploading & Checking...' : homeworkPhotosUploading ? 'Photos still uploading...' : (homeworkMode === 'photos' && homeworkPhotoHasError) ? 'Fix failed photo first' : mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
