@@ -2601,6 +2601,7 @@ export default function App() {
         setAdminUploadProgress(100);
         result = await fetchJsonWithRetry({
           url: '/api/admin/homework/finalize-submission',
+          timeoutMs: 110000,
           token: user.token,
           body: {
             studentEmail: adminUploadStudentEmail,
@@ -2635,6 +2636,7 @@ export default function App() {
         }
         result = await fetchJsonWithRetry({
           url: '/api/admin/homework/finalize-pdf-submission',
+          timeoutMs: 110000,
           token: user.token,
           body: {
             studentEmail: adminUploadStudentEmail,
@@ -2840,6 +2842,7 @@ export default function App() {
         setHomeworkUploadProgress(100);
         result = await fetchJsonWithRetry({
           url: '/api/homework/finalize-submission',
+          timeoutMs: 110000,
           token: user.token,
           body: {
             sessionId: homeworkSessionId,
@@ -2882,6 +2885,7 @@ export default function App() {
         }
         result = await fetchJsonWithRetry({
           url: '/api/homework/finalize-pdf-submission',
+          timeoutMs: 110000,
           token: user.token,
           body: {
             sessionId: homeworkSessionId,

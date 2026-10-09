@@ -548,7 +548,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
       let result: { ok: boolean; data: any };
       if (uploadMode === 'photos') {
         setUploadProgress(100);
-        result = await fetchJsonWithRetry({ url: '/api/revision/finalize-submission', token: user.token, body: { sessionId, paperId: currentPaper.id } });
+        result = await fetchJsonWithRetry({ url: '/api/revision/finalize-submission', timeoutMs: 110000, token: user.token, body: { sessionId, paperId: currentPaper.id } });
       } else {
         const CHUNK_SIZE = 3 * 1024 * 1024;
         const file = pdfFile as File;
@@ -573,7 +573,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           order += 1;
           setUploadProgress(Math.round((uploadedBytes / totalSize) * 100));
         }
-        result = await fetchJsonWithRetry({ url: '/api/revision/finalize-pdf-submission', token: user.token, body: { sessionId, paperId: currentPaper.id } });
+        result = await fetchJsonWithRetry({ url: '/api/revision/finalize-pdf-submission', timeoutMs: 110000, token: user.token, body: { sessionId, paperId: currentPaper.id } });
       }
       if (!result.ok) throw new Error(result.data.error || 'Failed to upload your answers.');
       const submissionId = result.data.submission?.id;

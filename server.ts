@@ -8133,6 +8133,11 @@ function buildApp(): express.Express {
       merged = await mergeSessionPhotos(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), HOMEWORK_TEMP_PREFIX, true, Number(expectedPhotoCount) || undefined);
     } catch (mergeErr: any) {
       console.error("Error merging session photos:", mergeErr.message);
+      // An earlier copy of this same request (the browser re-sends one it thinks timed out) may have
+      // already finished and cleaned up the temp photos this one is trying to read -- that's a
+      // success, not a failure to report to the student.
+      const alreadyDone = await findJustCreatedSubmission(auth.email, String(assignmentId));
+      if (alreadyDone) return res.json({ success: true, submission: mapHomeworkRowForStudent(alreadyDone) });
       const m = /^PHOTO_COUNT_MISMATCH:(\d+):(\d+)/.exec(mergeErr.message || "");
       if (m) return res.status(409).json({ error: `Only ${m[1]} of your ${m[2]} photos reached our server, so nothing was submitted. Please wait a few seconds and tap Submit again. If it says the same thing, remove the photos and add them again.` });
       return res.status(500).json({ error: "Failed to combine the uploaded photos into a PDF." });

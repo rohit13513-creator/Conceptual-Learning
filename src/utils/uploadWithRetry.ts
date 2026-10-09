@@ -19,6 +19,11 @@ interface JsonWithRetryOptions {
   body: any;
   method?: string;
   maxRetries?: number;
+  // Per-attempt timeout. The default suits the small JSON calls around an upload, but a "finalize"
+  // call merges every uploaded page into one PDF on the server and can legitimately take longer --
+  // a too-short timeout makes the browser give up and RE-SEND the request while the first one is
+  // still running, so two merges race over the same temp files.
+  timeoutMs?: number;
 }
 
 function waitForOnline(): Promise<void> {
@@ -124,12 +129,12 @@ export async function uploadWithRetry({ url, token, formData, method = 'POST', o
 // the unbounded XHR upload was (see attemptUpload above). AbortController is the only way to give
 // fetch a timeout; a shorter one than the upload's is fine here since this request carries no file
 // data.
-export async function fetchJsonWithRetry({ url, token, body, method = 'POST', maxRetries = 6 }: JsonWithRetryOptions): Promise<UploadResult> {
+export async function fetchJsonWithRetry({ url, token, body, method = 'POST', maxRetries = 6, timeoutMs = 30000 }: JsonWithRetryOptions): Promise<UploadResult> {
   return withNetworkRetry(
     async () => {
       let resp: Response;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       try {
         resp = await fetch(url, {
           method,
