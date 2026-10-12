@@ -581,6 +581,21 @@ async function findJustCreatedSubmission(studentEmail: string, assignmentId: str
   return ageMs >= 0 && ageMs < 3 * 60 * 1000 ? data : null;
 }
 
+// Looks up a student's class from the users table, retrying a couple of times on a database error.
+// A single transient failure (timeout, dropped connection) used to come back as a null row and be
+// reported to the student as "We couldn't determine your class" -- as if their account had no
+// class -- when a second attempt a moment later would have worked. Returns { error: true } only
+// when the lookup itself kept failing, so callers can tell that apart from "genuinely no class".
+async function lookupStudentClass(email: string): Promise<{ studentClass: string | null; error: boolean }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase.from("users").select("student_class").eq("email", email).maybeSingle();
+    if (!error) return { studentClass: data?.student_class || null, error: false };
+    console.error(`Class lookup failed for ${email} (attempt ${attempt + 1}):`, error.message);
+    await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+  }
+  return { studentClass: null, error: true };
+}
+
 // Supabase/PostgREST silently caps every select at 1000 rows no matter what .limit() says -- an
 // unpaginated "read all submissions" returns the first 1000 in arbitrary order and drops the rest
 // without any error. That is exactly how students who HAD submitted showed up as "not submitted"
@@ -9359,9 +9374,15 @@ function buildApp(): express.Express {
   app.get("/api/homework/leaderboard", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { data: userRow } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
-    if (!userRow?.student_class) return res.status(400).json({ error: "We couldn't determine your class." });
-    return res.json(await computeHomeworkLeaderboard(userRow.student_class));
+    const lookup = await lookupStudentClass(auth.email);
+    if (lookup.error) return res.status(503).json({ error: "The leaderboard is temporarily unavailable. Please refresh in a moment." });
+    if (!lookup.studentClass) return res.status(400).json({ error: "We couldn't determine your class." });
+    try {
+      return res.json(await computeHomeworkLeaderboard(lookup.studentClass));
+    } catch (err: any) {
+      console.error("Homework leaderboard error:", err.message);
+      return res.status(503).json({ error: "The leaderboard is temporarily unavailable. Please refresh in a moment." });
+    }
   });
 
   // Admin view of the same leaderboard for all three classes at once.
@@ -10919,8 +10940,8 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   });
 
   async function resolveClassLabelForRevision(auth: { email: string; role: string }): Promise<string | null> {
-    const { data: userRow } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
-    if (userRow?.student_class) return userRow.student_class;
+    const lookup = await lookupStudentClass(auth.email);
+    if (lookup.studentClass) return lookup.studentClass;
     const { data: setup } = await supabase.from("revision_setups").select("fallback_class").eq("student_email", auth.email).maybeSingle();
     return setup?.fallback_class ? (CLASS_TO_TARGET[setup.fallback_class] ? setup.fallback_class : TARGET_TO_LABEL[setup.fallback_class] || null) : null;
   }

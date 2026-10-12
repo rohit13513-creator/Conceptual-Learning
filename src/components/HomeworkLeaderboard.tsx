@@ -147,9 +147,22 @@ export function HomeworkLeaderboard({ isLightMode = false, token, currentUserEma
       setLoading(true);
       setError(null);
       try {
-        const resp = await fetch('/api/homework/leaderboard', { headers: { Authorization: `Bearer ${token}` } });
-        const json = await resp.json();
-        if (!resp.ok) throw new Error(json.error || 'Failed to load the leaderboard.');
+        // One automatic retry: a momentary hiccup on the server or the student's connection should
+        // not leave a red error on the card for the rest of the visit.
+        let json: any = null;
+        let failure = 'Failed to load the leaderboard.';
+        for (let attempt = 0; attempt < 2 && !json; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+          try {
+            const resp = await fetch('/api/homework/leaderboard', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+            const body = await resp.json();
+            if (resp.ok) json = body;
+            else failure = body.error || failure;
+          } catch {
+            failure = 'Could not reach the server. Please check your connection and refresh.';
+          }
+        }
+        if (!json) throw new Error(failure);
         if (!cancelled) setData(json);
       } catch (err: any) {
         if (!cancelled) setError(err.message);
