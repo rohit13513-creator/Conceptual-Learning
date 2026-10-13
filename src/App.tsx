@@ -1133,7 +1133,7 @@ export default function App() {
   const [adminHwLeaderboardClasses, setAdminHwLeaderboardClasses] = useState<{
     classLabel: string;
     totalAssignments: number;
-    rows: { email: string; name: string; photoUrl: string | null; attempted: number; score: number; maxScore: number; percentage: number }[];
+    rows: { email: string; name: string; photoUrl: string | null; attempted: number; totalAssignments?: number; score: number; maxScore: number; percentage: number }[];
   }[] | null>(null);
 
   useEffect(() => {

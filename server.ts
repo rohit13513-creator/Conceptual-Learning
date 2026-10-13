@@ -9302,7 +9302,7 @@ function buildApp(): express.Express {
 
     const { data: classmates } = await supabase
       .from("users")
-      .select("email, name, photo_url")
+      .select("email, name, photo_url, created_at")
       .eq("student_class", classLabel)
       .eq("role", "student")
       .eq("status", "approved")
@@ -9311,9 +9311,14 @@ function buildApp(): express.Express {
     if (roster.length === 0) return { classLabel, totalAssignments: 0, rows: [] as any[] };
     const emails = roster.map((u: any) => u.email);
 
-    const { data: assignments } = await supabase.from("homework_assignments").select("id").in("target_class", [targetKey, "All"]);
+    const { data: assignments } = await supabase.from("homework_assignments").select("id, assigned_date").in("target_class", [targetKey, "All"]);
     const assignmentIds = new Set((assignments || []).map((a: any) => a.id));
     const totalAssignments = assignmentIds.size;
+    // A homework is only "owed" by a student who had joined by the time it fell due (the day after it
+    // was assigned). Counting every assignment the class ever received against someone who signed up
+    // later showed them as having missed homework that didn't exist for them yet (a student who joined
+    // this month displayed 4/28 and a tiny percentage).
+    const assignmentDueMs = new Map<string, number>((assignments || []).map((a: any) => [a.id, new Date(`${a.assigned_date}T23:59:59Z`).getTime() + 24 * 60 * 60 * 1000]));
 
     // upsertHomeworkSubmission is *meant* to guarantee one row per (student, assignment) pair, but
     // real data has cases where that didn't hold (a handful of students have 2-3 rows for the same
@@ -9349,15 +9354,24 @@ function buildApp(): express.Express {
     // "attempted" column's own denominator. Scoring only against attempted/graded count let a
     // student who skipped most homeworks but did well on the few they submitted outrank someone
     // who attempted (and did reasonably on) far more of them, which is exactly backwards.
-    const maxScore = totalAssignments * HOMEWORK_TOTAL_MARKS;
     const rows = roster
       .map((u: any) => {
         const score = scoreSum.get(u.email) || 0;
+        const joinedMs = u.created_at ? new Date(u.created_at).getTime() : 0;
+        // Everything the student actually submitted always counts, even if it predates their join
+        // date (an admin may have uploaded on their behalf); the denominator is every assignment due
+        // after they joined PLUS any they submitted anyway.
+        let owed = 0;
+        for (const id of assignmentIds) {
+          if ((assignmentDueMs.get(id) || 0) >= joinedMs || latestByPair.has(`${id}|${u.email}`)) owed++;
+        }
+        const maxScore = owed * HOMEWORK_TOTAL_MARKS;
         return {
           email: u.email,
           name: u.name,
           photoUrl: u.photo_url || null,
           attempted: attemptedCount.get(u.email) || 0,
+          totalAssignments: owed,
           score,
           maxScore,
           percentage: maxScore > 0 ? Math.round((score / maxScore) * 1000) / 10 : 0,

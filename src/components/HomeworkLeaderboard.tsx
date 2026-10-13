@@ -10,6 +10,7 @@ export interface HomeworkLeaderboardRow {
   attempted: number;
   score: number;
   maxScore: number;
+  totalAssignments?: number;
   percentage: number;
 }
 
@@ -85,7 +86,7 @@ function HomeworkRows({ rows, totalAssignments, isLightMode, currentUserEmail }:
                   </div>
                 </td>
                 <td className={`px-2 py-1.5 text-center font-mono ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
-                  {row.attempted}/{totalAssignments}
+                  {row.attempted}/{row.totalAssignments ?? totalAssignments}
                 </td>
                 <td className={`px-2 py-1.5 text-center font-mono ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
                   {row.score}/{row.maxScore}
