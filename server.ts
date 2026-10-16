@@ -930,6 +930,7 @@ Working out which questions were actually assigned:
 - If you genuinely cannot tell which official question a specific piece of the student's work corresponds to (their own numbering is unclear, inconsistent, or doesn't cleanly match either the attached sheet or the description's stated range), say so plainly in your feedback rather than confidently asserting a specific missing/wrong question number that might not be the one the student actually meant -- a confident-sounding wrong guess is worse than admitting the mapping is unclear.
 - When a question is genuinely missing (not attempted anywhere in the submission) and you can tell the student is using their own numbering scheme that runs a constant offset from the sheet's numbering (e.g. every question they DID attempt is numbered exactly 10 higher than the matching sheet question, so the sheet's Q1 is their Q11, Q2 is their Q12, and so on), state that offset explicitly and give the student's own equivalent number for the missing one too, in plain language (e.g. "Sheet Q12, which would be your own Q22, is still missing"). A student who numbers their own pages differently from the sheet has no way to know which of their own upcoming questions "Sheet Q12" refers to unless you translate it for them -- a real, confirmed case had a student whose own numbering ran 10 higher than the sheet's, correctly finish every question the sheet actually assigned through the sheet's Q11 (which they had labelled Q21), and get told only that "Sheet Q12" and "Sheet Q13" were missing with no indication those meant their own Q22 and Q23 -- leaving the student confused about how much work was actually left. Only do this when the offset is clearly consistent across multiple attempted questions, not from a single data point.
 - A student's notebook very often ALSO holds other problems (earlier textbook exercise questions, extra practice) numbered 1, 2, 3... that collide with the sheet's own numbers 1, 2, 3... and their sheet answers may only start further on (e.g. their number 11 is Sheet Q1). Never match a student's answer to a sheet question by the bare number, and never decide a sheet question is "missing" or "wrong" before you have first matched EVERY sheet question, one by one, against the given values in the student's work (the radius, angle, area, times, lengths that the sheet question states) across ALL pages. A piece of work whose given values are clearly different from a sheet question's (a different radius, a different angle, a different figure) is a DIFFERENT problem the student did as extra work -- it is never a "wrong attempt" of the sheet question that happens to share its number, and it must not be criticised as "you used r=5 instead of r=14". Only call a sheet question wrong when the student's work clearly IS that question (its own given values match) and the working or answer is incorrect; otherwise, if no work matching its given values exists anywhere, it is missing. A real, confirmed case had a student whose pages 1-3 were textbook problems numbered 1-10 and whose sheet answers started at their number 11; the check compared their textbook 1-10 to the sheet's 1-10 by number, called correct answers wrong or missing, and scored them 0 for work that was largely right -- the student had told us "the numbering doesn't match the question sheet" and was right.
+- NUMBERING DIFFERENCES NEVER EXCUSE WORK THAT DOES NOT MATCH THE SHEET. A student whose own numbering differs from the sheet's will still have answers that correspond, by their given values, wording or figure, to specific sheet questions -- that is the ONLY thing that justifies re-mapping numbers. Before you accept that numbering is merely different, you must find concrete matches (the same given numbers, the same described situation, the same asked quantity) for several different sheet questions and record them in sheetMatchEvidence. If the student's pages are about a different set of problems -- even on the same subject, even if every line of it is correct -- then they uploaded the wrong homework: matchedSheetQuestionCount is 0 or nearly 0, you must NOT grade their work as if it satisfied the sheet, and you must NOT write soothing feedback about unclear numbering. Never award a high score on the basis that the work "looks correct" while being unable to say which sheet question each answer belongs to; correct work for questions that were not assigned earns nothing for the assigned ones. A real, confirmed case: a Class X student uploaded a homework on potential difference and Ohm's law to an "Electric Current, Q1-35" assignment; not a single sheet question had a matching answer, yet it was scored 10/10 with feedback saying the numbering "did not match" -- the correct outcome is that the wrong homework was submitted.
 - If the student has correctly answered questions matching the assigned scope and content, do not mark the homework incomplete just because the specific NUMBERS they wrote don't match a differently-numbered question sheet or the description's stated range -- match by content and intent, not bare digits.
 - If the student attempted extra questions outside the assigned range (bonus/extra practice), still check and grade those too -- do not ignore them and do not penalize the student for doing extra work.
 - If you genuinely cannot tell which questions were assigned (no range stated anywhere and no other way to infer it), just grade what's shown as usual, without guessing at what might be missing.
@@ -994,6 +995,22 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           items: { type: "string" },
           description: "One entry per page of the student's submission, in the order the pages appear, BEFORE deciding anything about completeness. Each entry: which question number(s) appear or continue on that page, and -- critically -- whether the page OPENS with a continuation of a question whose working started on the previous page (e.g. a final algebraic step, 'Hence Proved', a boxed final answer, or '= RHS' as the very first thing on the page). Also, for every page, state whether any question number is written next to the word 'doubt' (or 'dought'), INCLUDING when it is just a short line by itself at the very top of the page directly above another question's work, at the bottom, or in a margin -- e.g. 'Q7 Doubt' as a single line right above the start of Q8. This must be filled in for every page before any question is judged incomplete, wrong, or missing a conclusion."
         },
+        // Listed right after the page-by-page read for the same property-order reason: the model must
+        // PROVE the student's work belongs to this assignment before it is allowed to grade it. A
+        // real incident (a student uploaded a completely different homework -- potential difference
+        // and Ohm's law -- to an electric-current assignment) was scored 10/10 because the checker
+        // decided "the student's numbering just differs from the sheet" and graded the work as
+        // generic correct physics, although not one answer matched any sheet question.
+        sheetMatchEvidence: {
+          type: "array",
+          items: { type: "string" },
+          description: "Only when a question sheet is attached. Pick up to 5 DIFFERENT sheet questions spread across the sheet. For each, write: the sheet question number, the specific given values or key words the sheet states for it, and the student's answer that responds to exactly those values/words (or 'NONE FOUND' if nothing in the whole submission does). Quote concrete numbers/terms, not general topics."
+        },
+        matchedSheetQuestionCount: {
+          type: "integer",
+          minimum: 0,
+          description: "Only when a question sheet is attached. How many of the sheet's TOP-LEVEL questions the student's work demonstrably answers, judged by the question's own given values, terms or figure -- NEVER by the bare question number and NEVER by 'it is correct physics/maths on a similar topic'. A student answering a different homework on the same subject (e.g. potential difference / Ohm's law work uploaded for an electric-current sheet) matches ZERO or nearly zero even if every line of it is correct. Count a question only if you can point to the sheet's given value or wording in the student's answer."
+        },
         // Also listed before score, for the same property-order reason as pageByPageNotes: a
         // real submission (Class VIII proportions, ~26 questions with several true/false and
         // find-x sub-parts) was scored 2/10 with self-contradicting feedback text ("marked false
@@ -1028,7 +1045,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         score: { type: "integer", minimum: 0, maximum: 10, description: "Your best estimate, 0-10, based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely. The actual score shown to the student is computed deterministically afterward as 10 minus 1 mark per question in missingQuestions/incorrectQuestions (see those fields) plus separate fixed penalties for doubt-volume and lateness -- so this field is not the final word, but it must still be a genuine, careful estimate (not a placeholder), since an implausible value here (e.g. 10 alongside several incorrectQuestions) is a signal something else was filled in wrong." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
-      required: ["pageByPageNotes", "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
+      required: ["pageByPageNotes", ...(questionSheetBlock ? ["sheetMatchEvidence", "matchedSheetQuestionCount"] : []), "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
     },
   };
 
@@ -1115,6 +1132,25 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
     const parsed = toolUseBlock.input;
 
+    // Deterministic wrong-homework guard. If a question sheet was attached and the model itself
+    // reports that (almost) none of the sheet's questions are answered by this submission, nothing
+    // it says about correctness can be trusted to earn marks for THIS assignment -- score 0, every
+    // question outstanding, and a plain message telling the student they likely uploaded the wrong
+    // homework (never accusing them of copying). Applies to a first submission only: a scoped
+    // "Improve Score" resubmission deliberately contains just a few questions.
+    if (questionSheetBlock && !isScopedResubmission && typeof parsed.matchedSheetQuestionCount === "number") {
+      const total = typeof parsed.assignedQuestionCount === "number" && parsed.assignedQuestionCount > 0 ? parsed.assignedQuestionCount : 0;
+      const matchedTooFew = parsed.matchedSheetQuestionCount <= Math.floor(total * 0.15);
+      if (total >= 3 && matchedTooFew) {
+        parsed.score = 0;
+        parsed.feedback = "The pages you uploaded do not answer the questions on this homework's question sheet -- none of the given values or questions on the sheet could be found in your answers, so this looks like a different homework was uploaded here. Please open the homework you meant to submit, check its title, and upload the pages for THIS homework (the sheet is under \"View Assigned Homework\"). If you did upload the right pages, tell your teacher.";
+        parsed.missingQuestions = ["All questions"];
+        parsed.incorrectQuestions = [];
+        parsed.doubtQuestions = [];
+        parsed.__wrongHomework = true;
+      }
+    }
+
     // How many questions the FULL assignment actually has, counted the same top-level way the
     // teacher assigns them (e.g. "Question 16 to 30" = 15) -- NOT questionByQuestionCheck.length,
     // which deliberately expands into one entry per lettered sub-part (e.g. a question with parts
@@ -1148,7 +1184,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // countTopLevelQuestions (same reasoning as the doubt-percentage numerator below), so a
     // single multi-part question with several wrong sub-parts still only costs 1 mark, not one
     // per sub-part.
-    if (Array.isArray(parsed.missingQuestions) && Array.isArray(parsed.incorrectQuestions)) {
+    if (!parsed.__wrongHomework && Array.isArray(parsed.missingQuestions) && Array.isArray(parsed.incorrectQuestions)) {
       const badQuestionCount = countTopLevelQuestions([...parsed.missingQuestions, ...parsed.incorrectQuestions]);
       parsed.score = Math.max(0, 10 - badQuestionCount);
     }
@@ -1251,7 +1287,9 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // to null once nothing is outstanding, rather than persisting a stale empty array. Any
     // existing lateOverride is carried forward unchanged -- a Reevaluate shouldn't silently
     // discard an admin's earlier late/not-late call.
-    const outstandingQuestions = Array.from(new Set([
+    // A wrong-homework result leaves nothing "outstanding": the student's next upload for this
+    // assignment must be graded as a full fresh check, not scoped to a placeholder question.
+    const outstandingQuestions = parsed.__wrongHomework ? [] : Array.from(new Set([
       ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
       ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
     ]));
