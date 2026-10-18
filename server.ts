@@ -915,9 +915,16 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
     ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
     : { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } };
 
-  const questionSheetNote = questionSheetBlock
-    ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is a question sheet, attached for reference on the content/wording of individual questions.\n"
+  // The static instructions above are written for CBSE students. A Canadian-board student studies a
+  // different curriculum, so tell the grader (per request, keeping the cached system prompt
+  // identical for everyone else) not to hold them to CBSE-specific formats or syllabus.
+  const { data: boardStudentRow } = await supabase.from("users").select("student_class").eq("email", sub.student_email).maybeSingle();
+  const boardNote = boardStudentRow?.student_class === "Canadian"
+    ? "IMPORTANT: this student follows the CANADIAN school curriculum, not CBSE. Wherever the instructions above mention CBSE format, CBSE steps or NCERT, read that as 'standard school-maths working in the Canadian curriculum'. Grade strictly on mathematical correctness and clear working; do not deduct for notation, units or presentation conventions that differ from CBSE, and accept any valid method.\n"
     : "";
+  const questionSheetNote = boardNote + (questionSheetBlock
+    ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is a question sheet, attached for reference on the content/wording of individual questions.\n"
+    : "");
 
   // Split into a STATIC system prompt (byte-identical on every single call, across every student
   // and every assignment) and a small per-request user message with only what actually varies.
@@ -1369,6 +1376,12 @@ function computeDeadline(assignedDate: string, targetClass: string): string {
 }
 
 // Maps users.student_class (Roman numeral) <-> homework_assignments.target_class ("Nth")
+// Canadian-board students: stored as users.student_class "Canadian", and homework for them is posted
+// with target_class "canadian". Deliberately NOT part of CLASS_TO_TARGET / DEADLINE_TIME_BY_CLASS,
+// which also drive "All Classes" homework, Revision and the class leaderboards -- none of which
+// should include them.
+const CANADIAN_CLASS = "Canadian";
+const CANADIAN_TARGET = "canadian";
 const CLASS_TO_TARGET: Record<string, string> = { VIII: "8th", IX: "9th", X: "10th", XII: "12th" };
 const TARGET_TO_LABEL: Record<string, string> = { "8th": "VIII", "9th": "IX", "10th": "X", "12th": "XII" };
 
@@ -7434,7 +7447,16 @@ function buildApp(): express.Express {
 
   // User Profile registration (Requires Phone OTP + Phone Number)
   app.post("/api/register", async (req, res) => {
-    const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass, studentType } = req.body;
+    const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass: requestedClass, studentType: requestedType, board } = req.body;
+    // Canadian-board students are stored with student_class "Canadian" and are always regular
+    // ("offline") students -- they get separately posted homework but no Indian class level.
+    const isCanadianBoard = board === "Canadian" || requestedClass === "Canadian";
+    const studentClass = isCanadianBoard ? "Canadian" : requestedClass;
+    const studentType = isCanadianBoard ? "offline" : requestedType;
+    if (!isCanadianBoard && studentClass !== undefined && !["VIII", "IX", "X", "XI", "XII"].includes(studentClass)) {
+      return res.status(400).json({ error: "Please choose a valid class." });
+    }
+    const boardLabel = isCanadianBoard ? "Canadian Board" : (board === "ICSE" ? "ICSE" : "CBSE");
 
     if (!name || !email || !password || !phone || !whatsappNumber || !phoneOtp) {
       return res.status(400).json({ error: "Please complete all fields and verify your email using the OTP prior to registering." });
@@ -7525,7 +7547,8 @@ function buildApp(): express.Express {
       `- Name: ${newUser.name}\n` +
       `- Email Address: ${newUser.email}\n` +
       `- Phone Number: ${newUser.phone}\n` +
-      `- Class Level: ${newUser.studentClass || "10th"}\n` +
+      `- Board: ${boardLabel}\n` +
+      `- Class Level: ${newUser.studentClass === "Canadian" ? "Canadian Board (no class level)" : (newUser.studentClass || "10th")}\n` +
       `- Status: PENDING INBOX APPROVAL\n\n` +
       `Review and approve this registration instantly:\n` +
       `👉 Click Approve directly inside the platform or click here to approve via your email client:\n` +
@@ -7555,8 +7578,8 @@ function buildApp(): express.Express {
             <td style="padding: 12px 16px; font-size: 14px; color: #0f172a;">${newUser.phone}</td>
           </tr>
           <tr>
-            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; background-color: #f8fafc;">Class:</td>
-            <td style="padding: 12px 16px; font-size: 14px; color: #0891b2; font-weight: 800;">Class ${newUser.studentClass || "10th"}</td>
+            <td style="padding: 12px 16px; font-weight: 600; font-size: 14px; color: #475569; background-color: #f8fafc;">Board / Class:</td>
+            <td style="padding: 12px 16px; font-size: 14px; color: #0891b2; font-weight: 800;">${boardLabel}${newUser.studentClass === "Canadian" ? "" : " - Class " + (newUser.studentClass || "10th")}</td>
           </tr>
         </table>
 
@@ -9231,11 +9254,12 @@ function buildApp(): express.Express {
     for (const a of assignmentRows || []) {
       const targetKeys = a.target_class === "All" ? Object.keys(DEADLINE_TIME_BY_CLASS) : [a.target_class];
       for (const key of targetKeys) {
+        const isCanadianKey = key === CANADIAN_TARGET;
         const effectiveDeadline = a.target_class === "All" ? computeDeadline(a.assigned_date, key) : a.deadline;
         const deadlinePassed = !!effectiveDeadline && new Date(effectiveDeadline).getTime() <= Date.now();
         if (!deadlinePassed) continue; // only report once a class's own deadline has actually passed
 
-        const roster = students.filter((u: any) => CLASS_TO_TARGET[u.student_class] === key);
+        const roster = students.filter((u: any) => isCanadianKey ? u.student_class === CANADIAN_CLASS : CLASS_TO_TARGET[u.student_class] === key);
         const submitted = submittedByAssignment.get(a.id) || new Map<string, { submittedAt: string; adminNotes: string | null }>();
         const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
         const late = roster
@@ -9251,7 +9275,7 @@ function buildApp(): express.Express {
         report.push({
           id: a.target_class === "All" ? `${a.id}-${key}` : a.id,
           title: a.target_class === "All" ? `${a.title} (Class ${TARGET_TO_LABEL[key] || key})` : a.title,
-          targetClass: TARGET_TO_LABEL[key] || key,
+          targetClass: key === CANADIAN_TARGET ? "Canadian" : (TARGET_TO_LABEL[key] || key),
           assignedDate: a.assigned_date,
           deadline: effectiveDeadline,
           rosterCount: roster.length,

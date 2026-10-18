@@ -11,6 +11,7 @@ create table users (
   phone text,
   whatsapp_number text,
   student_type text not null default 'offline',    -- 'offline' (regular class, gets homework) | 'online' (self-study only)
+  -- student_class (added live, not in the original create statement): 'VIII'|'IX'|'X'|'XI'|'XII', or 'Canadian' for Canadian-board students (homework posted with target_class 'canadian')
   password_hash text not null,
   status text not null default 'pending',   -- pending | approved | rejected
   role text not null default 'student',     -- student | admin

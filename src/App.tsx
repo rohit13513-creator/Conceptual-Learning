@@ -663,7 +663,11 @@ export default function App() {
   // test accounts are exempt so they can freely QA any class's material.
   const CLASS_EXEMPT_EMAILS = [...ADMIN_EMAILS, 'test@rayoptica.com'];
   const isClassExempt = !user || CLASS_EXEMPT_EMAILS.includes(user.email);
-  const CLASS_TRACK_MAP: Record<string, '8th' | '9th' | '10th' | '12th' | 'unavailable'> = {
+  const CLASS_TRACK_MAP: Record<string, '8th' | '9th' | '10th' | '12th' | 'canadian' | 'unavailable'> = {
+    // Canadian-board students are stored with student_class "Canadian". Their track is deliberately
+    // separate from 8th/9th/10th so they never see another class's notes/homework, and so "All
+    // Classes" homework (which is for the Indian-board classes) does not reach them.
+    'Canadian': 'canadian',
     'VIII': '8th',
     'IX': '9th',
     'X': '10th',
@@ -678,10 +682,12 @@ export default function App() {
     '9th': '5:45 PM',
     '10th': '4:45 PM',
     '12th': '6:45 PM',
+    'canadian': '6:45 PM',
   };
-  const studentTrack: '8th' | '9th' | '10th' | '12th' | 'unavailable' | null = isClassExempt
+  const studentTrack: '8th' | '9th' | '10th' | '12th' | 'canadian' | 'unavailable' | null = isClassExempt
     ? null
     : (CLASS_TRACK_MAP[user?.studentClass || ''] || 'unavailable');
+  const isCanadianStudent = studentTrack === 'canadian';
 
   // Shared filter used by every class-scoped nav dropdown (Notes/Solve NCERT/Question Bank/Self
   // Assessment): exempt accounts see every item unchanged; locked students only ever see the
@@ -717,6 +723,7 @@ export default function App() {
   const [regPhoneOtp, setRegPhoneOtp] = useState('');
   const [regStudentClass, setRegStudentClass] = useState<'VIII' | 'IX' | 'X' | 'XI' | 'XII'>('X');
   const [regStudentType, setRegStudentType] = useState<'offline' | 'online'>('offline');
+  const [regBoard, setRegBoard] = useState<'CBSE' | 'ICSE' | 'Canadian'>('CBSE');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -1280,7 +1287,7 @@ export default function App() {
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDescription, setAssignDescription] = useState('');
   const [assignSubject, setAssignSubject] = useState('');
-  const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th'>('All');
+  const [assignTargetClass, setAssignTargetClass] = useState<'All' | '8th' | '9th' | '10th' | '12th' | 'canadian'>('All');
   const [assignAssignedDate, setAssignAssignedDate] = useState(todayDateStr);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [assignFile, setAssignFile] = useState<File | null>(null);
@@ -1600,8 +1607,10 @@ export default function App() {
           phone: regPhone,
           whatsappNumber: regWhatsapp,
           phoneOtp: regPhoneOtp,
-          studentClass: regStudentClass,
-          studentType: regStudentType
+          board: regBoard,
+          // Canadian-board students are always regular students and have no Indian class level.
+          studentClass: regBoard === 'Canadian' ? 'Canadian' : regStudentClass,
+          studentType: regBoard === 'Canadian' ? 'offline' : regStudentType
         })
       });
       const data = await response.json();
@@ -2340,7 +2349,9 @@ export default function App() {
   // posted homework and its status instead of an empty list once its deadline has quietly expired.
   const recentAssignmentsForStudent = useMemo(() => {
     return assignments
-      .filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack)
+      // Canadian-board students only ever see homework posted specifically for them: "All" is the
+      // Indian-board classes' homework.
+      .filter(a => isCanadianStudent ? a.targetClass === 'canadian' : (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack))
       .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime())
       .slice(0, 10);
   }, [assignments, isClassExempt, studentTrack]);
@@ -2417,7 +2428,7 @@ export default function App() {
   };
 
   const visibleAnnouncements = useMemo(() => {
-    return announcements.filter(a => a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack);
+    return announcements.filter(a => isCanadianStudent ? a.targetClass === 'canadian' : (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack));
   }, [announcements, isClassExempt, studentTrack]);
 
   const handlePostAnnouncement = async (e: React.FormEvent) => {
@@ -3770,6 +3781,26 @@ export default function App() {
               </div>
 
               <div className="space-y-1">
+                <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Which Board?</label>
+                <select
+                  value={regBoard}
+                  onChange={(e) => setRegBoard(e.target.value as any)}
+                  disabled={otpSent}
+                  className={`w-full border rounded-xl py-2.5 px-4 text-xs focus:outline-none focus:border-cyan-500 transition-colors disabled:opacity-50 cursor-pointer ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
+                >
+                  <option value="CBSE">CBSE</option>
+                  <option value="ICSE">ICSE</option>
+                  <option value="Canadian">Canadian Board</option>
+                </select>
+                {regBoard === 'Canadian' && (
+                  <p className={`text-[9.5px] leading-relaxed font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    * Canadian Board students are regular students. Your homework and notes are provided separately by your teacher.
+                  </p>
+                )}
+              </div>
+
+              {regBoard !== 'Canadian' && (
+              <div className="space-y-1">
                 <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Class</label>
                 <select
                   value={regStudentClass}
@@ -3784,7 +3815,9 @@ export default function App() {
                   <option value="XII">Class XII</option>
                 </select>
               </div>
+              )}
 
+              {regBoard !== 'Canadian' && (
               <div className="space-y-1.5">
                 <label className={`text-[10px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Are You an Offline Student?</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -3819,6 +3852,7 @@ export default function App() {
                     : '* Online students study independently through the app only -- no homework will be assigned.'}
                 </p>
               </div>
+              )}
 
               {/* Email OTP Verification Section */}
               {otpSent && (
@@ -5048,7 +5082,7 @@ export default function App() {
             {(() => {
               const targetTrack = CLASS_TRACK_MAP[editSub.studentClass || ''];
               const assignmentsForStudent = assignments
-                .filter((a: any) => a.targetClass === 'All' || a.targetClass === targetTrack)
+                .filter((a: any) => targetTrack === 'canadian' ? a.targetClass === 'canadian' : (a.targetClass === 'All' || a.targetClass === targetTrack))
                 .slice()
                 .sort((a: any, b: any) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
               return (
@@ -5439,8 +5473,8 @@ export default function App() {
               <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>Welcome back, {user.name.split(' ')[0]}!</h1>
             </div>
 
-            {/* Start Studying -- primary call to action */}
-            <button
+            {/* Start Studying -- primary call to action (not for Canadian-board students, whose notes are provided separately) */}
+            {!isCanadianStudent && (<button
               onClick={() => { setStudyingClass(null); setUnderConstructionSubject(null); changeView('startStudying'); }}
               className={`w-full flex items-center gap-4 p-6 sm:p-7 rounded-3xl border text-left transition duration-200 cursor-pointer relative overflow-hidden group ${
                 isLightMode
@@ -5456,12 +5490,12 @@ export default function App() {
                 <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-white/90' : 'text-slate-300'}`}>Open your Maths, Physics, Chemistry & Biology notes</p>
               </div>
               <ChevronRight className="w-6 h-6 shrink-0 opacity-80 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </button>)}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className={`grid grid-cols-1 gap-5 ${isCanadianStudent ? '' : 'lg:grid-cols-2'}`}>
 
-              {/* Latest Updates box */}
-              <div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              {/* Latest Updates box -- Canadian-board students only get homework on their home page */}
+              {!isCanadianStudent && (<div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
                 <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                   <Megaphone className="w-4 h-4 text-amber-400" /> Latest Updates
                 </h2>
@@ -5482,7 +5516,7 @@ export default function App() {
                 <button onClick={() => changeView('latestNews')} className={`mt-2 text-[11px] font-black self-start cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
                   View all updates →
                 </button>
-              </div>
+              </div>)}
 
               {/* Homework Assigned box */}
               <div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
@@ -5526,7 +5560,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {user && !ADMIN_EMAILS.includes(user.email) && (
+            {user && !ADMIN_EMAILS.includes(user.email) && !isCanadianStudent && (
               <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />
             )}
             {/* Admin has no student_class of its own, so it sees all three classes here instead of
@@ -5557,7 +5591,7 @@ export default function App() {
             )}
 
             {/* Revision box -- separate from admin-posted Homework, student-initiated on their own syllabus */}
-            <button
+            {!isCanadianStudent && (<button
               onClick={() => changeView('revision')}
               className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-cyan-50 to-blue-50 border-cyan-300' : 'from-cyan-500/10 to-blue-600/10 border-cyan-500/30'}`}
             >
@@ -5567,11 +5601,11 @@ export default function App() {
                 <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Get a fresh 30-mark practice paper for your syllabus, timed, with instant feedback.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
-            </button>
-            {user && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
+            </button>)}
+            {user && !isCanadianStudent && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
             {/* Download NCERT box */}
-            <button
+            {!isCanadianStudent && (<button
               onClick={() => changeView('ncertDownloads')}
               className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-slate-50 to-slate-100 border-slate-300' : 'from-slate-800/40 to-slate-900/40 border-slate-700'}`}
             >
@@ -5581,7 +5615,7 @@ export default function App() {
                 <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Chapter-wise textbook PDFs for your class, ready to download.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
-            </button>
+            </button>)}
 
             {/* Upload Homework box */}
             <div id="homework-upload-form" className={`border rounded-2xl p-5 sm:p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
@@ -5787,9 +5821,11 @@ export default function App() {
         <div className={`flex-1 overflow-y-auto px-4 py-12 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
           <div className="max-w-md mx-auto space-y-4 text-center py-12">
             <div className={`rounded-2xl border p-8 space-y-3 ${isLightMode ? 'bg-amber-50 border-amber-300' : 'bg-amber-950/20 border-amber-500/20'}`}>
-              <p className={`text-base font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>Content for your class is coming soon</p>
+              <p className={`text-base font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>{isCanadianStudent ? 'Your Canadian Maths notes are coming soon' : 'Content for your class is coming soon'}</p>
               <p className={`text-sm font-semibold leading-relaxed ${isLightMode ? 'text-amber-700' : 'text-amber-200/80'}`}>
-                We're still building dedicated study notes, question banks, and self-assessment tests for your registered class. In the meantime, all Simulators remain fully open to you -- use the Simulator menu above to keep exploring.
+                {isCanadianStudent
+                  ? 'Your teacher will add your Canadian Maths notes here. Your homework is on your Home page, and all Simulators remain open to you from the Simulator menu above.'
+                  : "We're still building dedicated study notes, question banks, and self-assessment tests for your registered class. In the meantime, all Simulators remain fully open to you -- use the Simulator menu above to keep exploring."}
               </p>
             </div>
             <button
@@ -7937,7 +7973,7 @@ export default function App() {
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
                         {a.description && <p className={`text-[11px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.description}</p>}
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                          {formatDateIST(a.createdAt)} • {a.targetClass === 'All' ? 'All Classes' : `Class ${a.targetClass}`}
+                          {formatDateIST(a.createdAt)} • {a.targetClass === 'All' ? 'All Classes' : `${a.targetClass === 'canadian' ? 'Canadian Board' : 'Class ' + a.targetClass}`}
                         </p>
                         {getEffectiveDeadline(a) && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(getEffectiveDeadline(a))}</p>}
                         {a.fileUrl && (
@@ -8174,11 +8210,29 @@ export default function App() {
         </div>
       )}
 
-      {activeView === 'revision' && user && (
+      {activeView === 'revision' && user && isCanadianStudent && (
+        <div className={`flex-1 overflow-y-auto px-4 py-12 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
+          <div className="max-w-md mx-auto text-center space-y-3">
+            <p className="text-base font-black">Revision papers are not available for the Canadian Board yet</p>
+            <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Your homework is on your Home page.</p>
+            <button onClick={() => changeView('hub')} className={`text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl ${isLightMode ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-200'}`}>Back to Home</button>
+          </div>
+        </div>
+      )}
+      {activeView === 'revision' && user && !isCanadianStudent && (
         <Revision isLightMode={isLightMode} user={{ name: user.name, email: user.email, token: user.token, role: user.role, studentClass: user.studentClass }} />
       )}
 
-      {activeView === 'ncertDownloads' && user && (
+      {activeView === 'ncertDownloads' && user && isCanadianStudent && (
+        <div className={`flex-1 overflow-y-auto px-4 py-12 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
+          <div className="max-w-md mx-auto text-center space-y-3">
+            <p className="text-base font-black">NCERT downloads are for the CBSE classes</p>
+            <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Your teacher will share your Canadian Maths material separately.</p>
+            <button onClick={() => changeView('hub')} className={`text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl ${isLightMode ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-200'}`}>Back to Home</button>
+          </div>
+        </div>
+      )}
+      {activeView === 'ncertDownloads' && user && !isCanadianStudent && (
         <NcertDownloads isLightMode={isLightMode} user={{ email: user.email, token: user.token }} />
       )}
 
@@ -8294,7 +8348,7 @@ export default function App() {
                     <div className="flex items-start justify-between gap-2">
                       <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
                       {a.targetClass !== 'All' && (
-                        <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">Class {a.targetClass.replace('th', '')}</span>
+                        <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">{a.targetClass === 'canadian' ? 'Canadian' : 'Class ' + a.targetClass.replace('th', '')}</span>
                       )}
                     </div>
                     <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
@@ -9117,6 +9171,7 @@ export default function App() {
                           <option value="9th">Class 9th</option>
                           <option value="10th">Class 10th</option>
                           <option value="12th">Class 12th / Competitions</option>
+                          <option value="canadian">Canadian Board</option>
                         </select>
                       </div>
                     </div>
@@ -9454,7 +9509,7 @@ export default function App() {
                 const studentsInClass = nonAdminUsers.filter((u: any) => (u.studentClass || 'Unspecified') === adminUploadClass);
                 const targetTrack = CLASS_TRACK_MAP[adminUploadClass];
                 const assignmentsForClass = assignments
-                  .filter((a: any) => a.targetClass === 'All' || a.targetClass === targetTrack)
+                  .filter((a: any) => targetTrack === 'canadian' ? a.targetClass === 'canadian' : (a.targetClass === 'All' || a.targetClass === targetTrack))
                   .slice()
                   .sort((a: any, b: any) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime());
 
