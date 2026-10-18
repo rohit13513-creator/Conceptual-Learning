@@ -754,11 +754,14 @@ async function upsertHomeworkSubmission(params: {
 
     if (updateError || !updatedRow) throw new Error(updateError?.message || "Failed to update the existing submission record.");
 
-    // Old file is no longer referenced by anything -- remove it so replaced submissions don't
-    // pile up as orphaned storage. Non-fatal: the record update above already succeeded.
+    // The replaced file is MOVED into a superseded/ folder instead of deleted. A student's first
+    // upload holds the whole assignment, and an "Improve Score" resubmission usually contains only
+    // the few corrected pages; deleting the original destroyed the only evidence of what the student
+    // had actually written, so a dispute ("I already did Q6, it wasn't recognised") could never be
+    // checked against the real pages. Non-fatal: the record update above already succeeded.
     if (existing.file_path && existing.file_path !== params.filePath) {
-      const { error: removeError } = await supabase.storage.from(HOMEWORK_BUCKET).remove([existing.file_path]);
-      if (removeError) console.warn("Could not remove superseded homework file:", removeError.message);
+      const { error: moveError } = await supabase.storage.from(HOMEWORK_BUCKET).move(existing.file_path, `superseded/${existing.file_path}`);
+      if (moveError) console.warn("Could not archive superseded homework file:", moveError.message);
     }
 
     return { row: updatedRow, priorMissingQuestions };
