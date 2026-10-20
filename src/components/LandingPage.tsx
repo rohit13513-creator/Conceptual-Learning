@@ -107,13 +107,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
   ];
 
   // Only reviews that tell a real story of learning (or praise the teaching at length) are shown: at least
-  // 450 characters, and none that name a place, because the coaching is no longer tied to one location.
-  const reviewsForBar = GOOGLE_REVIEWS.filter((r) => r.text.length >= 450 && !/gaur|exotica|dreamville|noida|locality/i.test(r.text));
+  // 450 characters, and none that name a place, because we are no longer tied to one location.
+  const reviewsForBar = GOOGLE_REVIEWS.filter((r) => r.text.length >= 450 && !/gaur|exotica|dreamville|noida|locality|coaching/i.test(r.text));
   const loop = [...reviewsForBar, ...reviewsForBar];
   const [activeReview, setActiveReview] = useState<GoogleReview | null>(null);
   const [showAbout, setShowAbout] = useState(false);
 
-  const navLink = `hidden md:inline text-xs font-bold cursor-pointer ${light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`;
+  const navLink = `hidden lg:inline text-sm xl:text-base font-bold cursor-pointer ${light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`;
   const iconBubble = 'w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-400 flex items-center justify-center shadow-lg shadow-cyan-500/20';
 
   const headerEl = (
@@ -182,7 +182,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
       <main className="relative flex-1 pb-44">
         <section className="max-w-6xl mx-auto px-4 pt-14 pb-10 sm:pt-20 text-center space-y-6">
           <span className={`inline-flex items-center gap-2 text-[10px] sm:text-[11px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>
-            <Sparkles className="w-3.5 h-3.5" /> Online and offline coaching &middot; Class VIII to X
+            <Sparkles className="w-3.5 h-3.5" /> Your learning guide &middot; Online and in class &middot; Class VIII to X
           </span>
           <h1 className={`text-4xl sm:text-6xl font-black tracking-tight leading-[1.05] ${heading}`}>
             Learn the concept.<br />
@@ -243,7 +243,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <section id="how" className="scroll-mt-20 max-w-6xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
             <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${heading}`}>How we work</h2>
-            <p className={`text-sm font-medium ${muted}`}>What makes our coaching different.</p>
+            <p className={`text-sm font-medium ${muted}`}>What is different with us.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {how.map((h) => (

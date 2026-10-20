@@ -3566,7 +3566,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             <img src="/favicon.svg" alt="" className="inline-block w-12 h-12 rounded-xl shadow-md shadow-cyan-500/10" />
             <h1 className={`text-2xl font-black tracking-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Conceptual Learning Online</h1>
             <p className="text-[11px] text-cyan-400 font-semibold tracking-wide">
-              Online and offline Maths and Science coaching.
+              Online and offline Maths and Science guidance.
             </p>
           </div>
 
