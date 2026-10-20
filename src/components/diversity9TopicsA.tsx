@@ -1,0 +1,267 @@
+import React from "react";
+import { Topic, b } from "./diversity9Types";
+
+// Lesson topics 1 to 8: biodiversity, why and how we classify, and the first two kingdoms.
+
+export const TOPICS_A: Topic[] = [
+  {
+    id: "life-forms",
+    title: "1. Life in Many Forms",
+    category: "Biodiversity",
+    heading: "Life in Many Forms",
+    sub: "From tiny algae in the sea to giant trees, the Earth holds an enormous variety of life.",
+    blocks: [
+      { t: "card", title: "Core Idea", body: [
+        <>Life exists in countless forms and habitats. There are microscopic organisms you cannot see with the eye, and giant trees. There are glowing jellyfish and soaring eagles. Life is found from the snow-clad Himalayas to the coral reefs of the Andaman Sea.</>,
+        <>This huge variety of living organisms is called {b("biodiversity")}. It is essential for life on the Earth.</>,
+      ] },
+      { t: "h", text: "Every Organism Has a Job in Nature" },
+      { t: "ul", items: [
+        <>{b("Microscopic algae")} in the oceans give out most of the oxygen we breathe.</>,
+        <>{b("Fungi and bacteria")} break down fallen leaves and other waste and turn it into manure (this is decomposition). This makes the soil fertile.</>,
+        <>{b("Birds, bees and bats")} carry pollen from flower to flower (pollination).</>,
+        <>{b("Plants")} trap sunlight and make food. This food supports nearly all life on the planet.</>,
+        <>These links between organisms keep ecosystems steady. An {b("ecosystem")} (all the living things of a place together with their surroundings) stays healthy because of them, and that is what makes the Earth fit for life.</>,
+      ] },
+      { t: "h", text: "Humans and Farmers Depend on Biodiversity" },
+      { t: "ul", items: [
+        <>Humans depend on biodiversity for food, shelter, medicines and a living.</>,
+        <>For centuries, farmers used their practical knowledge to keep many varieties of a crop. Each variety had a useful quality, such as {b("drought tolerance")} (able to survive with little water), {b("pest resistance")} (not easily damaged by insects), and the ability to grow in soil poor in nutrients.</>,
+        <>They learnt that variety lowers the risk of {b("crop failure")}. If one variety fails, another may still survive. This gives {b("food security")} (people always have enough food).</>,
+      ] },
+      { t: "h", text: "Why We Need to Group Organisms" },
+      { t: "ul", items: [
+        <>In such a vast variety, organisms are alike in some ways and different in others.</>,
+        <>To study this variety in an orderly way, scientists put organisms into groups based on shared characteristics and {b("evolutionary relationships")} (how closely they are related through common ancestors). This is {b("classification")}.</>,
+        <>Classification helps us understand how organisms are related and how they work. It is used in ecosystem management, saving biodiversity (conservation) and sustainable farming (farming that does not harm the land for the future).</>,
+      ] },
+      { t: "h", text: "Four Questions to Keep in Mind" },
+      { t: "exq", n: 1, q: "What do you understand by biodiversity?", a: "Biodiversity is the immense variety of living organisms found on the Earth, in all kinds of habitats, from microscopic organisms to giant trees." },
+      { t: "exq", n: 2, q: "How does the grouping of organisms help us understand diversity?", a: "Grouping on the basis of shared features makes a huge variety easy to study. We can see how organisms are alike, how they are different and how they are related to each other." },
+      { t: "exq", n: 3, q: "On what basis are plants and animals classified?", a: "On features such as external features, mode of nutrition, internal structure, cell structure, ecological role, reproduction and genetic similarity. These are explained in the next few topics." },
+      { t: "exq", n: 4, q: "How does classification help address problems in farming?", a: "Classification helps us identify and keep different crop varieties with useful qualities, such as drought tolerance and pest resistance. Keeping this variety lowers the risk of crop failure and strengthens food security." },
+    ],
+  },
+  {
+    id: "hotspot",
+    title: "2. India as a Biodiversity Hotspot",
+    category: "Biodiversity",
+    heading: "India as a Biodiversity Hotspot",
+    sub: "Different landscapes and climates give India species that are found nowhere else.",
+    blocks: [
+      { t: "ul", items: [
+        <>India has mountains in the north, desert in the west, rainforests in the North East, plateaus in the south, and long coastlines along the Arabian Sea and the Bay of Bengal.</>,
+        <>Each region has its own kind of soil and its own climate (temperature and rainfall).</>,
+        <>These different {b("habitats")} (the natural homes of organisms) together support a very wide variety of species.</>,
+        <>Some species live only in particular regions of the world and are not found naturally anywhere else. Such species are called {b("endemic species")}.</>,
+      ] },
+      { t: "img", pic: { file: "endemic-species", alt: "Four species found only in India: Nilgiri tahr, lion-tailed macaque, Nepenthes khasiana and Neelakurinji", caption: "Figure 1: Four endemic species of India. (a) Nilgiri tahr, (b) Lion-tailed macaque, (c) Nepenthes khasiana, (d) Neelakurinji" } },
+      { t: "species", title: "The species in Figure 1", items: [
+        ["Nilgiri tahr", "A mountain goat with a brown coat that lives on the steep grassy hills of the Western Ghats. It is found only in India."],
+        ["Lion-tailed macaque", "A black monkey with a grey-white mane around its face and a tuft at the tail tip. It lives in the rainforests of the Western Ghats and is found only in India."],
+        ["Nepenthes khasiana", "The Indian pitcher plant, an insect-eating plant whose leaves form jug-shaped traps. It grows only in the hills of Meghalaya in North East India."],
+        ["Neelakurinji", "A shrub of the hill grasslands of the Western Ghats that bears purple-blue flowers. It flowers together over a whole hillside, only once in many years."],
+      ] },
+      { t: "card", title: "Biodiversity hotspots", body: [
+        <>Regions that have a large number of endemic species and have also lost a lot of their natural habitat are called {b("biodiversity hotspots")}.</>,
+        <>These areas matter a great deal for conservation. Examples of global hotspots: the {b("Western Ghats")}, {b("Indo-Burma")} (including North East India), the {b("Himalayas")}, and {b("Sundaland")} (including the Nicobar Islands).</>,
+      ] },
+      { t: "remember", title: "Why protect hotspots?", body: <>These areas are especially rich in the number and the kinds of organisms. They support food webs and help ecosystems stay healthy. If a hotspot is lost, species that live nowhere else are lost with it.</> },
+    ],
+  },
+  {
+    id: "evolution",
+    title: "3. How Has Biodiversity Evolved?",
+    category: "Biodiversity",
+    heading: "How Has Biodiversity Evolved?",
+    sub: "The variety we see today took a very long time to build.",
+    blocks: [
+      { t: "ul", items: [
+        <>The biodiversity on the Earth today was not always the same.</>,
+        <>Individuals of a species differ slightly from each other. Some small differences helped an individual survive and have young ones when conditions changed. We say the individual {b("adapted")} (became suited to its surroundings).</>,
+        <>These small differences added up over many generations and gave rise to new forms of life.</>,
+        <>So today's diversity is the result of changes going on over a very long time. These changes were shaped by the interaction between organisms and their surroundings.</>,
+        <>To study this variety of life in a proper way, we need a system. Classification gives us that system.</>,
+      ] },
+      { t: "card", title: "India's Scientific Contributions", body: [
+        <>Some old Indian traditions show a deep understanding of landscapes and the living things in them. Two examples are the {b("Sangam Tinai")} way of classifying landscapes and the protection of {b("sacred groves")} (patches of forest kept untouched because of religious belief).</>,
+        <>These customs saved local habitats and fit well with modern ecological ideas, even though they were not written down as a formal science of ecology.</>,
+      ] },
+    ],
+  },
+  {
+    id: "how-to-classify",
+    title: "4. How to Classify Organisms?",
+    category: "Classification",
+    heading: "How to Classify Organisms?",
+    sub: "The same organisms can be grouped in many ways. The group depends on the feature you pick.",
+    blocks: [
+      { t: "activity", title: "Activity 12.1: Let us compare and classify", aim: "To see that organisms can be grouped in different ways, depending on the feature chosen.", steps: [
+        "Observe Figure 2 carefully. It shows the animals of an ecosystem in the day and at night.",
+        "Answer: Which animals can you identify? Where are they seen? Which seem active during the day, which during the night, and which both?",
+        "Record what you see in an observation table with four columns: the organism, where you see it (flying high, flying near the ground, tree, water, forest floor), when it seems active (day, night, unsure), and any visible feature. One sample row is: Owl, tree, night, feathers.",
+        "Now group the same organisms in more than one way. Each time change the feature you use to group them. Write which organisms fit each group and what feature helped you decide. One sample is: Carnivore, with eagle, tiger and leopard, decided by eating habits.",
+      ], observation: "The animals in the picture include a peacock, spotted deer, leopard, tiger, sloth bear, monkeys, hare, frog, gharial, snake, owl, bats, porcupine, slender loris, civet, dragonfly and butterflies. Some, like the peacock and tiger, are active in the day. Others, like the owl, bats and slender loris, are active at night. You can group them by what they eat (carnivore, herbivore), by where they live (tree, water, ground, air), by when they are active (day, night), or by body covering (feathers, fur, scales).", conclusion: "The same organism fits into different groups depending on the feature chosen. For example, an owl is a bird (feathers), a night-active animal, and a carnivore, all at once. So scientists must decide which features to use for grouping, and this leads to the idea of classification: a systematic way of organising the living diversity of the Earth." },
+      { t: "img", pic: { file: "day-night-ecosystem", alt: "A forest ecosystem shown in the day on the left and at night on the right, with many animals", caption: "Figure 2: Day and night view of a forest ecosystem" } },
+      { t: "species", title: "Some animals seen in Figure 2", items: [
+        ["Owl", "A bird of prey with large eyes and soft feathers that hunts at night. It rests on trees in the day."],
+        ["Peacock", "A large bird with bright blue feathers and a long, colourful train. It is active in the day and is the national bird of India."],
+        ["Tiger", "A big cat with orange fur and black stripes that hunts other animals for food. It is a carnivore and the largest of the cats."],
+        ["Leopard", "A spotted big cat that hunts deer and other animals, often from trees. It is a carnivore."],
+        ["Spotted deer", "A brown deer with white spots that eats grass and leaves. It is a herbivore and is hunted by tigers and leopards."],
+        ["Sloth bear", "A shaggy black bear with a long snout that feeds on termites, ants and fruits. It is active mostly at night."],
+        ["Bats", "Small mammals with wings made of skin that fly at night. They feed on insects or fruits."],
+        ["Slender loris", "A small, slow-moving, big-eyed animal that lives in trees and comes out at night to eat insects."],
+        ["Porcupine", "A mammal covered with sharp quills for defence. It feeds on roots and fruits and is active at night."],
+        ["Frog", "An amphibian (it lives on land and in water) with smooth skin that eats insects. It lays its eggs in water."],
+      ] },
+      { t: "h", text: "Some Features Scientists Use to Classify Organisms" },
+      { t: "p", body: <>Scientists first look at broad features that are easy to see. Then they look at finer and more detailed features. These are some of the features they use:</> },
+      { t: "facts", rows: [
+        ["1. External features", "Visible features such as shape, size and body organisation"],
+        ["2. Mode of nutrition", "How the organism gets food: autotrophic (makes its own food) or heterotrophic (depends on others for food)"],
+        ["3. Internal structures", "Skeleton pattern, presence or absence of organs, and the different types of tissues"],
+        ["4. Cell structure", "Whether the organism is unicellular (one cell) or multicellular (many cells), whether the cell is eukaryote (has a true nucleus) or prokaryote (has no true nucleus), and whether a cell wall is present or absent"],
+        ["5. Ecological role", "Whether it is a producer, a consumer or a decomposer"],
+        ["6. Reproduction", "Asexual methods, sexual methods, or both"],
+        ["7. Genetic similarity", "Likeness in inherited features. Scientists study this in detail using DNA"],
+      ] },
+      { t: "remember", title: "Why similar features matter", body: <>Organisms with similar features are thought to have come from common ancestors (they share an earlier ancestor). The more features organisms share, the more closely they are likely to be related.</> },
+      { t: "exq", n: 1, q: "Pause and Ponder: If many organisms share common features, could they also share a common ancestry?", a: "Yes. Similar features suggest that organisms have evolved from a common ancestor. The more features they share, the closer their ancestry is likely to be." },
+    ],
+  },
+  {
+    id: "need",
+    title: "5. The Need for Classification",
+    category: "Classification",
+    heading: "The Need for Classification",
+    sub: "Without a system, finding and studying millions of organisms would be impossible.",
+    blocks: [
+      { t: "card", title: "The library example", body: [
+        <>Imagine a huge library where thousands of volumes lie scattered on the floor. You want one particular volume. Where would you begin? If the volumes are arranged by subject, author or section, you can find any volume easily.</>,
+        <>In the same way, the Earth has millions of organisms. Arranging them in a system helps us understand them better.</>,
+      ] },
+      { t: "activity", title: "Activity 12.2: Let us read a case study (Pakke Tiger Reserve)", aim: "To see how classifying species helps scientists study biodiversity.", steps: [
+        "Read the case study. Pakke Tiger Reserve in Arunachal Pradesh is a forest where nearly 300 bird species have been recorded. India as a whole has about 1,300 bird species.",
+        "Note that Pakke has four species of hornbills: Rufous-necked, Oriental Pied, Great and Wreathed (Figure 3). These large birds nest only in large, old trees that have suitable holes (cavities), and they feed on specific fruits.",
+        "As a result, different hornbill species are found in different parts of the forest, depending on tree size and fruit availability.",
+        "Think over the questions: How are species spread inside a forest? Which plants and animals are closely linked? How does classifying the four hornbills help us understand biodiversity?",
+      ], observation: "(i) How can scientists keep track of so many species? By putting them into groups and giving each a proper name, so that the records are organised. (ii) What features separate the four hornbills? They look similar, but differ in size, colour of the beak and body, and the shape of the casque (the bump on the beak). They also differ in the trees and fruits they prefer. (iii) What if the large, old trees disappeared? The hornbills would have no place to nest and little food, so their numbers would fall and some species could disappear. The plants that depend on hornbills to spread their seeds would also suffer.", conclusion: "Many organisms are alike in external features, internal structure (tissues and organs) and cell organisation. To make the study of this vast diversity easier, scientists group organisms by their similarities and differences. The scientific system of grouping living organisms is called biological classification." },
+      { t: "img", pic: { file: "hornbills", alt: "Four hornbill species: Rufous-necked, Oriental Pied, Great and Wreathed hornbill", caption: "Figure 3: Four hornbill species of the Pakke Tiger Reserve" } },
+      { t: "species", title: "The four hornbills", items: [
+        ["Rufous-necked hornbill", "A hornbill with a reddish-brown neck and head and a dark body. It is a rare bird of the forests of North East India."],
+        ["Oriental Pied hornbill", "A black and white hornbill with a large yellow beak and a bump (casque) on top. It nests in tree holes and eats fruits and small animals."],
+        ["Great hornbill", "A very large hornbill with a big yellow-orange beak and casque. It feeds on fruits and nests high in old trees."],
+        ["Wreathed hornbill", "A hornbill with a yellow throat pouch and a wrinkled beak. It flies in flocks and eats fruits of forest trees."],
+      ] },
+      { t: "h", text: "How Biological Classification Helps" },
+      { t: "ul", items: [
+        <>It makes the study of living organisms more organised and systematic.</>,
+        <>It helps us understand the similarities and differences among living beings.</>,
+        <>It helps us understand how different organisms are related and how they interact.</>,
+        <>It helps us identify and name newly discovered organisms.</>,
+        <>It supports biodiversity conservation by showing which organisms are under threat of {b("extinction")} (disappearing for ever).</>,
+        <>It lets scientists all over the world talk about organisms using one common system.</>,
+      ] },
+    ],
+  },
+  {
+    id: "systems",
+    title: "6. Classification Systems Over Time",
+    category: "Classification",
+    heading: "Biological Classification Systems Over Time",
+    sub: "As knowledge grew, scientists kept improving how they group life.",
+    blocks: [
+      { t: "svg", key: "timeline", caption: "Figure 4: Timeline of classification systems" },
+      { t: "h", text: "Aristotle (4th century BCE): The First Attempt" },
+      { t: "ul", items: [
+        <>Aristotle grouped animals by their habitat (land, water and air). He also grouped them by their external appearance.</>,
+        <>This system had limits, because it relied mainly on features that can be seen easily from outside.</>,
+      ] },
+      { t: "h", text: "Two Kingdom System (Linnaeus, 1758)" },
+      { t: "p", body: <>In the 18th century, all living organisms were divided into two kingdoms.</> },
+      { t: "facts", rows: [
+        ["Plantae", "Organisms that do not move from place to place and make their own food"],
+        ["Animalia", "Organisms that move from place to place and depend on other organisms for food"],
+      ] },
+      { t: "ul", items: [
+        <>This created confusion. Where should {b("Amoeba, Paramecium and bacteria")} be placed? Amoeba and Paramecium move like animals, but they are unicellular and heterotrophic. Plants and animals are multicellular.</>,
+        <>So a third kingdom, {b("Protista")}, was added (Ernst Haeckel, 1866) for unicellular microscopic organisms. This is the three kingdom system.</>,
+      ] },
+      { t: "h", text: "Four Kingdom System (Copeland, 1938)" },
+      { t: "ul", items: [
+        <>As microscopes improved, scientists saw an important difference. An amoeba has a {b("true nucleus")} (a nucleus covered by a membrane), but bacteria do not.</>,
+        <>Both are unicellular but very different. So bacteria were placed in a separate kingdom, {b("Monera")}.</>,
+        <>This gave the four kingdoms: Plantae, Animalia, Protista and Monera. Protista now includes mostly unicellular organisms with a true nucleus.</>,
+      ] },
+      { t: "h", text: "Five Kingdom System (Whittaker, 1969)" },
+      { t: "ul", items: [
+        <>Fungi, like mushrooms, do not move like animals, but they are not plants either. They are {b("heterotrophic")} and get their food by {b("absorption")} (taking in dissolved food through the body surface). Many absorb food from dead and decaying matter. Some live in a partnership with other organisms (symbiotic) and some are parasites.</>,
+        <>So fungi were placed in their own kingdom. This gave the five kingdom classification: {b("Monera, Protista, Fungi, Plantae and Animalia")}.</>,
+      ] },
+      { t: "card", title: "India's Scientific Contributions", body: [
+        <>The {b("Rigveda")} and the {b("Brihat Samhita")} also classified animals. They used habitat (on land, in water, in air), behaviour patterns and ecological roles.</>,
+      ] },
+      { t: "remember", title: "Why do classification systems keep changing?", body: <>Science grows as we learn new things. Aristotle's system worked for his time. With new tools, such as the microscope and staining methods, scientists found microorganisms, and the classification had to change. So classification, like science, is an ongoing process of reasoning and change.</> },
+    ],
+  },
+  {
+    id: "five-kingdom",
+    title: "7. Five Kingdom Classification",
+    category: "Classification",
+    heading: "Five Kingdom Classification",
+    sub: "Four simple questions about the cell are enough to place an organism in its kingdom.",
+    blocks: [
+      { t: "p", body: <>In the five kingdom classification, all life forms are grouped according to certain common features.</> },
+      { t: "activity", title: "Activity 12.3: Let us study", aim: "To find the features on which the five kingdom classification is based.", steps: [
+        "Study the concept map in Figure 5.",
+        "List the features that form the basis of the five kingdom classification.",
+        "Compare your list with these features: cell type, cell structure, level of organisation and mode of nutrition.",
+      ], observation: "The concept map splits organisms step by step. First by cell type: prokaryotes (primitive nucleus with no membrane around it) and eukaryotes (membrane-bound nucleus). Then by level of organisation: unicellular or multicellular. Then by cell structure: with or without a cell wall. Then by mode of nutrition: autotrophic or heterotrophic. The ecological role (producer, consumer, decomposer) follows from the mode of nutrition.", conclusion: "The four features are: (1) cell type, prokaryote or eukaryote, (2) cell structure, presence or absence of a cell wall, (3) level of organisation, unicellular or multicellular, and (4) mode of nutrition, autotrophic or heterotrophic. Together they place every organism into one of the five kingdoms." },
+      { t: "img", pic: { file: "concept-map-five-kingdom", alt: "Concept map of the five kingdom classification showing cell type, level of organisation, cell structure and mode of nutrition", caption: "Figure 5: Concept map of the five kingdom classification" } },
+      { t: "svg", key: "kingdom-key", caption: "Figure 6: A simple key to the five kingdoms" },
+      { t: "compare", left: "Kingdom", right: "Main features", rows: [
+        ["Monera", "Unicellular, prokaryotes (no true nucleus)"],
+        ["Protista", "Unicellular, eukaryotes, with no cell wall or a cell wall of cellulose"],
+        ["Fungi", "Mostly multicellular, eukaryotes, cell wall of chitin, heterotrophic"],
+        ["Plantae", "Multicellular, eukaryotes, cell wall of cellulose, autotrophic (photosynthesis)"],
+        ["Animalia", "Multicellular, eukaryotes, no cell wall, heterotrophic"],
+      ] },
+    ],
+  },
+  {
+    id: "monera",
+    title: "8. Kingdom Monera",
+    category: "Kingdoms",
+    heading: "Kingdom Monera: Unicellular Prokaryotes",
+    sub: "Single-celled organisms with no true nucleus.",
+    blocks: [
+      { t: "activity", title: "Activity 12.4: Let us explore", aim: "To observe bacteria and cyanobacteria under a microscope.", steps: [
+        "In the school laboratory, observe the permanent slides of bacteria and cyanobacteria under the microscope.",
+        "Compare what you see with Figure 7.",
+      ], observation: "You see very small single cells. Bacteria appear as round balls, rods, curved commas or spirals. Cyanobacteria often appear as green or blue-green cells or chains of cells. No cell shows a true nucleus.", conclusion: "Bacteria and cyanobacteria are single-celled prokaryotes, so they are grouped under Monera." },
+      { t: "img", pic: { file: "monera-shapes", alt: "Four shapes of bacteria: round clusters, comma-shaped, rod-shaped and spiral", caption: "Figure 7: Shapes of members of Kingdom Monera" } },
+      { t: "ul", items: [
+        <>Bacteria are found everywhere: in soil, water, air, hot springs and other extreme places where most organisms cannot live. They are also found inside the human body.</>,
+        <>They live in the gut of {b("ruminants")} (animals like cows that chew the cud) and are responsible for making {b("biogas")} from the dung of these animals.</>,
+        <>Some bacteria are harmful ({b("pathogens")}, which cause diseases). Many are useful.</>,
+        <>{b("Cyanobacteria")} are autotrophs (they make their own food by photosynthesis). Some bacteria are {b("decomposers")}.</>,
+        <>Besides recycling nutrients, some bacteria break down pollutants such as oil, pesticides and sewage.</>,
+      ] },
+      { t: "species", title: "Examples from Monera", items: [
+        ["Lactobacillus", "A rod-shaped bacterium that turns milk into curd. It is a useful bacterium that is also found in our gut."],
+        ["Rhizobium", "A bacterium that lives in the root nodules (small swellings) of pulse plants like pea and gram. It takes nitrogen from the air and makes it available to the plant, so it makes the soil richer."],
+        ["Cyanobacteria", "Blue-green, single-celled organisms that make their own food by photosynthesis. They are also called blue-green algae."],
+      ] },
+      { t: "card", title: "Bridging Science and Society: Ram Bux Singh", body: [
+        <>Ram Bux Singh is known as the {b("Father of Modern Biogas")}. He was an Indian scientist who helped develop biogas technology.</>,
+        <>In 1957 he set up India's first scientifically designed biogas plant at Ramnagar, Sitapur, Uttar Pradesh. This began the systematic study of modern biogas in India.</>,
+        <>He later worked on low-cost, efficient biogas plants for villages, and helped set up plants in several other countries. His work supported renewable energy, waste management and sustainable development.</>,
+      ] },
+      { t: "card", title: "Threads of Curiosity: Cyanobacteria and the oxygen we breathe", body: [
+        <>Cyanobacteria were among the first organisms to make oxygen by photosynthesis. About 2.5 billion years ago this oxygen built up in the air and made the Earth suitable for other forms of life.</>,
+        <>Fossils of ancient cyanobacteria are found in structures called {b("stromatolites")}. They have been found in Rajasthan and Madhya Pradesh. They give some of the earliest evidence of life on the Earth.</>,
+      ] },
+    ],
+  },
+];
