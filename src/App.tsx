@@ -595,7 +595,7 @@ const ADMIN_EMAILS = ['rohit13513@gmail.com', 'conceptuallearningonline@gmail.co
 // proof of identity is the signed token Google itself hands back after the student authenticates).
 const GOOGLE_CLIENT_ID = '334975414855-jafdetqco1le8rgmklt727vnshibchfv.apps.googleusercontent.com';
 
-export default function App() {
+export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 'register' } = {}) {
   const [isLightMode, setIsLightMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("theme") === "light";
@@ -712,9 +712,9 @@ export default function App() {
   const [deviceType, setDeviceType] = useState<'Laptop' | 'Mobile Phone' | 'Tablet'>(defaultDevice());
 
   // Login & Register Form Inputs
-  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  const [authTab, setAuthTab] = useState<'login' | 'register'>(initialAuthTab || 'login');
   // Anyone not logged in lands on the public home page first; Log In / Register open the form.
-  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [showAuthForm, setShowAuthForm] = useState(!!initialAuthTab);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [regName, setRegName] = useState('');

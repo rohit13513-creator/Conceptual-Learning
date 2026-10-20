@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Mail, Sun, Moon, Target, Users, Gift, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { GOOGLE_LISTING, GOOGLE_REVIEWS, GoogleReview } from '../data/googleReviews';
-import { RESULT_SLIDES, ResultRow } from '../data/results';
+import { SCORE_CARDS } from '../data/results';
 
 interface LandingPageProps {
   isLightMode: boolean;
@@ -16,109 +16,55 @@ const Stars: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   </span>
 );
 
-// Only marks of 90% or more are shown. "x/y" is judged against y (80 or 70 for the school-exam
-// classes); a bare number is out of 100; an overall figure is already a percentage.
-const percentOf = (v?: string): number | null => {
-  if (!v) return null;
-  const frac = v.match(/^\s*([\d.]+)\s*\/\s*([\d.]+)\s*$/);
-  if (frac) return (parseFloat(frac[1]) / parseFloat(frac[2])) * 100;
-  const num = parseFloat(v);
-  return Number.isNaN(num) ? null : num;
-};
-const ninetyPlus = (rows: ResultRow[]): ResultRow[] =>
-  rows
-    .map((r) => ({
-      ...r,
-      overall: (percentOf(r.overall) ?? 0) >= 90 ? r.overall : undefined,
-      maths: (percentOf(r.maths) ?? 0) >= 90 ? r.maths : undefined,
-      science: (percentOf(r.science) ?? 0) >= 90 ? r.science : undefined,
-    }))
-    .filter((r) => r.overall || r.maths || r.science);
-
-const ResultsCarousel: React.FC<{ light: boolean }> = ({ light }) => {
+const ResultsShowcase: React.FC<{ light: boolean }> = ({ light }) => {
+  const cards = SCORE_CARDS;
+  const n = cards.length;
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
-  const n = RESULT_SLIDES.length;
-  const slide = RESULT_SLIDES[idx];
+  const card = cards[idx];
   const heading = light ? 'text-slate-900' : 'text-white';
   const muted = light ? 'text-slate-600' : 'text-slate-400';
+  const years = Array.from(new Set(cards.map((c) => c.year)));
 
   useEffect(() => {
     if (paused || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)) return;
-    const t = setTimeout(() => setIdx((i) => (i + 1) % n), 12000);
+    const t = setTimeout(() => setIdx((i) => (i + 1) % n), 6000);
     return () => clearTimeout(t);
   }, [idx, paused, n]);
 
-  const table = (allRows: ResultRow[]) => {
-    const rows = ninetyPlus(allRows);
-    const hasOverall = rows.some((r) => r.overall);
-    const hasMaths = rows.some((r) => r.maths);
-    const hasScience = rows.some((r) => r.science);
-    const head = light ? 'text-slate-500' : 'text-slate-400';
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs sm:text-sm">
-          <thead>
-            <tr className={`text-[10px] sm:text-[11px] uppercase tracking-wider ${head}`}>
-              <th className="py-2 pr-3 font-black">Student</th>
-              {hasOverall && <th className="py-2 px-2 font-black text-center">Overall</th>}
-              {hasMaths && <th className="py-2 px-2 font-black text-center">Maths</th>}
-              {hasScience && <th className="py-2 pl-2 font-black text-center">Science</th>}
-            </tr>
-          </thead>
-          <tbody className={`divide-y ${light ? 'divide-slate-200' : 'divide-slate-800'}`}>
-            {rows.map((r) => (
-              <tr key={r.name + (r.tag || '')}>
-                <td className={`py-2 pr-3 font-bold ${heading}`}>
-                  {r.name}
-                  {r.tag && <span className="ml-2 align-middle text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-500 border border-amber-400/30">{r.tag}</span>}
-                </td>
-                {hasOverall && <td className="py-2 px-2 text-center font-black text-cyan-400">{r.overall || '-'}</td>}
-                {hasMaths && <td className={`py-2 px-2 text-center font-semibold ${muted}`}>{r.maths || '-'}</td>}
-                {hasScience && <td className={`py-2 pl-2 text-center font-semibold ${muted}`}>{r.science || '-'}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  const arrow = `shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`;
 
   return (
     <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <div className="flex gap-2 overflow-x-auto pb-3 justify-start sm:justify-center" role="tablist" aria-label="Results by year">
-        {RESULT_SLIDES.map((sl, i) => (
+      <div className="flex gap-2 overflow-x-auto pb-3 justify-start sm:justify-center" role="tablist" aria-label="Jump to a year">
+        {years.map((y) => (
           <button
-            key={sl.id}
+            key={y}
             role="tab"
-            aria-selected={i === idx}
-            onClick={() => setIdx(i)}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-black border cursor-pointer transition ${i === idx ? 'bg-cyan-500 text-slate-950 border-cyan-400' : (light ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500')}`}
+            aria-selected={card.year === y}
+            onClick={() => setIdx(cards.findIndex((c) => c.year === y))}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-black border cursor-pointer transition ${card.year === y ? 'bg-cyan-500 text-slate-950 border-cyan-400' : (light ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500')}`}
           >
-            {sl.tab}
+            {y}
           </button>
         ))}
       </div>
       <div className="flex items-stretch gap-2 sm:gap-3">
-        <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label="Previous results" className={`shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`}>
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div className={`flex-1 min-w-0 rounded-2xl border p-4 sm:p-6 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`} aria-live="polite">
-          <h3 className={`text-lg sm:text-xl font-black tracking-tight ${heading}`}>{slide.title}</h3>
-          {slide.subtitle && <p className={`text-xs font-medium mt-0.5 ${muted}`}>{slide.subtitle}</p>}
-          <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${light ? 'text-cyan-700' : 'text-cyan-400'}`}>Scores of 90% and above</p>
-          <div className="mt-3">{table(slide.rows)}</div>
-          {slide.extraRows && ninetyPlus(slide.extraRows).length > 0 && (
-            <div className="mt-5">
-              <h4 className={`text-sm font-black ${heading}`}>{slide.extraTitle}</h4>
-              {table(slide.extraRows)}
-            </div>
+        <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label="Previous result" className={arrow}><ChevronLeft className="w-5 h-5" /></button>
+        <div key={card.key} aria-live="polite" className={`flex-1 min-w-0 rounded-3xl border px-5 py-8 sm:py-10 text-center space-y-3 ${light ? 'bg-white border-slate-200' : 'bg-gradient-to-b from-slate-900/80 to-slate-900/40 border-slate-800'}`}>
+          <span className={`inline-block text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>{card.exam} &middot; {card.year}</span>
+          <h3 className={`text-2xl sm:text-4xl font-black tracking-tight ${heading}`}>{card.name}</h3>
+          <p className={`text-sm sm:text-base font-bold uppercase tracking-wider ${muted}`}>{card.subject}</p>
+          <p className="text-5xl sm:text-7xl font-black text-cyan-400 leading-none">{card.marks}</p>
+          {card.achievement && (
+            <p className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-black px-3 py-1.5 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
+              <Trophy className="w-4 h-4" /> {card.achievement} &middot; {card.exam} {card.year}
+            </p>
           )}
         </div>
-        <button onClick={() => setIdx((idx + 1) % n)} aria-label="Next results" className={`shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`}>
-          <ChevronRight className="w-5 h-5" />
-        </button>
+        <button onClick={() => setIdx((idx + 1) % n)} aria-label="Next result" className={arrow}><ChevronRight className="w-5 h-5" /></button>
       </div>
+      <p className={`text-center text-[11px] font-bold mt-3 ${muted}`}>{idx + 1} of {n} &middot; scores of 90% and above</p>
     </div>
   );
 };
@@ -223,9 +169,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <section className="max-w-4xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
             <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Our results</h2>
-            <p className={`text-sm font-medium ${muted}`}>Year by year. Use the arrows or the year buttons to see each batch.</p>
+            <p className={`text-sm font-medium ${muted}`}>One result at a time. Use the arrows, or pick a year to jump to it.</p>
           </div>
-          <ResultsCarousel light={light} />
+          <ResultsShowcase light={light} />
         </section>
 
         <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">

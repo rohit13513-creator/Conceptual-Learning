@@ -12,6 +12,8 @@ export interface ResultRow {
 export interface ResultSlide {
   id: string;
   tab: string;
+  exam: string;
+  year: string;
   title: string;
   subtitle?: string;
   rows: ResultRow[];
@@ -23,6 +25,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2026-27',
     tab: '2026-27',
+    exam: 'Class X CBSE Board',
+    year: '2026-27',
     title: 'Class X CBSE Board Results 2026-27',
     rows: [
       { name: 'Saatvik Sharma', overall: '98.6%', maths: '97/100', science: '99/100' },
@@ -50,6 +54,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2025-26-ix',
     tab: '2025-26 Class IX',
+    exam: 'Class IX',
+    year: '2025-26',
     title: 'Class IX Results 2025-26',
     subtitle: 'Marks out of 80',
     rows: [
@@ -70,6 +76,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2025-26-viii',
     tab: '2025-26 Class VIII',
+    exam: 'Class VIII',
+    year: '2025-26',
     title: 'Class VIII Results 2025-26',
     subtitle: 'Marks out of 80 (Anishka and Daksh: out of 70)',
     rows: [
@@ -85,6 +93,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2024-25',
     tab: '2024-25',
+    exam: 'Class X CBSE Board',
+    year: '2024-25',
     title: 'Class X CBSE Board Results 2024-25',
     subtitle: 'Scores of a few of our heroes',
     rows: [
@@ -107,6 +117,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2023-24',
     tab: '2023-24',
+    exam: 'Class X CBSE Board',
+    year: '2023-24',
     title: 'Class X CBSE Board Results 2023-24',
     rows: [
       { name: 'Avni', overall: '97%', maths: '95', science: '94' },
@@ -118,6 +130,8 @@ export const RESULT_SLIDES: ResultSlide[] = [
   {
     id: '2022-23',
     tab: '2022-23',
+    exam: 'CBSE High School',
+    year: '2022-23',
     title: 'CBSE High School Results 2022-23',
     rows: [
       { name: 'Anya Singh', maths: '95' },
@@ -125,3 +139,54 @@ export const RESULT_SLIDES: ResultSlide[] = [
     ],
   },
 ];
+
+export interface ScoreCard {
+  key: string;
+  name: string;
+  subject: string;
+  marks: string;
+  percent: number;
+  exam: string;
+  year: string;
+  achievement?: string;
+}
+
+const percentOf = (v?: string): number | null => {
+  if (!v) return null;
+  const frac = v.match(/^\s*([\d.]+)\s*\/\s*([\d.]+)\s*$/);
+  if (frac) return (parseFloat(frac[1]) / parseFloat(frac[2])) * 100;
+  const num = parseFloat(v);
+  return Number.isNaN(num) ? null : num;
+};
+
+// One card per single score of 90% or more -- a student with a 90+ in Maths and a 90+ in Science
+// gets two cards, never one combined card. A bare mark (e.g. "99") is out of 100; "x/y" is judged
+// against y (80 or 70 for the school exams); overall is already a percentage.
+export const SCORE_CARDS: ScoreCard[] = (() => {
+  const cards: ScoreCard[] = [];
+  for (const slide of RESULT_SLIDES) {
+    for (const row of [...slide.rows, ...(slide.extraRows || [])]) {
+      const entries: [string, string | undefined][] = [
+        ['Overall percentage', row.overall],
+        ['Maths', row.maths],
+        ['Science', row.science],
+      ];
+      for (const [subject, raw] of entries) {
+        const p = percentOf(raw);
+        if (!raw || p === null || p < 90) continue;
+        const marks = subject === 'Overall percentage' || raw.includes('/') ? raw : raw + '/100';
+        cards.push({
+          key: slide.id + '|' + row.name + '|' + subject,
+          name: row.name,
+          subject,
+          marks,
+          percent: p,
+          exam: slide.exam,
+          year: slide.year,
+          achievement: row.tag,
+        });
+      }
+    }
+  }
+  return cards;
+})();
