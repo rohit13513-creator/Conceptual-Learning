@@ -3563,12 +3563,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
           {/* Logo & Headline */}
           <div className="text-center space-y-2">
-            <div className="inline-flex w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 items-center justify-center text-cyan-400 text-2xl font-extrabold shadow-md shadow-cyan-500/10 animate-pulse">
-              ⌬
-            </div>
+            <img src="/favicon.svg" alt="" className="inline-block w-12 h-12 rounded-xl shadow-md shadow-cyan-500/10" />
             <h1 className={`text-2xl font-black tracking-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Conceptual Learning Online</h1>
             <p className="text-[11px] text-cyan-400 font-semibold tracking-wide">
-              Complete theory of optics with simulation.
+              Online and offline Maths and Science coaching.
             </p>
           </div>
 

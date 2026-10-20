@@ -133,7 +133,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
 
       <header className={`sticky top-0 z-30 backdrop-blur-md border-b ${light ? 'bg-white/80 border-slate-200' : 'bg-[#060b14]/80 border-slate-800'}`}>
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-400 flex items-center justify-center text-slate-950 text-xl font-extrabold shadow-md shadow-cyan-500/20">⌬</div>
+          <img src="/favicon.svg" alt="Conceptual Learning Online" className="w-9 h-9 rounded-xl shadow-md shadow-cyan-500/20" />
           <span className={`font-black tracking-tight text-xs sm:text-base leading-tight ${heading}`}>Conceptual Learning Online</span>
           <div className="flex-1" />
           <a href="#how" className={navLink}>How we work</a>
