@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Mail, Sun, Moon, Target, Users, Gift, Calendar, ChevronLeft, ChevronRight, Sparkles, Laptop, School, CheckCircle2 } from 'lucide-react';
 import { GOOGLE_LISTING, GOOGLE_REVIEWS, GoogleReview } from '../data/googleReviews';
 import { SCORE_CARDS } from '../data/results';
+import { AboutUs } from './AboutUs';
 
 interface LandingPageProps {
   isLightMode: boolean;
@@ -105,13 +106,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
     { n: '3', title: 'Start learning', text: 'Open your notes, simulators and homework, and begin.' },
   ];
 
-  // Testimonials that name a place are left out of the bar, because the coaching is no longer tied to one location.
-  const reviewsForBar = GOOGLE_REVIEWS.filter((r) => !/gaur|exotica|dreamville|noida|locality/i.test(r.text));
+  // Only reviews that tell a real story of learning (or praise the teaching at length) are shown: at least
+  // 450 characters, and none that name a place, because the coaching is no longer tied to one location.
+  const reviewsForBar = GOOGLE_REVIEWS.filter((r) => r.text.length >= 450 && !/gaur|exotica|dreamville|noida|locality/i.test(r.text));
   const loop = [...reviewsForBar, ...reviewsForBar];
   const [activeReview, setActiveReview] = useState<GoogleReview | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
 
   const navLink = `hidden md:inline text-xs font-bold cursor-pointer ${light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`;
   const iconBubble = 'w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-400 flex items-center justify-center shadow-lg shadow-cyan-500/20';
+
+  const headerEl = (
+    <header className={`sticky top-0 z-30 backdrop-blur-md border-b ${light ? 'bg-white/80 border-slate-200' : 'bg-[#060b14]/80 border-slate-800'}`}>
+      <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex items-center gap-2.5 sm:gap-3.5">
+        <img src="/favicon.svg" alt="Conceptual Learning Online" className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl shadow-lg shadow-cyan-500/25 shrink-0" />
+        <button onClick={() => setShowAbout(false)} aria-label="Conceptual Learning Online home" className="text-left cursor-pointer leading-none">
+          <span className={`block font-black tracking-tight text-[17px] sm:text-3xl leading-tight ${heading}`}>Conceptual Learning</span>
+          <span className="block font-black uppercase text-[10px] sm:text-sm tracking-[0.35em] sm:tracking-[0.45em] bg-gradient-to-r from-cyan-400 to-teal-300 bg-clip-text text-transparent mt-0.5">Online</span>
+        </button>
+        <div className="flex-1" />
+        <a href="#how" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("how")?.scrollIntoView(), 60); }} className={navLink}>How we work</a>
+        <a href="#results" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("results")?.scrollIntoView(), 60); }} className={navLink}>Results</a>
+        <a href="#portal" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("portal")?.scrollIntoView(), 60); }} className={navLink}>Portal</a>
+        <a href="#join" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("join")?.scrollIntoView(), 60); }} className={navLink}>Contact</a>
+        <button onClick={() => setShowAbout(true)} className={navLink}>About Us</button>
+        <button onClick={onToggleTheme} aria-label="Toggle light or dark mode" className={`p-2 rounded-lg cursor-pointer ${light ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}>
+          {light ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
+        <button onClick={onLogin} className={`px-3 py-2 rounded-lg text-xs font-black cursor-pointer whitespace-nowrap ${light ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-200 hover:bg-slate-800'}`}>Log In</button>
+        <button onClick={onRegister} className="px-3.5 py-2 rounded-lg text-xs font-black bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:brightness-110 cursor-pointer shadow-md shadow-cyan-500/20">Register</button>
+      </div>
+    </header>
+  );
+
+  if (showAbout) {
+    return (
+      <div className={`relative min-h-screen flex flex-col font-sans overflow-x-hidden ${light ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
+        {headerEl}
+        <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 space-y-6">
+          <button onClick={() => setShowAbout(false)} className={`text-xs font-bold cursor-pointer ${light ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}>&larr; Back to home</button>
+          <AboutUs isLightMode={light} />
+          <div className={`rounded-2xl border p-5 text-center space-y-2 ${card}`}>
+            <p className={`text-sm font-black ${heading}`}>Contact us</p>
+            <a href="mailto:conceptuallearning.online@gmail.com" className="inline-flex items-center gap-2 text-sm font-black text-cyan-400 hover:text-cyan-300 break-all"><Mail className="w-4 h-4 shrink-0" /> conceptuallearning.online@gmail.com</a>
+            <div className="flex justify-center gap-3 pt-2">
+              <button onClick={onRegister} className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 cursor-pointer">Register</button>
+              <button onClick={onLogin} className={`px-5 py-2.5 rounded-xl text-xs font-black border cursor-pointer ${light ? 'border-slate-300 text-slate-700' : 'border-slate-700 text-slate-200'}`}>Log In</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative min-h-screen flex flex-col font-sans overflow-x-hidden ${light ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
@@ -131,22 +177,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <div className={`absolute top-56 -left-28 w-[360px] h-[360px] rounded-full blur-3xl ${light ? 'bg-indigo-300/20' : 'bg-indigo-500/10'}`} />
       </div>
 
-      <header className={`sticky top-0 z-30 backdrop-blur-md border-b ${light ? 'bg-white/80 border-slate-200' : 'bg-[#060b14]/80 border-slate-800'}`}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <img src="/favicon.svg" alt="Conceptual Learning Online" className="w-9 h-9 rounded-xl shadow-md shadow-cyan-500/20" />
-          <span className={`font-black tracking-tight text-xs sm:text-base leading-tight ${heading}`}>Conceptual Learning Online</span>
-          <div className="flex-1" />
-          <a href="#how" className={navLink}>How we work</a>
-          <a href="#results" className={navLink}>Results</a>
-          <a href="#portal" className={navLink}>Portal</a>
-          <a href="#join" className={navLink}>Join</a>
-          <button onClick={onToggleTheme} aria-label="Toggle light or dark mode" className={`p-2 rounded-lg cursor-pointer ${light ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}>
-            {light ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
-          <button onClick={onLogin} className={`px-3 py-2 rounded-lg text-xs font-black cursor-pointer whitespace-nowrap ${light ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-200 hover:bg-slate-800'}`}>Log In</button>
-          <button onClick={onRegister} className="px-3.5 py-2 rounded-lg text-xs font-black bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:brightness-110 cursor-pointer shadow-md shadow-cyan-500/20">Register</button>
-        </div>
-      </header>
+      {headerEl}
 
       <main className="relative flex-1 pb-44">
         <section className="max-w-6xl mx-auto px-4 pt-14 pb-10 sm:pt-20 text-center space-y-6">
@@ -276,10 +307,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
             </div>
             <p className={`text-xs font-medium ${muted}`}>New registrations are approved before access is given.</p>
             <a href="mailto:conceptuallearning.online@gmail.com" className="inline-flex items-center gap-2 text-sm font-black text-cyan-400 hover:text-cyan-300 break-all"><Mail className="w-4 h-4 shrink-0" /> conceptuallearning.online@gmail.com</a>
+            <div><button onClick={() => { setShowAbout(true); window.scrollTo({ top: 0 }); }} className={`text-xs font-black underline underline-offset-4 cursor-pointer ${light ? 'text-slate-700' : 'text-slate-300'}`}>About Us</button></div>
           </div>
         </section>
 
         <footer className={`max-w-6xl mx-auto px-4 pt-4 pb-6 text-center text-[11px] font-medium ${muted}`}>
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <button onClick={() => { setShowAbout(true); window.scrollTo({ top: 0 }); }} className="font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer">About Us</button>
+            <a href="#join" className="font-bold text-cyan-400 hover:text-cyan-300">Contact</a>
+          </div>
           &copy; {new Date().getFullYear()} Conceptual Learning Online
         </footer>
       </main>
