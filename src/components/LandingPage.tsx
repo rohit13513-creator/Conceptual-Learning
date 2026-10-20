@@ -189,7 +189,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
             <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-300 bg-clip-text text-transparent">The marks follow.</span>
           </h1>
           <p className={`max-w-4xl mx-auto text-sm sm:text-lg font-medium leading-relaxed ${muted}`}>
-            Maths and Science for Class VIII to X, online and in the classroom. Clear concepts, regular practice, quick feedback.
+            <span className="block sm:whitespace-nowrap">Maths and Science for Class VIII to X, online and in the classroom.</span>
+            <span className="block sm:whitespace-nowrap">Clear concepts, regular practice, quick feedback.</span>
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button onClick={onRegister} className="px-7 py-3.5 rounded-xl text-sm font-black bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 hover:brightness-110 cursor-pointer shadow-lg shadow-cyan-500/25">Join us</button>
