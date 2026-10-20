@@ -16,6 +16,25 @@ const Stars: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   </span>
 );
 
+// Only marks of 90% or more are shown. "x/y" is judged against y (80 or 70 for the school-exam
+// classes); a bare number is out of 100; an overall figure is already a percentage.
+const percentOf = (v?: string): number | null => {
+  if (!v) return null;
+  const frac = v.match(/^\s*([\d.]+)\s*\/\s*([\d.]+)\s*$/);
+  if (frac) return (parseFloat(frac[1]) / parseFloat(frac[2])) * 100;
+  const num = parseFloat(v);
+  return Number.isNaN(num) ? null : num;
+};
+const ninetyPlus = (rows: ResultRow[]): ResultRow[] =>
+  rows
+    .map((r) => ({
+      ...r,
+      overall: (percentOf(r.overall) ?? 0) >= 90 ? r.overall : undefined,
+      maths: (percentOf(r.maths) ?? 0) >= 90 ? r.maths : undefined,
+      science: (percentOf(r.science) ?? 0) >= 90 ? r.science : undefined,
+    }))
+    .filter((r) => r.overall || r.maths || r.science);
+
 const ResultsCarousel: React.FC<{ light: boolean }> = ({ light }) => {
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -30,7 +49,8 @@ const ResultsCarousel: React.FC<{ light: boolean }> = ({ light }) => {
     return () => clearTimeout(t);
   }, [idx, paused, n]);
 
-  const table = (rows: ResultRow[]) => {
+  const table = (allRows: ResultRow[]) => {
+    const rows = ninetyPlus(allRows);
     const hasOverall = rows.some((r) => r.overall);
     const hasMaths = rows.some((r) => r.maths);
     const hasScience = rows.some((r) => r.science);
@@ -86,8 +106,9 @@ const ResultsCarousel: React.FC<{ light: boolean }> = ({ light }) => {
         <div className={`flex-1 min-w-0 rounded-2xl border p-4 sm:p-6 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`} aria-live="polite">
           <h3 className={`text-lg sm:text-xl font-black tracking-tight ${heading}`}>{slide.title}</h3>
           {slide.subtitle && <p className={`text-xs font-medium mt-0.5 ${muted}`}>{slide.subtitle}</p>}
+          <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${light ? 'text-cyan-700' : 'text-cyan-400'}`}>Scores of 90% and above</p>
           <div className="mt-3">{table(slide.rows)}</div>
-          {slide.extraRows && (
+          {slide.extraRows && ninetyPlus(slide.extraRows).length > 0 && (
             <div className="mt-5">
               <h4 className={`text-sm font-black ${heading}`}>{slide.extraTitle}</h4>
               {table(slide.extraRows)}
