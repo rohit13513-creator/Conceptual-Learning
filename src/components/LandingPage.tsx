@@ -128,8 +128,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <a href="#how" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("how")?.scrollIntoView(), 60); }} className={navLink}>How we work</a>
         <a href="#results" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("results")?.scrollIntoView(), 60); }} className={navLink}>Results</a>
         <a href="#portal" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("portal")?.scrollIntoView(), 60); }} className={navLink}>Portal</a>
-        <a href="#join" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("join")?.scrollIntoView(), 60); }} className={navLink}>Contact</a>
         <button onClick={() => setShowAbout(true)} className={navLink}>About Us</button>
+        <a href="#join" onClick={() => { setShowAbout(false); setTimeout(() => document.getElementById("join")?.scrollIntoView(), 60); }} className={navLink}>Contact</a>
         <button onClick={onToggleTheme} aria-label="Toggle light or dark mode" className={`p-2 rounded-lg cursor-pointer ${light ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800'}`}>
           {light ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>

@@ -68,12 +68,12 @@ export function AboutUs({ isLightMode = false }: { isLightMode?: boolean }) {
             🚀 Our Story & Academic Vision
           </h2>
           <p className="text-xs text-slate-400 font-semibold max-w-xl">
-            Meet the pioneers bridgeing the gap between rote learning and true conceptual comprehension.
+            Meet the pioneers bridging the gap between rote learning and true conceptual comprehension.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
           {/* Nisha Sharma Card */}
           <div className={`p-6 rounded-2xl border transition duration-300 flex flex-col justify-between space-y-4 ${
             isLightMode 
@@ -93,7 +93,13 @@ export function AboutUs({ isLightMode = false }: { isLightMode?: boolean }) {
                 </div>
               </div>
               <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                Every great journey begins with a vision. Our platform was conceptualized and initiated by Mrs. Nisha Sharma, whose passion for impactful education laid the foundation for this digital learning ecosystem to bridge the gap between rote learning and true comprehension.
+                The whole idea behind Conceptual Learning is Mrs. Nisha Sharma's. The approach, the thinking and the vision all come from her. She believes that a student who really understands a topic does not need to cram it, and every part of this platform is built on that one thought.
+              </p>
+              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                Her way is simple. Start from the basics. Explain the reason behind a rule before using it. Let the student try the questions, find where they go wrong, and set it right. No doubt is too small to ask, and no student should feel that Maths or Science is only for the bright ones.
+              </p>
+              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                The notes, the simulators, the homework feedback and the revision papers all follow this same way of thinking. The vision is hers, and the whole team works to carry it to every student, in the classroom and online.
               </p>
             </div>
             <div className={`pt-3 flex items-center justify-between text-[11px] font-mono border-t ${isLightMode ? 'border-slate-100' : 'border-slate-900/60'}`}>
