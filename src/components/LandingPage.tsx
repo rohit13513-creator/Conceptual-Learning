@@ -166,7 +166,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 max-w-3xl mx-auto">
             {[
-              { big: `${GOOGLE_LISTING.rating.toFixed(1)} / 5`, small: 'Rating on Google', stars: true },
+              { big: `${GOOGLE_LISTING.rating.toFixed(1)} / 5`, small: 'Student rating', stars: true },
               { big: 'Online + Offline', small: 'Learn your way' },
               { big: 'VIII - X', small: 'Classes' },
               { big: 'Maths + Science', small: 'Subjects' },
@@ -291,7 +291,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
             <div role="dialog" aria-label={`Review by ${activeReview.name}`} className={`pointer-events-auto w-full max-w-2xl max-h-[60vh] overflow-y-auto rounded-2xl border shadow-2xl p-5 space-y-2 ${light ? 'bg-white border-slate-300' : 'bg-[#0c1324] border-cyan-500/30'}`}>
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2"><Stars className="w-3.5 h-3.5" /><span className={`text-sm font-black ${heading}`}>{activeReview.name}</span></div>
-                <span className={`text-[11px] font-medium ${muted}`}>{activeReview.when}</span>
               </div>
               <p className={`text-sm font-medium leading-relaxed ${light ? 'text-slate-800' : 'text-slate-200'}`}>"{activeReview.text}"</p>
             </div>
@@ -299,8 +298,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         )}
         <div className="max-w-6xl mx-auto px-4 pt-2 flex items-center gap-2 flex-wrap">
           <Stars className="w-3.5 h-3.5" />
-          <span className={`text-[11px] font-black ${heading}`}>{GOOGLE_LISTING.rating.toFixed(1)} on Google</span>
-          <span className={`hidden sm:inline text-[11px] font-medium ${muted}`}>What our students wrote on Google, as written.</span>
+          <span className={`text-xs font-black ${heading}`}>Testimonials and feedback from our students</span>
         </div>
         <div className="cl-marquee-wrap overflow-hidden py-2" onMouseLeave={() => setActiveReview(null)}>
           <div className="cl-marquee-track flex gap-3 px-3">
@@ -308,7 +306,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
               <figure key={`${r.name}-${i}`} aria-hidden={i >= reviewsForBar.length} onMouseEnter={() => setActiveReview(r)} onClick={() => setActiveReview(activeReview === r ? null : r)} className={`shrink-0 w-80 sm:w-[26rem] cursor-pointer rounded-xl border p-3 space-y-1.5 transition-colors ${activeReview === r ? (light ? 'bg-cyan-50 border-cyan-400' : 'bg-cyan-500/10 border-cyan-400') : (light ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/70 border-slate-800')}`}>
                 <div className="flex items-center justify-between gap-2">
                   <figcaption className={`text-xs font-black truncate ${heading}`}>{r.name}</figcaption>
-                  <span className={`text-[10px] font-medium shrink-0 ${muted}`}>{r.when}</span>
+                  <Stars className="w-3 h-3 shrink-0" />
                 </div>
                 <blockquote className={`text-[11px] font-medium leading-snug line-clamp-4 ${muted}`}>"{r.text}"</blockquote>
                 <p className={`text-[10px] font-bold ${light ? 'text-cyan-700' : 'text-cyan-400'}`}>Read more</p>
