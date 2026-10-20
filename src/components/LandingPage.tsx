@@ -16,8 +16,13 @@ const Stars: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   </span>
 );
 
-const ResultsShowcase: React.FC<{ light: boolean }> = ({ light }) => {
-  const cards = SCORE_CARDS;
+const SubjectShowcase: React.FC<{ light: boolean; subject: 'Maths' | 'Science'; intervalMs: number }> = ({ light, subject, intervalMs }) => {
+  // Newest year first, highest mark first within a year (stable for equal marks).
+  const cards = SCORE_CARDS
+    .filter((c) => c.subject === subject)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => b.c.year.localeCompare(a.c.year) || b.c.percent - a.c.percent || a.i - b.i)
+    .map((x) => x.c);
   const n = cards.length;
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -27,44 +32,45 @@ const ResultsShowcase: React.FC<{ light: boolean }> = ({ light }) => {
   const years = Array.from(new Set(cards.map((c) => c.year)));
 
   useEffect(() => {
-    if (paused || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)) return;
-    const t = setTimeout(() => setIdx((i) => (i + 1) % n), 6000);
+    if (paused || n < 2 || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)) return;
+    const t = setTimeout(() => setIdx((i) => (i + 1) % n), intervalMs);
     return () => clearTimeout(t);
-  }, [idx, paused, n]);
+  }, [idx, paused, n, intervalMs]);
 
-  const arrow = `shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`;
+  if (!card) return null;
+  const arrow = `shrink-0 self-center w-8 h-8 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`;
 
   return (
-    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
-      <div className="flex gap-2 overflow-x-auto pb-3 justify-start sm:justify-center" role="tablist" aria-label="Jump to a year">
+    <div className={`rounded-2xl border p-3 sm:p-4 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/50 border-slate-800'}`} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+      <h3 className={`text-center text-sm font-black uppercase tracking-widest ${subject === 'Maths' ? 'text-cyan-400' : 'text-teal-400'}`}>{subject} toppers</h3>
+      <div className="flex gap-1.5 overflow-x-auto py-2 justify-start sm:justify-center" role="tablist" aria-label={`${subject}: jump to a year`}>
         {years.map((y) => (
           <button
             key={y}
             role="tab"
             aria-selected={card.year === y}
             onClick={() => setIdx(cards.findIndex((c) => c.year === y))}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-black border cursor-pointer transition ${card.year === y ? 'bg-cyan-500 text-slate-950 border-cyan-400' : (light ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500')}`}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-black border cursor-pointer transition ${card.year === y ? 'bg-cyan-500 text-slate-950 border-cyan-400' : (light ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500')}`}
           >
             {y}
           </button>
         ))}
       </div>
-      <div className="flex items-stretch gap-2 sm:gap-3">
-        <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label="Previous result" className={arrow}><ChevronLeft className="w-5 h-5" /></button>
-        <div key={card.key} aria-live="polite" className={`flex-1 min-w-0 rounded-3xl border px-5 py-8 sm:py-10 text-center space-y-3 ${light ? 'bg-white border-slate-200' : 'bg-gradient-to-b from-slate-900/80 to-slate-900/40 border-slate-800'}`}>
-          <span className={`inline-block text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>{card.exam} &middot; {card.year}</span>
-          <h3 className={`text-2xl sm:text-4xl font-black tracking-tight ${heading}`}>{card.name}</h3>
-          <p className={`text-sm sm:text-base font-bold uppercase tracking-wider ${muted}`}>{card.subject}</p>
-          <p className="text-5xl sm:text-7xl font-black text-cyan-400 leading-none">{card.marks}</p>
+      <div className="flex items-stretch gap-2">
+        <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label={`Previous ${subject} result`} className={arrow}><ChevronLeft className="w-4 h-4" /></button>
+        <div key={card.key} aria-live="polite" className={`flex-1 min-w-0 rounded-2xl border px-3 py-5 text-center space-y-2 ${light ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/40 border-slate-800'}`}>
+          <span className={`inline-block text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>{card.exam} &middot; {card.year}</span>
+          <h4 className={`text-xl sm:text-2xl font-black tracking-tight ${heading}`}>{card.name}</h4>
+          <p className="text-4xl sm:text-5xl font-black text-cyan-400 leading-none">{card.marks}</p>
           {card.achievement && (
-            <p className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-black px-3 py-1.5 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
-              <Trophy className="w-4 h-4" /> {card.achievement} &middot; {card.exam} {card.year}
+            <p className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
+              <Trophy className="w-3.5 h-3.5" /> {card.achievement}
             </p>
           )}
         </div>
-        <button onClick={() => setIdx((idx + 1) % n)} aria-label="Next result" className={arrow}><ChevronRight className="w-5 h-5" /></button>
+        <button onClick={() => setIdx((idx + 1) % n)} aria-label={`Next ${subject} result`} className={arrow}><ChevronRight className="w-4 h-4" /></button>
       </div>
-      <p className={`text-center text-[11px] font-bold mt-3 ${muted}`}>{idx + 1} of {n} &middot; scores of 90% and above</p>
+      <p className={`text-center text-[10px] font-bold mt-2 ${muted}`}>{idx + 1} of {n} &middot; 90% and above</p>
     </div>
   );
 };
@@ -166,12 +172,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
           </div>
         </section>
 
-        <section className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+        <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
             <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Our results</h2>
-            <p className={`text-sm font-medium ${muted}`}>One result at a time. Use the arrows, or pick a year to jump to it.</p>
+            <p className={`text-sm font-medium ${muted}`}>Our toppers year by year. The names change by themselves, or use the arrows.</p>
           </div>
-          <ResultsShowcase light={light} />
+          <div className="grid md:grid-cols-2 gap-4">
+            <SubjectShowcase light={light} subject="Maths" intervalMs={5000} />
+            <SubjectShowcase light={light} subject="Science" intervalMs={6000} />
+          </div>
         </section>
 
         <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">
