@@ -29,6 +29,7 @@ import { LearnScience8Matter } from './components/LearnScience8Matter';
 import { LearnScience8ElementsCompounds } from './components/LearnScience8ElementsCompounds';
 import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
 import { PhotoUploader } from './components/PhotoUploader';
+import { LandingPage } from './components/LandingPage';
 import { shrinkPdf, PDF_SHRINK_THRESHOLD_BYTES, PDF_MAX_UPLOAD_BYTES } from './utils/shrinkPdf';
 import { Revision } from './components/Revision';
 import { RevisionLeaderboard, CategoryCard as RevisionCategoryCard } from './components/RevisionLeaderboard';
@@ -712,6 +713,8 @@ export default function App() {
 
   // Login & Register Form Inputs
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  // Anyone not logged in lands on the public home page first; Log In / Register open the form.
+  const [showAuthForm, setShowAuthForm] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [regName, setRegName] = useState('');
@@ -1554,7 +1557,7 @@ export default function App() {
       width: 320,
       text: 'signin_with',
     });
-  }, [authTab, isLightMode, handleGoogleCredentialResponse]);
+  }, [authTab, isLightMode, handleGoogleCredentialResponse, showAuthForm]);
 
   const handleRequestOtp = async (successMessage?: string) => {
     if (!regEmail || !regPhone) {
@@ -1644,6 +1647,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    setShowAuthForm(false);
     localStorage.removeItem('optics_v1_user');
     sessionStorage.removeItem('optics_v1_user');
     setLoginPassword('');
@@ -3534,6 +3538,17 @@ export default function App() {
     return <PrintView grade={printParam} />;
   }
 
+  if (!user && !showAuthForm) {
+    return (
+      <LandingPage
+        isLightMode={isLightMode}
+        onToggleTheme={() => setIsLightMode(!isLightMode)}
+        onLogin={() => { setAuthTab('login'); setAuthError(null); setAuthSuccess(null); setShowAuthForm(true); }}
+        onRegister={() => { setAuthTab('register'); setAuthError(null); setAuthSuccess(null); setShowAuthForm(true); }}
+      />
+    );
+  }
+
   if (!user) {
     return (
       <>
@@ -3543,6 +3558,8 @@ export default function App() {
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className={`w-full max-w-md backdrop-blur-xl border rounded-2xl shadow-2xl p-6 sm:p-8 relative z-10 space-y-6 shrink-0 ${isLightMode ? 'bg-white/95 border-slate-200' : 'bg-slate-900/90 border-slate-800'}`}>
+
+          <button type="button" onClick={() => setShowAuthForm(false)} className={`text-[11px] font-bold cursor-pointer ${isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-200'}`}>&larr; Back to home page</button>
 
           {/* Logo & Headline */}
           <div className="text-center space-y-2">
