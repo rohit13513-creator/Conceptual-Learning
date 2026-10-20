@@ -57,10 +57,10 @@ const SubjectShowcase: React.FC<{ light: boolean; subject: 'Maths' | 'Science'; 
           </button>
         ))}
       </div>
-      <div key={card.key} aria-live="polite" className="px-3 pt-6 pb-4 text-center space-y-2 min-h-[210px] flex flex-col items-center justify-center">
+      <div key={card.key} aria-live="polite" className="px-3 pt-5 pb-3 text-center space-y-1.5 min-h-[160px] flex flex-col items-center justify-center">
         <p className={`text-[11px] font-black uppercase tracking-widest ${light ? 'text-cyan-700' : 'text-cyan-300'}`}>{card.exam} &middot; {card.year}</p>
-        <h4 className={`text-2xl sm:text-3xl font-black tracking-tight ${heading}`}>{card.name}</h4>
-        <p className="text-5xl sm:text-6xl font-black text-cyan-400 leading-none py-1">{card.marks}</p>
+        <h4 className={`text-lg sm:text-xl font-black tracking-tight ${heading}`}>{card.name}</h4>
+        <p className="text-3xl sm:text-4xl font-black text-cyan-400 leading-none py-1">{card.marks}</p>
         {card.achievement && (
           <p className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
             <Trophy className="w-3.5 h-3.5" /> {card.achievement}
@@ -96,7 +96,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
   const platform = [
     { icon: BookOpen, title: 'Notes and question banks', text: 'Pointwise notes, solved NCERT questions and practice questions for Maths and Science.' },
     { icon: FlaskConical, title: 'Interactive simulators', text: 'See how a concept works instead of only reading about it.' },
-    { icon: ClipboardCheck, title: 'Homework with quick feedback', text: 'Upload photos of your homework and get checked feedback with your score.' },
+    { icon: ClipboardCheck, title: 'Homework with quick feedback', text: 'Daily homework is a part of our classes. Upload photos of it on the portal and get checked feedback with your score.' },
     { icon: Trophy, title: 'Revision papers and leaderboards', text: 'Fresh 30-mark practice papers for the chapters you choose, and class leaderboards.' },
   ];
 
@@ -221,22 +221,40 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
             <div className={`rounded-3xl border p-6 sm:p-7 space-y-4 ${card} ${lift}`}>
               <div className={iconBubble}><Laptop className="w-5 h-5 text-slate-950" /></div>
               <h3 className={`text-lg font-black ${heading}`}>Online</h3>
-              <p className={`text-sm font-medium leading-relaxed ${muted}`}>Study from anywhere with our learning portal: detailed notes, interactive simulators, practice papers, and homework you upload and get checked.</p>
+              <p className={`text-sm font-medium leading-relaxed ${muted}`}>Learn from anywhere through our learning portal, at your own pace, on phone or computer. Everything you need to understand each concept is in one place.</p>
               <ul className={`text-xs font-semibold space-y-1.5 ${muted}`}>
-                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Available any time, on phone or computer</li>
-                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Quick feedback on every homework</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Detailed notes, interactive simulators and question banks</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Daily homework, checked on the portal with quick feedback</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Regular tests and timely assessments</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Doubts cleared, however small they seem</li>
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Revision papers for the chapters you choose</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Extra sessions to prepare for Class 11</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Personal focus on each student's progress</li>
               </ul>
             </div>
             <div className={`rounded-3xl border p-6 sm:p-7 space-y-4 ${card} ${lift}`}>
               <div className={iconBubble}><School className="w-5 h-5 text-slate-950" /></div>
               <h3 className={`text-lg font-black ${heading}`}>In the classroom</h3>
-              <p className={`text-sm font-medium leading-relaxed ${muted}`}>Regular classes with personal attention, regular tests, and doubt support, backed by the same portal for practice between classes.</p>
+              <p className={`text-sm font-medium leading-relaxed ${muted}`}>A teacher takes your class in person, explaining each concept and clearing your doubts on the spot. The same learning portal is there for practice between classes.</p>
               <ul className={`text-xs font-semibold space-y-1.5 ${muted}`}>
-                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Personal focus on each student's progress</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Detailed notes, interactive simulators and question banks</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Daily homework, checked on the portal with quick feedback</li>
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Regular tests and timely assessments</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Doubts cleared, however small they seem</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Revision papers for the chapters you choose</li>
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Extra sessions to prepare for Class 11</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Personal focus on each student's progress</li>
               </ul>
+            </div>
+          </div>
+          <div className={`rounded-2xl border p-5 sm:p-6 grid sm:grid-cols-2 gap-4 sm:gap-8 ${card}`}>
+            <div className="space-y-1">
+              <h3 className={`text-sm font-black ${heading}`}>Admission for Online</h3>
+              <p className={`text-xs sm:text-sm font-medium leading-relaxed ${muted}`}>Register on the portal and, once your registration is approved, start learning right away.</p>
+            </div>
+            <div className="space-y-1">
+              <h3 className={`text-sm font-black ${heading}`}>Admission for the Classroom</h3>
+              <p className={`text-xs sm:text-sm font-medium leading-relaxed ${muted}`}>Seats are limited, so admission is through a test of 50 marks. Students who score more than 50% are selected, subject to availability of seats.</p>
             </div>
           </div>
         </section>
