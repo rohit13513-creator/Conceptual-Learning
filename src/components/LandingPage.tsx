@@ -38,7 +38,7 @@ const SubjectShowcase: React.FC<{ light: boolean; subject: 'Maths' | 'Science'; 
   }, [idx, paused, n, intervalMs]);
 
   if (!card) return null;
-  const arrow = `shrink-0 self-center w-8 h-8 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`;
+  const arrow = `shrink-0 w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`;
 
   return (
     <div className={`rounded-2xl border p-3 sm:p-4 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/50 border-slate-800'}`} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
@@ -56,21 +56,20 @@ const SubjectShowcase: React.FC<{ light: boolean; subject: 'Maths' | 'Science'; 
           </button>
         ))}
       </div>
-      <div className="flex items-stretch gap-2">
+      <div key={card.key} aria-live="polite" className="px-3 pt-6 pb-4 text-center space-y-2 min-h-[210px] flex flex-col items-center justify-center">
+        <p className={`text-[11px] font-black uppercase tracking-widest ${light ? 'text-cyan-700' : 'text-cyan-300'}`}>{card.exam} &middot; {card.year}</p>
+        <h4 className={`text-2xl sm:text-3xl font-black tracking-tight ${heading}`}>{card.name}</h4>
+        <p className="text-5xl sm:text-6xl font-black text-cyan-400 leading-none py-1">{card.marks}</p>
+        {card.achievement && (
+          <p className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
+            <Trophy className="w-3.5 h-3.5" /> {card.achievement}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center justify-center gap-3 pb-1">
         <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label={`Previous ${subject} result`} className={arrow}><ChevronLeft className="w-4 h-4" /></button>
-        <div key={card.key} aria-live="polite" className={`flex-1 min-w-0 rounded-2xl border px-3 py-5 text-center space-y-2 ${light ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/40 border-slate-800'}`}>
-          <span className={`inline-block text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>{card.exam} &middot; {card.year}</span>
-          <h4 className={`text-xl sm:text-2xl font-black tracking-tight ${heading}`}>{card.name}</h4>
-          <p className="text-4xl sm:text-5xl font-black text-cyan-400 leading-none">{card.marks}</p>
-          {card.achievement && (
-            <p className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-400/15 text-amber-500 border border-amber-400/30">
-              <Trophy className="w-3.5 h-3.5" /> {card.achievement}
-            </p>
-          )}
-        </div>
         <button onClick={() => setIdx((idx + 1) % n)} aria-label={`Next ${subject} result`} className={arrow}><ChevronRight className="w-4 h-4" /></button>
       </div>
-      <p className={`text-center text-[10px] font-bold mt-2 ${muted}`}>{idx + 1} of {n} &middot; 90% and above</p>
     </div>
   );
 };
@@ -229,7 +228,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <section id="results" className="scroll-mt-20 max-w-6xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
             <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${heading}`}>Our results</h2>
-            <p className={`text-sm font-medium ${muted}`}>Our toppers year by year. The names change by themselves, or use the arrows.</p>
+            <p className={`text-sm font-medium ${muted}`}>Many students, many stories.</p>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             <SubjectShowcase light={light} subject="Maths" intervalMs={5000} />
@@ -312,7 +311,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
                   <span className={`text-[10px] font-medium shrink-0 ${muted}`}>{r.when}</span>
                 </div>
                 <blockquote className={`text-[11px] font-medium leading-snug line-clamp-4 ${muted}`}>"{r.text}"</blockquote>
-                <p className={`text-[10px] font-bold ${light ? 'text-cyan-700' : 'text-cyan-400'}`}>Hover or tap to read the full review</p>
+                <p className={`text-[10px] font-bold ${light ? 'text-cyan-700' : 'text-cyan-400'}`}>Read more</p>
               </figure>
             ))}
           </div>
