@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, MapPin, Phone, ExternalLink, Sun, Moon, Target, Users, Gift, Calendar } from 'lucide-react';
+import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Mail, Sun, Moon, Target, Users, Gift, Calendar } from 'lucide-react';
 import { GOOGLE_LISTING, GOOGLE_REVIEWS, REPORTED_RESULTS } from '../data/googleReviews';
 
 interface LandingPageProps {
@@ -115,7 +115,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
             <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Results our students have shared</h2>
             <p className={`text-sm font-medium ${muted}`}>Reported by the students themselves in their Google reviews.</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {REPORTED_RESULTS.map((r) => (
               <div key={r.who} className={`rounded-2xl border p-4 text-center space-y-1 ${card}`}>
                 <p className="text-xl font-black text-cyan-400">{r.result}</p>
@@ -147,10 +147,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <section className="max-w-6xl mx-auto px-4 py-10">
           <div className={`rounded-2xl border p-6 sm:p-8 grid sm:grid-cols-2 gap-6 ${card}`}>
             <div className="space-y-3">
-              <h2 className={`text-xl font-black ${heading}`}>Visit or call</h2>
-              <p className={`text-xs font-medium flex gap-2 ${muted}`}><MapPin className="w-4 h-4 shrink-0 text-cyan-400" /> {GOOGLE_LISTING.address}</p>
-              <p className={`text-xs font-medium flex gap-2 ${muted}`}><Phone className="w-4 h-4 shrink-0 text-cyan-400" /> <a href={`tel:${GOOGLE_LISTING.phone.replace(/\s/g, '')}`} className="hover:underline">{GOOGLE_LISTING.phone}</a></p>
-              <a href={GOOGLE_LISTING.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-black text-cyan-400 hover:text-cyan-300"><ExternalLink className="w-3.5 h-3.5" /> See all reviews and directions on Google</a>
+              <h2 className={`text-xl font-black ${heading}`}>Want to join or know more?</h2>
+              <p className={`text-xs font-medium leading-relaxed ${muted}`}>Write to us and we will get back to you.</p>
+              <a href="mailto:conceptuallearning.online@gmail.com" className="inline-flex items-center gap-2 text-sm font-black text-cyan-400 hover:text-cyan-300 break-all"><Mail className="w-4 h-4 shrink-0" /> conceptuallearning.online@gmail.com</a>
             </div>
             <div className="space-y-3 sm:text-right">
               <p className={`text-sm font-black ${heading}`}>Already a student?</p>
