@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Mail, Sun, Moon, Target, Users, Gift, Calendar } from 'lucide-react';
-import { GOOGLE_LISTING, GOOGLE_REVIEWS, REPORTED_RESULTS, GoogleReview } from '../data/googleReviews';
+import React, { useState, useEffect } from 'react';
+import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Mail, Sun, Moon, Target, Users, Gift, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { GOOGLE_LISTING, GOOGLE_REVIEWS, GoogleReview } from '../data/googleReviews';
+import { RESULT_SLIDES, ResultRow } from '../data/results';
 
 interface LandingPageProps {
   isLightMode: boolean;
@@ -14,6 +15,92 @@ const Stars: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
     {[0, 1, 2, 3, 4].map((i) => <Star key={i} className={`${className} fill-current`} />)}
   </span>
 );
+
+const ResultsCarousel: React.FC<{ light: boolean }> = ({ light }) => {
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const n = RESULT_SLIDES.length;
+  const slide = RESULT_SLIDES[idx];
+  const heading = light ? 'text-slate-900' : 'text-white';
+  const muted = light ? 'text-slate-600' : 'text-slate-400';
+
+  useEffect(() => {
+    if (paused || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)) return;
+    const t = setTimeout(() => setIdx((i) => (i + 1) % n), 12000);
+    return () => clearTimeout(t);
+  }, [idx, paused, n]);
+
+  const table = (rows: ResultRow[]) => {
+    const hasOverall = rows.some((r) => r.overall);
+    const hasMaths = rows.some((r) => r.maths);
+    const hasScience = rows.some((r) => r.science);
+    const head = light ? 'text-slate-500' : 'text-slate-400';
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs sm:text-sm">
+          <thead>
+            <tr className={`text-[10px] sm:text-[11px] uppercase tracking-wider ${head}`}>
+              <th className="py-2 pr-3 font-black">Student</th>
+              {hasOverall && <th className="py-2 px-2 font-black text-center">Overall</th>}
+              {hasMaths && <th className="py-2 px-2 font-black text-center">Maths</th>}
+              {hasScience && <th className="py-2 pl-2 font-black text-center">Science</th>}
+            </tr>
+          </thead>
+          <tbody className={`divide-y ${light ? 'divide-slate-200' : 'divide-slate-800'}`}>
+            {rows.map((r) => (
+              <tr key={r.name + (r.tag || '')}>
+                <td className={`py-2 pr-3 font-bold ${heading}`}>
+                  {r.name}
+                  {r.tag && <span className="ml-2 align-middle text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-500 border border-amber-400/30">{r.tag}</span>}
+                </td>
+                {hasOverall && <td className="py-2 px-2 text-center font-black text-cyan-400">{r.overall || '-'}</td>}
+                {hasMaths && <td className={`py-2 px-2 text-center font-semibold ${muted}`}>{r.maths || '-'}</td>}
+                {hasScience && <td className={`py-2 pl-2 text-center font-semibold ${muted}`}>{r.science || '-'}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+      <div className="flex gap-2 overflow-x-auto pb-3 justify-start sm:justify-center" role="tablist" aria-label="Results by year">
+        {RESULT_SLIDES.map((sl, i) => (
+          <button
+            key={sl.id}
+            role="tab"
+            aria-selected={i === idx}
+            onClick={() => setIdx(i)}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-black border cursor-pointer transition ${i === idx ? 'bg-cyan-500 text-slate-950 border-cyan-400' : (light ? 'bg-white border-slate-300 text-slate-600 hover:border-slate-400' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500')}`}
+          >
+            {sl.tab}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-stretch gap-2 sm:gap-3">
+        <button onClick={() => setIdx((idx - 1 + n) % n)} aria-label="Previous results" className={`shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`}>
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <div className={`flex-1 min-w-0 rounded-2xl border p-4 sm:p-6 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`} aria-live="polite">
+          <h3 className={`text-lg sm:text-xl font-black tracking-tight ${heading}`}>{slide.title}</h3>
+          {slide.subtitle && <p className={`text-xs font-medium mt-0.5 ${muted}`}>{slide.subtitle}</p>}
+          <div className="mt-3">{table(slide.rows)}</div>
+          {slide.extraRows && (
+            <div className="mt-5">
+              <h4 className={`text-sm font-black ${heading}`}>{slide.extraTitle}</h4>
+              {table(slide.extraRows)}
+            </div>
+          )}
+        </div>
+        <button onClick={() => setIdx((idx + 1) % n)} aria-label="Next results" className={`shrink-0 self-center w-9 h-9 sm:w-11 sm:h-11 rounded-full border flex items-center justify-center cursor-pointer ${light ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100' : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'}`}>
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // Public home page shown to anyone who is not logged in. Every figure and quote on it comes from
 // src/data/googleReviews.ts (copied from the Google listing); nothing here is invented.
@@ -112,20 +199,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
           </div>
         </section>
 
-        <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">
+        <section className="max-w-4xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
-            <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Some of our top scorers</h2>
-            <p className={`text-sm font-medium ${muted}`}>Board results of our Class 10 students.</p>
+            <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Our results</h2>
+            <p className={`text-sm font-medium ${muted}`}>Year by year. Use the arrows or the year buttons to see each batch.</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {REPORTED_RESULTS.map((r) => (
-              <div key={r.who} className={`rounded-2xl border p-4 text-center space-y-1 ${card}`}>
-                <p className="text-xl font-black text-cyan-400">{r.result}</p>
-                <p className={`text-[11px] font-medium leading-snug ${muted}`}>{r.detail}</p>
-                <p className={`text-[11px] font-black ${heading}`}>{r.who}</p>
-              </div>
-            ))}
-          </div>
+          <ResultsCarousel light={light} />
         </section>
 
         <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">

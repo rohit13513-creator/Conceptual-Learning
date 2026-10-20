@@ -44,11 +44,3 @@ export const GOOGLE_REVIEWS: GoogleReview[] = [
   { name: 'Divya', when: 'a year ago', text: `One of the best coaching institutes I have ever seen for classes 8th to 10th! The teaching quality is outstanding, and the guidance is truly exceptional. Sir, we would love to see you expand to higher classes as well!` },
   { name: 'Yatharth Varshney', when: 'a year ago', text: `It was a great journey studying 10th this year at one of the best tuition. Rohit sir is very hard working teacher. It was a great experience for me learning from sir.` },
 ];
-
-// Results shown on the home page. Add year-wise entries here when the full list is available.
-export const REPORTED_RESULTS: { result: string; who: string; detail: string }[] = [
-  { result: '98.6%', who: 'Saatvik Sharma', detail: 'overall, with 99 in Science and 97 in Mathematics' },
-  { result: '98%', who: 'Aarav Madaan', detail: 'overall, with 99 in Maths and 98 in Science' },
-  { result: '97%', who: 'Kavya Panda', detail: 'in the Class 10 boards' },
-  { result: '94.6%', who: 'Shreya Singh', detail: 'in the Class 10 boards, after finding Maths hard' },
-];
