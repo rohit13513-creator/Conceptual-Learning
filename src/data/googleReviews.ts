@@ -45,8 +45,7 @@ export const GOOGLE_REVIEWS: GoogleReview[] = [
   { name: 'Yatharth Varshney', when: 'a year ago', text: `It was a great journey studying 10th this year at one of the best tuition. Rohit sir is very hard working teacher. It was a great experience for me learning from sir.` },
 ];
 
-// Results that students themselves stated in their reviews above -- shown on the home page as
-// "student-reported", never as our own claims.
+// Results shown on the home page. Add year-wise entries here when the full list is available.
 export const REPORTED_RESULTS: { result: string; who: string; detail: string }[] = [
   { result: '98.6%', who: 'Saatvik Sharma', detail: 'overall, with 99 in Science and 97 in Mathematics' },
   { result: '98%', who: 'Aarav Madaan', detail: 'overall, with 99 in Maths and 98 in Science' },

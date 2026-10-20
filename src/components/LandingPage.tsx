@@ -99,7 +99,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
             <h2 className={`text-2xl font-black tracking-tight ${heading}`}>How we work</h2>
-            <p className={`text-sm font-medium ${muted}`}>As described by our students in their Google reviews.</p>
+            <p className={`text-sm font-medium ${muted}`}>What makes our classes different.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {how.map((h) => (
@@ -114,8 +114,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
 
         <section className="max-w-6xl mx-auto px-4 py-10 space-y-6">
           <div className="text-center space-y-1">
-            <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Results our students have shared</h2>
-            <p className={`text-sm font-medium ${muted}`}>Reported by the students themselves in their Google reviews.</p>
+            <h2 className={`text-2xl font-black tracking-tight ${heading}`}>Some of our top scorers</h2>
+            <p className={`text-sm font-medium ${muted}`}>Board results of our Class 10 students.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {REPORTED_RESULTS.map((r) => (
