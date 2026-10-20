@@ -79,10 +79,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         </section>
 
         <section className="max-w-6xl mx-auto px-4 py-6">
-          <div className={`grid grid-cols-2 sm:grid-cols-4 gap-3`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3`}>
             {[
               { big: `${GOOGLE_LISTING.rating.toFixed(1)} / 5`, small: 'Rating on Google', stars: true },
-              { big: `${GOOGLE_LISTING.reviewCount}`, small: 'Reviews on Google' },
               { big: 'VIII - X', small: 'Classes taught' },
               { big: 'Maths + Science', small: 'Subjects' },
             ].map((s) => (
@@ -170,7 +169,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
         <div className="max-w-6xl mx-auto px-4 pt-2 flex items-center gap-2 flex-wrap">
           <Stars className="w-3.5 h-3.5" />
           <span className={`text-[11px] font-black ${heading}`}>{GOOGLE_LISTING.rating.toFixed(1)} on Google</span>
-          <span className={`hidden sm:inline text-[11px] font-medium ${muted}`}>from {GOOGLE_LISTING.reviewCount} reviews. Below are {GOOGLE_REVIEWS.length} of them, as written (copied {GOOGLE_LISTING.syncedOn}).</span>
+          <span className={`hidden sm:inline text-[11px] font-medium ${muted}`}>What our students wrote on Google, as written (copied {GOOGLE_LISTING.syncedOn}).</span>
         </div>
         <div className="cl-marquee-wrap overflow-hidden py-2">
           <div className="cl-marquee-track flex gap-3 px-3">
