@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { DownloadNotesLink } from "./DownloadNotesLink";
 import { Award, HelpCircle, ChevronLeft, ChevronRight, FlaskConical, Sprout, Network, Trophy, Lightbulb, Globe2, Layers, Dna, PawPrint } from "lucide-react";
 import { ClassificationTimelineDiagram, FiveKingdomKeyDiagram, PlantClassesDiagram, AnimalTreeDiagram, HierarchyLadderDiagram, DiversityMindMap } from "./diversity9Diagrams";
 import { Block, Pic, SvgKey, Topic } from "./diversity9Types";
@@ -10,6 +11,8 @@ import { TOPICS_D } from "./diversity9TopicsD";
 // Lesson: "Patterns in Life: Diversity and Classification". Simple words, short sentences, point by point.
 
 const IMG_BASE = "/diagrams/diversity9/";
+const NOTES_PDF_URL = "/Class-9-Biology-Diversity-Notes.pdf";
+const NOTES_PDF_NAME = "Class-9-Biology-Diversity-Notes.pdf";
 const TOPICS: Topic[] = [...TOPICS_A, ...TOPICS_B, ...TOPICS_C, ...TOPICS_D];
 
 const ICONS: Record<string, React.ElementType> = {
@@ -163,15 +166,19 @@ export function LearnDiversity9({ isLightMode = false, onCompleteNotes, onGoToSe
   return (
     <div className={`flex-1 flex flex-col md:flex-row overflow-hidden h-full transition-colors duration-300 ${isLightMode ? "bg-slate-50" : "bg-[#060b14]"}`} id="learn-diversity9-container">
       <div className={`sticky top-0 shrink-0 z-20 p-3 md:hidden w-full ${isLightMode ? "bg-white/95 border-b border-slate-200" : "bg-[#0d1424]/95 border-b border-slate-800"}`}>
-        <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
+        <div className="flex items-center gap-2">
+          <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`flex-1 min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
           {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
         </select>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} compact />
+        </div>
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Globe2 className="w-5 h-5 text-green-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>Diversity and Classification</h3></div>
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Patterns in Life: how and why we group the living world.</p>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t) => (

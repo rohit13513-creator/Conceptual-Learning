@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { DownloadNotesLink } from "./DownloadNotesLink";
 import {
   BookOpen,
   Award,
@@ -19,6 +20,9 @@ import {
   ChevronRight,
   Trophy,
 } from "lucide-react";
+
+const NOTES_PDF_URL = "/Class-9-Biology-Cell-Notes.pdf";
+const NOTES_PDF_NAME = "Class-9-Biology-Cell-Notes.pdf";
 
 type BioTopicId =
   | "intro-to-cells"
@@ -198,6 +202,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
             <Dna className="w-4 h-4 text-green-500" />
             <span className={`text-sm uppercase tracking-widest font-black font-mono ${isLightMode ? "text-slate-800" : "text-green-400"}`}>Cells: Structure & Function</span>
           </div>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} compact />
         </div>
       </div>
 
@@ -213,6 +218,7 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               The basic unit of life: structure, organelles, and how cells work, explained simply.
             </p>
           </div>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
