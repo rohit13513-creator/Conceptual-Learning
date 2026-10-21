@@ -827,6 +827,51 @@ function sanitizePlaceholderText(value: unknown): string | null {
   return trimmed;
 }
 
+// The top-level number of a question label such as "16", "Q16", "21(b)" or "Exercise Q5(ii)", or
+// null when it has no number at all or the assignment has more than one numbered list ("Example 3"
+// and "Exercise Q3" both restart at 1, so a bare range check would be meaningless there).
+function topLevelQuestionNumber(label: unknown): number | null {
+  const text = String(label ?? "");
+  if (/example|exercise|ex\.|sheet/i.test(text)) return null;
+  const m = text.replace(/\(.*$/, "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// Labels in doubt/missing/incorrect that lie outside the sheet's own first..last question numbers.
+// Only trusted when the model gave a usable range (last >= first > 0) and the assignment has a
+// single numbered list.
+function findOutOfRangeLabels(parsed: any): string[] {
+  const first = parsed?.sheetFirstQuestionNumber;
+  const last = parsed?.sheetLastQuestionNumber;
+  if (typeof first !== "number" || typeof last !== "number" || first <= 0 || last < first) return [];
+  const labels: any[] = [
+    ...(Array.isArray(parsed.doubtQuestions) ? parsed.doubtQuestions : []),
+    ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
+    ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
+  ];
+  const out = new Set<string>();
+  let numbered = 0;
+  for (const l of labels) {
+    const n = topLevelQuestionNumber(l);
+    if (n === null) continue;
+    numbered++;
+    if (n < first || n > last) out.add(String(l));
+  }
+  // If most labels are outside the range, the student is probably numbering the whole sheet with a
+  // consistent offset (their own Q14 is the sheet's Q1) -- that is handled by the existing offset
+  // rules, and is not a sign of another homework's pages, so leave it alone.
+  if (out.size * 2 >= numbered) return [];
+  return Array.from(out);
+}
+
+function stripOutOfRangeLabels(parsed: any) {
+  const bad = new Set(findOutOfRangeLabels(parsed));
+  if (bad.size === 0) return;
+  for (const key of ["doubtQuestions", "missingQuestions", "incorrectQuestions"]) {
+    if (Array.isArray(parsed[key])) parsed[key] = parsed[key].filter((l: any) => !bad.has(String(l)));
+  }
+}
+
 async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
@@ -946,6 +991,8 @@ Working out which questions were actually assigned:
 - If you genuinely cannot tell which questions were assigned (no range stated anywhere and no other way to infer it), just grade what's shown as usual, without guessing at what might be missing.
 - Many assignments (e.g. "Examples 1-11, Exercise Q1-11") contain TWO separately-numbered lists that both restart at 1 -- a bare "Q9" is genuinely ambiguous between them and risks quoting or checking the wrong problem entirely. Whenever an assignment has more than one numbered list, always write "Example N" or "Exercise QN" (never a bare number) everywhere you refer to a question -- in pageByPageNotes, questionByQuestionCheck, feedback, missingQuestions, and incorrectQuestions alike.
 
+A submission file sometimes contains pages that belong to a DIFFERENT homework. Students photograph their whole notebook and select photos for several assignments at once, so one file can hold, for example, this assignment's pages AND the pages of the previous day's homework (often in reverse order). Pages of another homework are recognisable because: their question numbers run past the last question of this assignment's sheet (the sheet ends at 35 but the page has Q39, Q43, Q45); a heading names a different chapter or homework number; and their given values match none of this sheet's questions. Such pages are NOT part of this assignment: in pageByPageNotes and otherHomeworkPages mark them as 'other homework', and then ignore them completely. Never grade them, never count their doubt markers, never put any of their question numbers into missingQuestions, incorrectQuestions or doubtQuestions, and never mention them in the feedback. The numbers of the two homeworks very often collide (both have a Q16, a Q17, a Q19 and a Q21), so a question number that appears twice in the file must be resolved by its given values: the page whose given values match THIS sheet's question is the answer, and the other one is simply a different homework. Never tell a student their working 'used the wrong value' or 'reused data from another question' until you have checked that the work you are criticising is not simply from the other homework's pages. A real, confirmed case had a Class X student upload her Electricity 6 pages together with her Electricity 7 pages: the check blamed her for 'wrong' Q16, Q17, Q19 and Q21 (those labels belong to Electricity 7's pages, while her real Electricity 6 answers were correct or marked doubt), and reported Q39, Q43 and Q45 as doubt although the assignment had only 35 questions.
+
 Counting the assignment for the doubt-percentage rule: separately from questionByQuestionCheck (which lists each lettered/numbered sub-part individually so every sub-part's arithmetic gets checked), report assignedQuestionCount as the number of TOP-LEVEL assigned questions only -- the count implied by the assigned range itself (e.g. "Question 16 to 30" is 15 questions, even though some of those, like a question with parts (i)-(iv), expand to several entries in questionByQuestionCheck). Do not derive assignedQuestionCount by counting entries in questionByQuestionCheck; count top-level question numbers in the assigned range directly.
 
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") -- this means the student is stuck and wants the teacher to explain that question in class. This applies whether the doubt marker stands alone with no attempt at all, OR the student made a partial/incorrect attempt first and then wrote "doubt" (e.g. gave up partway through and flagged it, rather than leaving it fully blank) -- either way, treat the WHOLE question as a self-flagged doubt, not a wrong or missing answer. Do not grade the partial attempt as incorrect just because one exists alongside the doubt marker, and never mark a doubt as incorrect.
@@ -1005,6 +1052,13 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           items: { type: "string" },
           description: "One entry per page of the student's submission, in the order the pages appear, BEFORE deciding anything about completeness. Each entry: which question number(s) appear or continue on that page, and -- critically -- whether the page OPENS with a continuation of a question whose working started on the previous page (e.g. a final algebraic step, 'Hence Proved', a boxed final answer, or '= RHS' as the very first thing on the page). Also, for every page, state whether any question number is written next to the word 'doubt' (or 'dought'), INCLUDING when it is just a short line by itself at the very top of the page directly above another question's work, at the bottom, or in a margin -- e.g. 'Q7 Doubt' as a single line right above the start of Q8. This must be filled in for every page before any question is judged incomplete, wrong, or missing a conclusion."
         },
+        otherHomeworkPages: {
+          type: "array",
+          items: { type: "string" },
+          description: "Page numbers (1-based, as written in pageByPageNotes) that belong to a DIFFERENT homework than this assignment, each with a few words of why (e.g. 'page 9: Electricity 7, Q25-Q45, past the sheet's last question 35'). Empty array if every page belongs to this assignment. Everything on these pages must be ignored in every field below."
+        },
+        sheetFirstQuestionNumber: { type: "integer", minimum: 0, description: "Only when a question sheet is attached. The number of the FIRST question printed on the sheet (or the first number of the stated range), exactly as the sheet itself numbers it. 0 if it cannot be determined." },
+        sheetLastQuestionNumber: { type: "integer", minimum: 0, description: "Only when a question sheet is attached. The number of the LAST top-level question printed on the sheet (or the last number of the stated range), exactly as the sheet itself numbers it (e.g. 35 for a sheet of 'Questions 1 to 35'). 0 if it cannot be determined." },
         // Listed right after the page-by-page read for the same property-order reason: the model must
         // PROVE the student's work belongs to this assignment before it is allowed to grade it. A
         // real incident (a student uploaded a completely different homework -- potential difference
@@ -1055,11 +1109,14 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         score: { type: "integer", minimum: 0, maximum: 10, description: "Your best estimate, 0-10, based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely. The actual score shown to the student is computed deterministically afterward as 10 minus 1 mark per question in missingQuestions/incorrectQuestions (see those fields) plus separate fixed penalties for doubt-volume and lateness -- so this field is not the final word, but it must still be a genuine, careful estimate (not a placeholder), since an implausible value here (e.g. 10 alongside several incorrectQuestions) is a signal something else was filled in wrong." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
       },
-      required: ["pageByPageNotes", ...(questionSheetBlock ? ["sheetMatchEvidence", "matchedSheetQuestionCount"] : []), "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
+      required: ["pageByPageNotes", "otherHomeworkPages", ...(questionSheetBlock ? ["sheetFirstQuestionNumber", "sheetLastQuestionNumber", "sheetMatchEvidence", "matchedSheetQuestionCount"] : []), "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
     },
   };
 
   try {
+   // One full model call, optionally with an extra correction note appended to the request (used
+   // once, below, when the first result names question numbers that do not exist in the assignment).
+   const gradeOnce = async (extraNote: string): Promise<any> => {
     // Anthropic occasionally returns a transient 529 "Overloaded" or 429 rate-limit response --
     // retry a couple of times with a short backoff before giving up on this submission.
     let data: any;
@@ -1102,8 +1159,8 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           messages: [{
             role: "user",
             content: questionSheetBlock
-              ? [contentBlock, questionSheetBlock, { type: "text", text: prompt }]
-              : [contentBlock, { type: "text", text: prompt }],
+              ? [contentBlock, questionSheetBlock, { type: "text", text: prompt + extraNote }]
+              : [contentBlock, { type: "text", text: prompt + extraNote }],
           }],
         }),
       });
@@ -1140,7 +1197,35 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     if (!succeeded) throw new Error(lastErrorMessage);
 
     const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_grade");
-    const parsed = toolUseBlock.input;
+    return toolUseBlock.input;
+   };
+
+    let parsed = await gradeOnce("");
+
+    // Deterministic out-of-range check. When the sheet's own first/last question numbers are known,
+    // any question label outside that range cannot belong to this assignment -- it came from pages
+    // of a different homework that ended up in the same file (a real incident listed Q39, Q43 and
+    // Q45 as doubt on a 35-question assignment, and blamed the student for another homework's Q16,
+    // Q17 and Q19). One retry with an explicit correction lets the model re-read the file properly
+    // and rewrite its feedback; whatever still lies outside the range afterwards is dropped from the
+    // lists so it can never affect the score, the doubt percentage or the outstanding questions.
+    if (!isScopedResubmission) {
+      const outOfRange = findOutOfRangeLabels(parsed);
+      if (outOfRange.length > 0) {
+        const first = parsed.sheetFirstQuestionNumber;
+        const last = parsed.sheetLastQuestionNumber;
+        console.warn(`Submission ${submissionId}: question labels outside the sheet range ${first}-${last}: ${outOfRange.join(", ")} -- re-checking once.`);
+        try {
+          const retried = await gradeOnce(
+            `\n\nCORRECTION: a previous attempt at this check listed question numbers (${outOfRange.join(", ")}) that do not exist on this assignment -- the sheet runs only from question ${first} to question ${last}. This file contains pages of a DIFFERENT homework mixed in with this one. Find those pages (question numbers beyond ${last}, a different chapter or homework heading, given values that match no question on this sheet), list them in otherHomeworkPages, and then ignore them completely. Questions that share a number with this sheet (for example a Q16 or Q19) must be judged only from the pages whose given values match THIS sheet. Do not report any other homework's questions as missing, incorrect or doubt, and do not criticise any working that belongs to the other homework.`
+          );
+          if (retried && typeof retried.score === "number") parsed = retried;
+        } catch (e: any) {
+          console.warn("Correction re-check failed, keeping the first result:", e?.message);
+        }
+      }
+      stripOutOfRangeLabels(parsed);
+    }
 
     // Deterministic wrong-homework guard. If a question sheet was attached and the model itself
     // reports that (almost) none of the sheet's questions are answered by this submission, nothing
