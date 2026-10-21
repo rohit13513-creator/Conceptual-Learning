@@ -6481,6 +6481,15 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               />
             </div>
 
+            {preparingFor === '9th' && qbSubject === 'biology' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button onClick={() => setBioChapter9('cell')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'cell' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Cell</button>
+                <button onClick={() => setBioChapter9('tissues')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'tissues' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Tissues in Action</button>
+                <button onClick={() => setBioChapter9('diversity')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'diversity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Diversity & Classification</button>
+              </div>
+            )}
+
             {preparingFor === '9th' && qbSubject === 'physics' && (
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
@@ -6882,6 +6891,15 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 ))}
               </div>
             </div>
+
+            {preparingFor === '9th' && qbSubject === 'biology' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button onClick={() => setBioChapter9('cell')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'cell' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Cell</button>
+                <button onClick={() => setBioChapter9('tissues')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'tissues' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Tissues in Action</button>
+                <button onClick={() => setBioChapter9('diversity')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'diversity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Diversity & Classification</button>
+              </div>
+            )}
 
             {preparingFor === '9th' && qbSubject === 'physics' && (
               <div className="flex items-center gap-2">
@@ -7661,6 +7679,15 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 {preparingFor === '8th' ? 'Grade 8 Standard' : preparingFor === '9th' ? 'Grade 9 Standard' : preparingFor === '10th' ? 'Grade 10 Standard' : 'Competitive / JEE'}
               </span>
             </div>
+
+            {preparingFor === '9th' && qbSubject === 'biology' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button onClick={() => setBioChapter9('cell')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'cell' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Cell</button>
+                <button onClick={() => setBioChapter9('tissues')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'tissues' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Tissues in Action</button>
+                <button onClick={() => setBioChapter9('diversity')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter9 === 'diversity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Diversity & Classification</button>
+              </div>
+            )}
 
             {preparingFor === '9th' && qbSubject === 'physics' && (
               <div className="flex items-center gap-2">
