@@ -1,333 +1,243 @@
 import React from 'react';
-import { 
-  Award, 
-  BookOpen, 
-  Star, 
-  Target, 
-  Compass, 
-  Sparkles, 
-  GraduationCap, 
-  ChevronRight, 
-  User, 
-  Heart, 
-  Flame, 
-  TrendingUp, 
-  Users 
+import {
+  Target,
+  Sparkles,
+  Lightbulb,
+  PenLine,
+  MessageCircleQuestion,
+  Trophy,
+  Medal,
+  BadgeCheck,
+  TrendingUp,
+  Rocket,
+  Quote,
+  ArrowRight,
 } from 'lucide-react';
+import { Reveal } from './Reveal';
+
+// About Us: used both inside the student app and on the public home page.
+// Styling comes from the shared premium layer in index.css (.cl-card, .cl-eyebrow, ...), which
+// switches between dark and light by itself.
+
+const STATS = [
+  { value: '98.6%', label: 'Highest overall score', note: 'achieved by our student pool', accent: 'from-cyan-400 to-sky-500' },
+  { value: '99/100', label: 'Subject perfection', note: 'peaking at 99 in Science and Maths', accent: 'from-amber-300 to-orange-400' },
+  { value: '8+', label: '95% club', note: 'students crossed 95% overall', accent: 'from-emerald-400 to-teal-400' },
+  { value: '12+', label: '90% super achievers', note: 'students crossed the 90% mark', accent: 'from-violet-400 to-fuchsia-400' },
+];
+
+const WAYS = [
+  { icon: Lightbulb, title: 'Concept first', text: 'Every topic starts from the basics and the reason behind it, so the idea stays in the mind and not just the answer.' },
+  { icon: PenLine, title: 'Try, then correct', text: 'Students attempt the questions, find where they go wrong, and set it right together with their teacher.' },
+  { icon: MessageCircleQuestion, title: 'No doubt is too small', text: 'Every doubt is welcome. Maths and Science are not only for the bright ones, every student can be good at them.' },
+];
+
+const CLASSES = [
+  { roman: 'VIII', name: 'Class VIII', tag: 'Foundation of Concepts', ring: 'from-cyan-400 to-sky-500' },
+  { roman: 'IX', name: 'Class IX', tag: 'Foundation for Competitions', ring: 'from-violet-400 to-indigo-500' },
+  { roman: 'X', name: 'Class X', tag: 'Board Excellence', ring: 'from-emerald-400 to-teal-500' },
+];
+
+const HIGHLIGHTS = [
+  { icon: Rocket, tone: 'text-cyan-400', title: 'The Ultimate Heights', text: <>Our student pool achieved a highest overall score of <b>98.6%</b>.</> },
+  { icon: Trophy, tone: 'text-amber-400', title: 'Near-Perfect Subject Scores', text: <>In individual core subjects, our students reached <b>99/100</b> in Science and <b>99/100</b> in Mathematics.</> },
+  { icon: Medal, tone: 'text-emerald-400', title: 'The 95%+ Elite Club', text: <>Over <b>8 students</b> crossed the 95% overall aggregate, showing steady excellence across the board.</> },
+  { icon: BadgeCheck, tone: 'text-violet-400', title: 'The 90% Super Achievers', text: <><b>12+ students</b> went past the 90% overall mark, which shows that the method works for everyone, not only a few.</> },
+  { icon: TrendingUp, tone: 'text-rose-400', title: 'Subject Mastery', text: <>A large majority of our students consistently score <b>90+ marks out of 100</b> in Mathematics and Science.</> },
+];
+
+function Leader({ initials, name, role, accent, paragraphs, footer }: { initials: string; name: string; role: string; accent: string; paragraphs: string[]; footer: string }) {
+  return (
+    <div className="cl-card cl-card-hover p-6 sm:p-7 flex flex-col h-full relative overflow-hidden">
+      <div className={`absolute -top-16 -right-16 w-44 h-44 rounded-full bg-gradient-to-br ${accent} opacity-15 blur-2xl pointer-events-none`} />
+      <Quote className="absolute top-5 right-5 w-8 h-8 opacity-10" />
+      <div className="flex items-center gap-4 relative">
+        <div className={`shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${accent} p-[2px] shadow-lg`}>
+          <div className="w-full h-full rounded-[0.9rem] flex items-center justify-center font-black text-lg tracking-wide cl-heading" style={{ background: 'var(--cl-bg)' }}>
+            {initials}
+          </div>
+        </div>
+        <div>
+          <h3 className="text-lg font-black cl-heading leading-tight">{name}</h3>
+          <span className="cl-eyebrow mt-1.5" style={{ fontSize: '.6rem' }}>{role}</span>
+        </div>
+      </div>
+      <div className="mt-5 space-y-3 flex-1 relative">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-sm leading-relaxed font-medium cl-page">{p}</p>
+        ))}
+      </div>
+      <div className="mt-5 pt-4 flex items-center justify-between relative" style={{ borderTop: '1px solid var(--cl-border)' }}>
+        <span className="text-[11px] font-black uppercase tracking-[0.18em] cl-muted">{footer}</span>
+        <Sparkles className="w-4 h-4 text-cyan-400" />
+      </div>
+    </div>
+  );
+}
 
 export function AboutUs({ isLightMode = false }: { isLightMode?: boolean }) {
+  void isLightMode;
   return (
-    <div className={`space-y-10 font-sans ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`} id="about-us-container">
-      
-      {/* ── SECTION 1: MASTER HERO HEADER ── */}
-      <div className={`relative rounded-3xl overflow-hidden p-8 sm:p-12 shadow-2xl border ${
-        isLightMode 
-          ? 'bg-gradient-to-r from-slate-100 via-slate-50 to-indigo-50 border-slate-200' 
-          : 'bg-gradient-to-r from-[#0d1527] via-[#090f1d] to-[#1e1b4b] border-slate-800'
-      }`}>
-        <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-10 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 space-y-6 max-w-3xl">
-          <div className={`inline-flex items-center gap-1.5 px-3 py-1 ${isLightMode ? 'bg-blue-50 border-blue-200 text-blue-900' : 'bg-cyan-500/10 border-cyan-400/20 text-cyan-500'} text-[10px] font-black uppercase tracking-widest rounded-full font-mono`}>
-            <Sparkles className="w-3.5 h-3.5" />
-            Our Academic Philosophy
+    <div className="space-y-16 font-sans cl-page" id="about-us-container">
+
+      {/* ── HERO ── */}
+      <Reveal>
+        <section className="cl-card cl-aurora relative overflow-hidden px-6 py-12 sm:px-12 sm:py-16 text-center">
+          <div className="cl-grid-bg absolute inset-0 pointer-events-none" />
+          <div className="relative z-10 max-w-3xl mx-auto space-y-6">
+            <span className="cl-eyebrow"><Sparkles className="w-3.5 h-3.5" /> Our academic philosophy</span>
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-[1.05] cl-heading">
+              The power of <span className="cl-gradient-text cl-shine-text">Conceptual Learning</span>
+            </h1>
+            <p className="text-base sm:text-lg leading-relaxed font-medium cl-page max-w-2xl mx-auto">
+              A place where education goes beyond memorising, and grows true, deep-rooted understanding.
+            </p>
+            <div className="cl-card text-left p-5 sm:p-6 mt-2" style={{ background: 'var(--cl-surface-flat)' }}>
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-400">
+                <Target className="w-4 h-4" /> Our mission
+              </div>
+              <p className="mt-2 text-sm sm:text-base leading-relaxed font-semibold cl-heading">
+                To change the way students learn, from "memorising for exams" to "understanding for life." We believe that once a concept is crystal clear, good grades and success follow on their own.
+              </p>
+            </div>
           </div>
-          
-          <h1 className={`text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-            The Power of <span className="bg-gradient-to-r from-cyan-600 via-[#0284c7] to-indigo-600 bg-clip-text text-transparent">Conceptual Learning</span>
-          </h1>
-          
-          <p className={`text-sm sm:text-base leading-relaxed font-sans ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-            Welcome to our platform, where education goes beyond traditional memorization to foster true, deep-rooted understanding.
-          </p>
-          
-          <div className={`p-5 rounded-2xl backdrop-blur-sm space-y-3 border ${
-            isLightMode 
-              ? 'bg-white/80 border-slate-200' 
-              : 'bg-slate-950/70 border-slate-800/80'
-          }`}>
-            <h3 className={`text-xs font-bold ${isLightMode ? 'text-blue-900' : 'text-cyan-600'} font-mono uppercase tracking-wider flex items-center gap-2`}>
-              <Target className={`w-4 h-4 ${isLightMode ? 'text-blue-900' : 'text-cyan-600'}`} />
-              Our Mission
-            </h3>
-            <p className={`text-xs sm:text-sm leading-relaxed font-semibold font-sans ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>
-              To transform the way students learn by shifting the focus from <span className={`hover:underline decoration-cyan-400 ${isLightMode ? 'text-cyan-800 font-bold' : 'text-white'}`}>"memorizing for exams"</span> to <span className={`hover:underline decoration-teal-400 ${isLightMode ? 'text-teal-800 font-bold' : 'text-white'}`}>"understanding for life."</span> We believe that once a concept is crystal clear, top grades and academic success naturally follow.
+        </section>
+      </Reveal>
+
+      {/* ── NUMBERS ── */}
+      <section className="space-y-6">
+        <Reveal>
+          <div className="text-center space-y-2">
+            <span className="cl-eyebrow">Proven results</span>
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight cl-heading">Concepts that turn into <span className="cl-gradient-text">marks</span></h2>
+            <p className="text-sm font-medium cl-muted max-w-2xl mx-auto">
+              Year after year, our students deliver strong results in the CBSE Class X Board Examinations. By focusing on Core Mathematics and Science, we help them go beyond expectations.
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* ── SECTION 2: THE VISIONaries ── */}
-      <div className="space-y-6">
-        <div className="space-y-1">
-          <span className={`text-[10px] ${isLightMode ? 'text-blue-900' : 'text-cyan-600'} font-mono font-black uppercase tracking-widest block`}>
-            The Leadership
-          </span>
-          <h2 className={`text-2xl font-black tracking-tight flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
-            🚀 Our Story & Academic Vision
-          </h2>
-          <p className="text-xs text-slate-400 font-semibold max-w-xl">
-            Meet the pioneers bridging the gap between rote learning and true conceptual comprehension.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-
-          {/* Nisha Sharma Card */}
-          <div className={`p-6 rounded-2xl border transition duration-300 flex flex-col justify-between space-y-4 ${
-            isLightMode 
-              ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm text-slate-800' 
-              : 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-          }`}>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center text-teal-500">
-                  <User className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Mrs. Nisha Sharma</h3>
-                  <span className="text-[10px] uppercase font-mono font-black text-teal-600 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
-                    Founder
-                  </span>
-                </div>
+        </Reveal>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {STATS.map((s, i) => (
+            <Reveal key={s.label} delay={i * 80}>
+              <div className="cl-card cl-card-hover h-full p-5 sm:p-6 text-center relative overflow-hidden">
+                <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${s.accent}`} />
+                <p className={`text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${s.accent} bg-clip-text text-transparent`} style={{ WebkitTextFillColor: 'transparent' }}>{s.value}</p>
+                <p className="mt-2 text-xs font-black uppercase tracking-[0.14em] cl-heading">{s.label}</p>
+                <p className="mt-1 text-xs font-medium cl-muted leading-snug">{s.note}</p>
               </div>
-              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                The idea behind Conceptual Learning is Mrs. Nisha Sharma's. She believes that a student learns best when every topic is understood from the basics, and not just learnt by heart. The whole platform is built on this thought.
-              </p>
-              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                Her way is simple. Explain the reason first, let the student try the questions, and correct the mistakes together. No doubt is too small to ask, and every student can be good at Maths and Science.
-              </p>
-            </div>
-            <div className={`pt-3 flex items-center justify-between text-[11px] font-mono border-t ${isLightMode ? 'border-slate-100' : 'border-slate-900/60'}`}>
-              <span className="text-teal-600 font-extrabold uppercase tracking-wider">Founder</span>
-              <Heart className="w-3.5 h-3.5 text-teal-500 fill-teal-500/20 animate-pulse" />
-            </div>
-          </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
 
-          {/* Rohit Sharma Card */}
-          <div className={`p-6 rounded-2xl border transition duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden ${
-            isLightMode 
-              ? 'bg-white border-slate-200 hover:border-slate-300 shadow-sm text-slate-800' 
-              : 'bg-gradient-to-b from-slate-900 to-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
-          }`}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-                  <Flame className="w-5 h-5 animate-pulse" />
+      {/* ── LEADERSHIP ── */}
+      <section className="space-y-6">
+        <Reveal>
+          <div className="text-center space-y-2">
+            <span className="cl-eyebrow">The leadership</span>
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight cl-heading">Our story and <span className="cl-gradient-text">academic vision</span></h2>
+            <p className="text-sm font-medium cl-muted max-w-xl mx-auto">Meet the people bridging the gap between rote learning and real understanding.</p>
+          </div>
+        </Reveal>
+        <div className="grid md:grid-cols-2 gap-6 items-stretch">
+          <Reveal className="h-full">
+            <Leader
+              initials="NS" name="Mrs. Nisha Sharma" role="Founder" accent="from-teal-400 to-cyan-500" footer="Founder"
+              paragraphs={[
+                "The idea behind Conceptual Learning is Mrs. Nisha Sharma's. She believes that a student learns best when every topic is understood from the basics, and not just learnt by heart. The whole platform is built on this thought.",
+                'Her way is simple. Explain the reason first, let the student try the questions, and correct the mistakes together. No doubt is too small to ask, and every student can be good at Maths and Science.',
+              ]}
+            />
+          </Reveal>
+          <Reveal delay={100} className="h-full">
+            <Leader
+              initials="RS" name="Mr. Rohit Sharma" role="Core Academic Lead" accent="from-amber-400 to-orange-500" footer="Academic Mentor"
+              paragraphs={[
+                'At the heart of this academic platform is Mr. Rohit Sharma. He is passionate about his work and has conquered many competitive examinations. As a proficient teacher who excels at explaining concepts to students, he transforms complex, challenging topics into clear, highly intuitive lessons.',
+                'His clear and well-planned way of teaching helps students do well in school examinations and also builds a strong base for engineering and medical entrance tests.',
+              ]}
+            />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── HOW WE TEACH ── */}
+      <section className="space-y-6">
+        <Reveal>
+          <div className="text-center space-y-2">
+            <span className="cl-eyebrow">How we teach</span>
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight cl-heading">Understanding, <span className="cl-gradient-text">step by step</span></h2>
+          </div>
+        </Reveal>
+        <div className="grid md:grid-cols-3 gap-5">
+          {WAYS.map((w, i) => {
+            const Icon = w.icon;
+            return (
+              <Reveal key={w.title} delay={i * 90} className="h-full">
+                <div className="cl-card cl-card-hover h-full p-6">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br from-cyan-400 to-teal-400 shadow-lg shadow-cyan-500/20">
+                    <Icon className="w-6 h-6 text-slate-950" />
+                  </div>
+                  <h3 className="mt-4 text-base font-black cl-heading">{w.title}</h3>
+                  <p className="mt-1.5 text-sm font-medium leading-relaxed cl-page">{w.text}</p>
                 </div>
-                <div>
-                  <h3 className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Mr. Rohit Sharma</h3>
-                  <span className="text-[10px] uppercase font-mono font-black text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
-                    Core Academic Lead
-                  </span>
+              </Reveal>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── CLASSES ── */}
+      <section className="space-y-6">
+        <Reveal>
+          <div className="text-center space-y-2">
+            <span className="cl-eyebrow">Admissions and mentorship</span>
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight cl-heading">Classes we <span className="cl-gradient-text">cater to</span></h2>
+            <p className="text-sm font-medium cl-muted max-w-xl mx-auto">Focused, concept-driven online and offline mentorship for these classes.</p>
+          </div>
+        </Reveal>
+        <div className="grid sm:grid-cols-3 gap-5">
+          {CLASSES.map((c, i) => (
+            <Reveal key={c.name} delay={i * 90} className="h-full">
+              <div className="cl-card cl-card-hover h-full p-7 text-center">
+                <div className={`mx-auto w-20 h-20 rounded-full bg-gradient-to-br ${c.ring} p-[3px] shadow-xl`}>
+                  <div className="w-full h-full rounded-full flex items-center justify-center text-2xl font-black cl-heading" style={{ background: 'var(--cl-bg)' }}>{c.roman}</div>
                 </div>
+                <h3 className="mt-4 text-lg font-black cl-heading">{c.name}</h3>
+                <p className="mt-1 text-sm font-bold cl-muted">{c.tag}</p>
               </div>
-              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                At the heart of this academic platform is Mr. Rohit Sharma. He is passionate about his work and has conquered many competitive examinations. As a proficient teacher who excels at explaining concepts to students, he transforms complex, challenging topics into clear, highly intuitive lessons.
-              </p>
-              <p className={`text-xs sm:text-sm leading-relaxed font-medium ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                His clear and well-planned way of teaching helps students do well in school examinations and also builds a strong base for engineering and medical entrance tests.
-              </p>
-            </div>
-            <div className={`pt-3 flex items-center justify-between text-[11px] font-mono border-t ${isLightMode ? 'border-slate-100' : 'border-slate-900/60'}`}>
-              <span className="text-amber-500 font-extrabold uppercase tracking-wider">Academic Mentor</span>
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            </div>
-          </div>
-
+            </Reveal>
+          ))}
         </div>
-      </div>
+      </section>
 
-      {/* ── SECTION 3: CLASSES DETAILS ── */}
-      <div className="space-y-5">
-        <div className="space-y-1">
-          <span className="text-[10px] text-indigo-500 font-mono font-black uppercase tracking-widest block">
-            Admissions & Mentorship
-          </span>
-          <h2 className={`text-xl font-black tracking-tight flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
-            📚 Classes We Cater To
-          </h2>
-          <p className="text-xs text-slate-400 font-semibold">
-            Currently, our platform provides highly focused, concept-driven online and offline mentorship exclusively for:
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          
-          <div className={`p-5 rounded-xl border transition text-center space-y-2 ${
-            isLightMode 
-              ? 'bg-white border-slate-200 hover:border-cyan-500/35 shadow-sm text-slate-800' 
-              : 'bg-[#090f1d] border-slate-800/80 hover:border-cyan-500/30'
-          }`}>
-            <div className={`w-9 h-9 rounded-full ${isLightMode ? 'bg-blue-100 text-blue-900' : 'bg-cyan-500/10 text-cyan-500'} flex items-center justify-center mx-auto text-xs font-mono font-black`}>
-              VIII
-            </div>
-            <h4 className={`text-sm font-bold font-sans ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Class VIII</h4>
-            <span className={`text-[10.5px] font-extrabold uppercase px-2.5 py-1.5 rounded-lg border font-sans tracking-wide block ${
-              isLightMode 
-                ? 'bg-blue-50 text-blue-900 border-blue-200' 
-                : 'bg-cyan-950/60 text-cyan-200 border-cyan-500/35'
-            }`}>
-              Foundation of Concepts
-            </span>
+      {/* ── LEDGER ── */}
+      <Reveal>
+        <section className="cl-card p-6 sm:p-8">
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-400">
+            <Trophy className="w-4 h-4" /> The performance record
           </div>
-
-          <div className={`p-5 rounded-xl border transition text-center space-y-2 ${
-            isLightMode 
-              ? 'bg-white border-slate-200 hover:border-indigo-500/35 shadow-sm text-slate-800' 
-              : 'bg-[#090f1d] border-slate-800/80 hover:border-indigo-500/30'
-          }`}>
-            <div className="w-9 h-9 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500 mx-auto text-xs font-mono font-black">
-              IX
-            </div>
-            <h4 className={`text-sm font-bold font-sans ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Class IX</h4>
-            <span className={`text-[10.5px] font-extrabold uppercase px-2.5 py-1.5 rounded-lg border font-sans tracking-wide block ${
-              isLightMode 
-                ? 'bg-indigo-50 text-indigo-800 border-indigo-200' 
-                : 'bg-indigo-950/60 text-indigo-200 border-indigo-500/35'
-            }`}>
-              Foundation for Competitions
-            </span>
-          </div>
-
-          <div className={`p-5 rounded-xl border transition text-center space-y-2 ${
-            isLightMode 
-              ? 'bg-white border-slate-200 hover:border-emerald-500/35 shadow-sm text-slate-800' 
-              : 'bg-[#090f1d] border-slate-800/80 hover:border-emerald-500/30'
-          }`}>
-            <div className="w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 mx-auto text-xs font-mono font-black">
-              X
-            </div>
-            <h4 className={`text-sm font-bold font-sans ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Class X</h4>
-            <span className={`text-[10.5px] font-extrabold uppercase px-2.5 py-1.5 rounded-lg border font-sans tracking-wide block ${
-              isLightMode 
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                : 'bg-emerald-950/60 text-emerald-200 border-emerald-500/35'
-            }`}>
-              Board Excellence
-            </span>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ── SECTION 4: PERFORMANCE MILESTONES ── */}
-      <div className={`p-6 sm:p-8 rounded-2xl border space-y-6 ${
-        isLightMode 
-          ? 'bg-gradient-to-br from-slate-100 to-slate-50 border-slate-200 text-slate-800 shadow-md' 
-          : 'bg-gradient-to-br from-[#0c1222] to-slate-950 border-slate-800 text-slate-100'
-      }`}>
-        <div className="space-y-1">
-          <span className="text-[10px] text-yellow-500 font-mono font-black uppercase tracking-widest block">
-            Proven Results
-          </span>
-          <h2 className={`text-xl font-black tracking-tight flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>
-            🏆 Our Track Record: Academic Excellence
-          </h2>
-          <p className={`text-xs leading-relaxed font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
-            We don’t just claim to teach differently—our results prove it. Year after year, our students deliver phenomenal performances in the CBSE Class X Board Examinations, turning conceptual clarity into top-tier scores.
-          </p>
-          <p className="text-xs text-slate-400 font-semibold font-sans">
-            By focusing heavily on Core Mathematics and Science, we ensure our students outshine expectations. Here is a brief look at our stellar performance milestones:
-          </p>
-        </div>
-
-        {/* Bento Board Performance Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-2">
-          
-          <div className={`p-4 border rounded-xl space-y-1.5 text-center relative overflow-hidden ${
-            isLightMode 
-              ? 'bg-white border-slate-200 shadow-sm' 
-              : 'bg-slate-900/60 border-slate-850'
-          }`}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-indigo-500" />
-            <span className={`text-[9px] ${isLightMode ? 'text-blue-900' : 'text-cyan-500'} uppercase font-mono tracking-wider block font-black`}>The Ultimate Heights</span>
-            <span className={`text-3xl font-black font-mono block ${isLightMode ? 'text-slate-900' : 'text-white'}`}>98.6%</span>
-            <p className="text-[10.5px] leading-snug text-slate-400 font-medium">Staggering highest overall score achieved by our student pool.</p>
-          </div>
-
-          <div className={`p-4 border rounded-xl space-y-1.5 text-center relative overflow-hidden ${
-            isLightMode 
-              ? 'bg-white border-slate-200 shadow-sm' 
-              : 'bg-slate-900/60 border-slate-850'
-          }`}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-yellow-500 to-amber-500" />
-            <span className="text-[9px] text-yellow-500 uppercase font-mono tracking-wider block font-black">Subject Perfection</span>
-            <span className={`text-3xl font-black font-mono block ${isLightMode ? 'text-slate-900' : 'text-white'}`}>99/100</span>
-            <p className="text-[10.5px] leading-snug text-slate-400 font-medium">In individual core subjects, peaking at 99 in Science & Math.</p>
-          </div>
-
-          <div className={`p-4 border rounded-xl space-y-1.5 text-center relative overflow-hidden ${
-            isLightMode 
-              ? 'bg-white border-slate-200 shadow-sm' 
-              : 'bg-slate-900/60 border-slate-850'
-          }`}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-500" />
-            <span className="text-[9px] text-emerald-500 uppercase font-mono tracking-wider block font-black">95%+ Elite Club</span>
-            <span className={`text-3xl font-black font-mono block ${isLightMode ? 'text-slate-900' : 'text-white'}`}>8+ Qs</span>
-            <p className="text-[10.5px] leading-snug text-slate-400 font-medium">Over 8 students comfortably crossed 95% overall aggregate.</p>
-          </div>
-
-          <div className={`p-4 border rounded-xl space-y-1.5 text-center relative overflow-hidden ${
-            isLightMode 
-              ? 'bg-white border-slate-200 shadow-sm' 
-              : 'bg-slate-900/60 border-slate-850'
-          }`}>
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
-            <span className="text-[9px] text-indigo-500 uppercase font-mono tracking-wider block font-black">90%+ Super Achievers</span>
-            <span className={`text-3xl font-black font-mono block ${isLightMode ? 'text-slate-900' : 'text-white'}`}>12+ Qs</span>
-            <p className="text-[10.5px] leading-snug text-slate-400 font-medium">An overwhelming majority shatttered the 90% benchmark.</p>
-          </div>
-
-        </div>
-
-        {/* Long Text Bullet Checklist card */}
-        <div className={`p-4 sm:p-5 rounded-xl border space-y-3 ${
-          isLightMode 
-            ? 'bg-white border-slate-200' 
-            : 'bg-slate-950/80 border-slate-850'
-        }`}>
-          <h4 className="text-xs font-black text-amber-500 font-mono uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5" />
-            Detailed Performance Ledger
-          </h4>
-          
-          <ul className={`space-y-3 text-xs ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-            <li className="flex gap-2.5 items-start">
-              <span className={`shrink-0 select-none ${isLightMode ? 'text-blue-900' : 'text-cyan-500'}`}>🚀</span>
-              <p className="font-semibold leading-relaxed">
-                <strong className={isLightMode ? 'text-slate-900' : 'text-white'}>The Ultimate Heights:</strong> Our student pool achieved a staggering highest overall score of <b className={`${isLightMode ? 'text-blue-900' : 'text-cyan-600'} font-bold`}>98.6%</b>.
-              </p>
-            </li>
-            <li className="flex gap-2.5 items-start">
-              <span className={`shrink-0 select-none ${isLightMode ? 'text-blue-900' : 'text-cyan-500'}`}>💯</span>
-              <p className="font-semibold leading-relaxed">
-                <strong className={isLightMode ? 'text-slate-900' : 'text-white'}>Near-Perfect Subject Scores:</strong> In individual core subjects, our students peaked at an incredible <b className={`${isLightMode ? 'text-blue-950 font-black' : 'text-cyan-400 font-bold'}`}>99/100</b> in Science and <b className={`${isLightMode ? 'text-blue-950 font-black' : 'text-cyan-400 font-bold'}`}>99/100</b> in Mathematics.
-              </p>
-            </li>
-            <li className="flex gap-2.5 items-start">
-              <span className="text-indigo-500 shrink-0 select-none">🎖️</span>
-              <p className="font-semibold leading-relaxed">
-                <strong className={isLightMode ? 'text-slate-900' : 'text-white'}>The 95%+ Elite Club:</strong> Over <b className="text-emerald-600 font-bold">8 students</b> comfortably crossed the prestigious 95% overall aggregate mark, showcasing consistent excellence across the board.
-              </p>
-            </li>
-            <li className="flex gap-2.5 items-start">
-              <span className="text-rose-500 shrink-0 select-none">🎯</span>
-              <p className="font-semibold leading-relaxed">
-                <strong className={isLightMode ? 'text-slate-900' : 'text-white'}>The 90% Super Achievers:</strong> An overwhelming majority—<b className="text-amber-600 font-bold">12+ students</b>—shattered the 90% overall benchmark, proving that our methodology works for everyone, not just a select few.
-              </p>
-            </li>
-            <li className="flex gap-2.5 items-start">
-              <span className="text-amber-500 shrink-0 select-none">📈</span>
-              <p className="font-semibold leading-relaxed">
-                <strong className={isLightMode ? 'text-slate-900' : 'text-white'}>Subject Mastery:</strong> Even beyond overall percentages, a vast majority of our students consistently score <b className="text-amber-600 font-black">90+ marks out of 100</b> specifically in Mathematics and Science.
-              </p>
-            </li>
+          <ul className="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-5">
+            {HIGHLIGHTS.map((h) => {
+              const Icon = h.icon;
+              return (
+                <li key={h.title} className="flex gap-3.5 items-start">
+                  <span className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${h.tone}`} style={{ background: 'var(--cl-surface-flat)', border: '1px solid var(--cl-border)' }}>
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-black cl-heading">{h.title}</p>
+                    <p className="mt-0.5 text-sm font-medium leading-relaxed cl-page">{h.text}</p>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
-        </div>
-      </div>
+          <div className="cl-divider my-6" />
+          <p className="text-sm font-semibold cl-page flex items-center gap-2">
+            Ready to learn the concept first? Join us, online or in the classroom. <ArrowRight className="w-4 h-4 text-cyan-400 shrink-0" />
+          </p>
+        </section>
+      </Reveal>
 
     </div>
   );
