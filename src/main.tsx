@@ -42,6 +42,15 @@ function Root() {
   );
 }
 
+// Apply the saved light theme before the first paint, so the theme-aware text colours (which key off
+// the html.light class) are right on the public home page and sign-in screens too.
+try {
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.add('light');
+    document.body.classList.add('light');
+  }
+} catch { /* storage unavailable */ }
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Root />

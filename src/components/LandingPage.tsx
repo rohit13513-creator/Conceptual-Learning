@@ -113,7 +113,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
   const [activeReview, setActiveReview] = useState<GoogleReview | null>(null);
   const [showAbout, setShowAbout] = useState(false);
 
-  const navLink = `hidden lg:inline text-sm xl:text-base font-bold cursor-pointer ${light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`;
+  const navLink = `hidden lg:inline whitespace-nowrap text-sm xl:text-base font-bold cursor-pointer ${light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`;
   const iconBubble = 'w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-400 flex items-center justify-center shadow-lg shadow-cyan-500/20';
 
   const headerEl = (
@@ -121,7 +121,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
       <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex items-center gap-2.5 sm:gap-3.5">
         <img src="/favicon.svg" alt="Conceptual Learning Online" className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl shadow-lg shadow-cyan-500/25 shrink-0" />
         <button onClick={() => setShowAbout(false)} aria-label="Conceptual Learning Online home" className="text-left cursor-pointer leading-none">
-          <span className={`block font-black tracking-tight text-[17px] sm:text-3xl leading-tight ${heading}`}>Conceptual Learning</span>
+          <span className={`block whitespace-nowrap font-black tracking-tight text-[17px] sm:text-2xl xl:text-3xl leading-tight ${heading}`}>Conceptual Learning</span>
           <span className="block font-black uppercase text-[10px] sm:text-sm tracking-[0.35em] sm:tracking-[0.45em] bg-gradient-to-r from-cyan-400 to-teal-300 bg-clip-text text-transparent mt-0.5">Online</span>
         </button>
         <div className="flex-1" />

@@ -1,9 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Body text: Inter (very easy to read). Headings and bold labels: Poppins (friendly and catchy). */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Poppins", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Slightly larger text steps so nothing is hard to read */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.1875rem;
 }
 
 body {
@@ -542,3 +549,379 @@ html #qbank-container button.rounded-xl.border:hover {
   box-shadow: var(--cl-glow);
 }
 html #ncert-container h2, html #qbank-container h2, html #assessment-container h2 { letter-spacing: -0.015em; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   READABLE TYPE AND CALMER COLOUR (all pages, dark and light)
+   ═══════════════════════════════════════════════════════════════════════════ */
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.55;
+}
+h1, h2, h3, h4, .font-black, .font-extrabold {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+h1 { line-height: 1.12; }
+h2, h3 { line-height: 1.22; }
+/* the typewriter font made small labels hard to read: use the clean body font everywhere except real code */
+.font-mono { font-family: var(--font-sans) !important; font-variant-numeric: tabular-nums; }
+code, pre, kbd, samp { font-family: var(--font-mono) !important; }
+.tracking-widest { letter-spacing: 0.1em; }
+.tracking-wider { letter-spacing: 0.06em; }
+input, select, textarea, button { font-family: inherit; }
+
+/* very small sizes are lifted to a comfortable minimum */
+.text-\[5px\], .text-\[6\.5px\], .text-\[7px\], .text-\[7\.5px\], .text-\[8px\], .text-\[8\.5px\] { font-size: 11.5px !important; line-height: 1.35 !important; }
+.text-\[9px\], .text-\[9\.5px\] { font-size: 12px !important; line-height: 1.4 !important; }
+.text-\[10px\], .text-\[10\.5px\] { font-size: 12.5px !important; line-height: 1.45 !important; }
+.text-\[11px\], .text-\[11\.5px\] { font-size: 13px !important; line-height: 1.5 !important; }
+.text-\[12px\] { font-size: 13.5px !important; }
+.text-\[12\.5px\] { font-size: 14px !important; }
+.text-\[13px\] { font-size: 14.5px !important; }
+.text-\[13\.5px\] { font-size: 15px !important; }
+.text-\[14px\] { font-size: 15.5px !important; }
+.text-\[15px\] { font-size: 16px !important; }
+
+/* ── Dark theme: dim greys are brightened, deep shades of colour are lifted ── */
+html:not(.light) .text-slate-300 { color: #dbe3ee; }
+html:not(.light) .text-slate-400 { color: #bcc8da; }
+html:not(.light) .text-slate-500 { color: #a6b4c8; }
+html:not(.light) .text-slate-600 { color: #96a6bc; }
+html:not(.light) .text-slate-700 { color: #8a9bb3; }
+html:not(.light) .text-gray-400 { color: #bcc8da; }
+html:not(.light) .text-gray-500 { color: #a6b4c8; }
+html:not(.light) .placeholder\:text-slate-600::placeholder, html:not(.light) .placeholder\:text-slate-500::placeholder { color: #8396ad; }
+html:not(.light) .text-cyan-600, html:not(.light) .text-cyan-700, html:not(.light) .text-cyan-800, html:not(.light) .text-cyan-900 { color: var(--color-cyan-400); }
+html:not(.light) .text-sky-600, html:not(.light) .text-sky-700, html:not(.light) .text-sky-800, html:not(.light) .text-sky-900 { color: var(--color-sky-400); }
+html:not(.light) .text-blue-600, html:not(.light) .text-blue-700, html:not(.light) .text-blue-800, html:not(.light) .text-blue-900 { color: var(--color-blue-400); }
+html:not(.light) .text-indigo-600, html:not(.light) .text-indigo-700, html:not(.light) .text-indigo-800, html:not(.light) .text-indigo-900 { color: var(--color-indigo-400); }
+html:not(.light) .text-violet-600, html:not(.light) .text-violet-700, html:not(.light) .text-violet-800, html:not(.light) .text-violet-900 { color: var(--color-violet-400); }
+html:not(.light) .text-purple-600, html:not(.light) .text-purple-700, html:not(.light) .text-purple-800, html:not(.light) .text-purple-900 { color: var(--color-purple-400); }
+html:not(.light) .text-fuchsia-600, html:not(.light) .text-fuchsia-700, html:not(.light) .text-fuchsia-800, html:not(.light) .text-fuchsia-900 { color: var(--color-fuchsia-400); }
+html:not(.light) .text-pink-600, html:not(.light) .text-pink-700, html:not(.light) .text-pink-800, html:not(.light) .text-pink-900 { color: var(--color-pink-400); }
+html:not(.light) .text-rose-600, html:not(.light) .text-rose-700, html:not(.light) .text-rose-800, html:not(.light) .text-rose-900 { color: var(--color-rose-400); }
+html:not(.light) .text-red-600, html:not(.light) .text-red-700, html:not(.light) .text-red-800, html:not(.light) .text-red-900 { color: var(--color-red-400); }
+html:not(.light) .text-orange-600, html:not(.light) .text-orange-700, html:not(.light) .text-orange-800, html:not(.light) .text-orange-900 { color: var(--color-orange-400); }
+html:not(.light) .text-amber-600, html:not(.light) .text-amber-700, html:not(.light) .text-amber-800, html:not(.light) .text-amber-900 { color: var(--color-amber-400); }
+html:not(.light) .text-yellow-600, html:not(.light) .text-yellow-700, html:not(.light) .text-yellow-800, html:not(.light) .text-yellow-900 { color: var(--color-yellow-400); }
+html:not(.light) .text-lime-600, html:not(.light) .text-lime-700, html:not(.light) .text-lime-800, html:not(.light) .text-lime-900 { color: var(--color-lime-400); }
+html:not(.light) .text-green-600, html:not(.light) .text-green-700, html:not(.light) .text-green-800, html:not(.light) .text-green-900 { color: var(--color-green-400); }
+html:not(.light) .text-emerald-600, html:not(.light) .text-emerald-700, html:not(.light) .text-emerald-800, html:not(.light) .text-emerald-900 { color: var(--color-emerald-400); }
+html:not(.light) .text-teal-600, html:not(.light) .text-teal-700, html:not(.light) .text-teal-800, html:not(.light) .text-teal-900 { color: var(--color-teal-400); }
+
+/* ── Light theme: every coloured text becomes a deep shade that reads well on white ── */
+html.light .text-slate-500, html.light .text-gray-500 { color: #475569 !important; }
+html.light .text-slate-600 { color: #334155 !important; }
+html.light ::placeholder { color: #64748b !important; }
+html.light .text-cyan-300, html.light .text-cyan-400, html.light .text-cyan-500, html.light .text-cyan-600 { color: var(--color-cyan-700) !important; }
+html.light .text-sky-300, html.light .text-sky-400, html.light .text-sky-500, html.light .text-sky-600 { color: var(--color-sky-700) !important; }
+html.light .text-blue-300, html.light .text-blue-400, html.light .text-blue-500, html.light .text-blue-600 { color: var(--color-blue-700) !important; }
+html.light .text-indigo-300, html.light .text-indigo-400, html.light .text-indigo-500, html.light .text-indigo-600 { color: var(--color-indigo-700) !important; }
+html.light .text-violet-300, html.light .text-violet-400, html.light .text-violet-500, html.light .text-violet-600 { color: var(--color-violet-700) !important; }
+html.light .text-purple-300, html.light .text-purple-400, html.light .text-purple-500, html.light .text-purple-600 { color: var(--color-purple-700) !important; }
+html.light .text-fuchsia-300, html.light .text-fuchsia-400, html.light .text-fuchsia-500, html.light .text-fuchsia-600 { color: var(--color-fuchsia-700) !important; }
+html.light .text-pink-300, html.light .text-pink-400, html.light .text-pink-500, html.light .text-pink-600 { color: var(--color-pink-700) !important; }
+html.light .text-rose-300, html.light .text-rose-400, html.light .text-rose-500, html.light .text-rose-600 { color: var(--color-rose-700) !important; }
+html.light .text-red-300, html.light .text-red-400, html.light .text-red-500, html.light .text-red-600 { color: var(--color-red-700) !important; }
+html.light .text-orange-300, html.light .text-orange-400, html.light .text-orange-500, html.light .text-orange-600 { color: var(--color-orange-700) !important; }
+html.light .text-amber-300, html.light .text-amber-400, html.light .text-amber-500, html.light .text-amber-600 { color: var(--color-amber-700) !important; }
+html.light .text-yellow-300, html.light .text-yellow-400, html.light .text-yellow-500, html.light .text-yellow-600 { color: var(--color-yellow-700) !important; }
+html.light .text-lime-300, html.light .text-lime-400, html.light .text-lime-500, html.light .text-lime-600 { color: var(--color-lime-700) !important; }
+html.light .text-green-300, html.light .text-green-400, html.light .text-green-500, html.light .text-green-600 { color: var(--color-green-700) !important; }
+html.light .text-emerald-300, html.light .text-emerald-400, html.light .text-emerald-500, html.light .text-emerald-600 { color: var(--color-emerald-700) !important; }
+html.light .text-teal-300, html.light .text-teal-400, html.light .text-teal-500, html.light .text-teal-600 { color: var(--color-teal-700) !important; }
+html.light .text-\[\#22d3ee\] { color: #0e7490 !important; }
+
+/* ── Calm palette on the learning screens: one cool accent, one secondary, and warm amber for highlights ── */
+[id^="learn-"][id$="-container"]:not(#learn-optics-container):not(#learn-chemistry-container),
+#ncert-container,
+#qbank-container,
+#assessment-container,
+#about-us-container,
+.cl-calm {
+  --color-sky-50: #ecfeff;
+  --color-sky-100: #cffafe;
+  --color-sky-200: #a5f3fc;
+  --color-sky-300: #67e8f9;
+  --color-sky-400: #22d3ee;
+  --color-sky-500: #06b6d4;
+  --color-sky-600: #0891b2;
+  --color-sky-700: #0e7490;
+  --color-sky-800: #155e75;
+  --color-sky-900: #164e63;
+  --color-sky-950: #083344;
+  --color-blue-50: #f5f3ff;
+  --color-blue-100: #ede9fe;
+  --color-blue-200: #ddd6fe;
+  --color-blue-300: #c4b5fd;
+  --color-blue-400: #a78bfa;
+  --color-blue-500: #8b5cf6;
+  --color-blue-600: #7c3aed;
+  --color-blue-700: #6d28d9;
+  --color-blue-800: #5b21b6;
+  --color-blue-900: #4c1d95;
+  --color-blue-950: #2e1065;
+  --color-indigo-50: #f5f3ff;
+  --color-indigo-100: #ede9fe;
+  --color-indigo-200: #ddd6fe;
+  --color-indigo-300: #c4b5fd;
+  --color-indigo-400: #a78bfa;
+  --color-indigo-500: #8b5cf6;
+  --color-indigo-600: #7c3aed;
+  --color-indigo-700: #6d28d9;
+  --color-indigo-800: #5b21b6;
+  --color-indigo-900: #4c1d95;
+  --color-indigo-950: #2e1065;
+  --color-purple-50: #f5f3ff;
+  --color-purple-100: #ede9fe;
+  --color-purple-200: #ddd6fe;
+  --color-purple-300: #c4b5fd;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-purple-600: #7c3aed;
+  --color-purple-700: #6d28d9;
+  --color-purple-800: #5b21b6;
+  --color-purple-900: #4c1d95;
+  --color-purple-950: #2e1065;
+  --color-fuchsia-50: #f5f3ff;
+  --color-fuchsia-100: #ede9fe;
+  --color-fuchsia-200: #ddd6fe;
+  --color-fuchsia-300: #c4b5fd;
+  --color-fuchsia-400: #a78bfa;
+  --color-fuchsia-500: #8b5cf6;
+  --color-fuchsia-600: #7c3aed;
+  --color-fuchsia-700: #6d28d9;
+  --color-fuchsia-800: #5b21b6;
+  --color-fuchsia-900: #4c1d95;
+  --color-fuchsia-950: #2e1065;
+  --color-pink-50: #f5f3ff;
+  --color-pink-100: #ede9fe;
+  --color-pink-200: #ddd6fe;
+  --color-pink-300: #c4b5fd;
+  --color-pink-400: #a78bfa;
+  --color-pink-500: #8b5cf6;
+  --color-pink-600: #7c3aed;
+  --color-pink-700: #6d28d9;
+  --color-pink-800: #5b21b6;
+  --color-pink-900: #4c1d95;
+  --color-pink-950: #2e1065;
+  --color-orange-50: #fffbeb;
+  --color-orange-100: #fef3c7;
+  --color-orange-200: #fde68a;
+  --color-orange-300: #fcd34d;
+  --color-orange-400: #fbbf24;
+  --color-orange-500: #f59e0b;
+  --color-orange-600: #d97706;
+  --color-orange-700: #b45309;
+  --color-orange-800: #92400e;
+  --color-orange-900: #78350f;
+  --color-orange-950: #451a03;
+  --color-yellow-50: #fffbeb;
+  --color-yellow-100: #fef3c7;
+  --color-yellow-200: #fde68a;
+  --color-yellow-300: #fcd34d;
+  --color-yellow-400: #fbbf24;
+  --color-yellow-500: #f59e0b;
+  --color-yellow-600: #d97706;
+  --color-yellow-700: #b45309;
+  --color-yellow-800: #92400e;
+  --color-yellow-900: #78350f;
+  --color-yellow-950: #451a03;
+  --color-lime-50: #ecfdf5;
+  --color-lime-100: #d1fae5;
+  --color-lime-200: #a7f3d0;
+  --color-lime-300: #6ee7b7;
+  --color-lime-400: #34d399;
+  --color-lime-500: #10b981;
+  --color-lime-600: #059669;
+  --color-lime-700: #047857;
+  --color-lime-800: #065f46;
+  --color-lime-900: #064e3b;
+  --color-lime-950: #022c22;
+}
+
+/* ── Light theme: any remaining dark card background or gradient stop becomes a soft light tint ── */
+html.light .bg-\[\#0c1324\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#1e293b\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0b1220\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0d1527\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#070d18\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#121927\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0b101c\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#111827\]\/50 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#162724\] { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#1d293d\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#111c2f\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#090e1a\]\/80 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#121826\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#090e1a\]\/85 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#111625\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#111726\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0d1527\]\/90 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#101b33\]\/60 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0a0f1d\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#121c32\]\/95 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#060b14\]\/80 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0a1020\]\/95 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0f1a12\] { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0b1710\] { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0d1424\]\/95 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .via-\[\#0a2018\]\/40 { --tw-gradient-via: #f0fdf4 !important; }
+html.light .via-\[\#0a2820\]\/40 { --tw-gradient-via: #f0fdf4 !important; }
+html.light .bg-\[\#0a1f14\] { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0a1a1f\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0a1622\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0b1420\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .via-\[\#0a1a28\]\/40 { --tw-gradient-via: #f1f5f9 !important; }
+html.light .bg-\[\#0b101d\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0f171a\] { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#11192d\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#16213b\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#1b2a47\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .via-\[\#0a182d\]\/40 { --tw-gradient-via: #f1f5f9 !important; }
+html.light .bg-\[\#1e2d4a\]\/85 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .from-\[\#0c1322\] { --tw-gradient-from: #f1f5f9 !important; }
+html.light .to-\[\#121c2e\] { --tw-gradient-to: #f1f5f9 !important; }
+html.light .bg-\[\#070b12\] { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#030712\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#090f1e\] { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#050912\] { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#1c180e\] { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#121b2e\]\/80 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0f172a\]\/60 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0b0f19\] { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-\[\#111726\]\/80 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-\[\#0a1122\]\/90 { background-color: #f1f5f9 !important; border-color: #cbd5e1; }
+html.light .bg-slate-800\/40 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .from-slate-800\/40 { --tw-gradient-from: #ffffff !important; }
+html.light .to-slate-900\/40 { --tw-gradient-to: #ffffff !important; }
+html.light .to-slate-900 { --tw-gradient-to: #ffffff !important; }
+html.light .from-slate-900 { --tw-gradient-from: #ffffff !important; }
+html.light .to-slate-950 { --tw-gradient-to: #ffffff !important; }
+html.light .bg-slate-900\/35 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-slate-950\/75 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-slate-950\/55 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/40 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .from-amber-950\/60 { --tw-gradient-from: #fffbeb !important; }
+html.light .via-slate-900 { --tw-gradient-via: #ffffff !important; }
+html.light .bg-violet-950\/40 { background-color: #f5f3ff !important; border-color: #cbd5e1; }
+html.light .bg-amber-950\/40 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-slate-800\/60 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-emerald-950\/40 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-red-950\/40 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .from-cyan-950 { --tw-gradient-from: #ecfeff !important; }
+html.light .to-teal-950 { --tw-gradient-to: #f0fdfa !important; }
+html.light .bg-rose-900\/30 { background-color: #fff1f2 !important; border-color: #cbd5e1; }
+html.light .bg-rose-900\/50 { background-color: #fff1f2 !important; border-color: #cbd5e1; }
+html.light .bg-cyan-900\/10 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-emerald-900\/30 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-blue-900\/10 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-amber-950\/10 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-slate-900\/75 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-sky-950\/15 { background-color: #f0f9ff !important; border-color: #cbd5e1; }
+html.light .bg-sky-950\/30 { background-color: #f0f9ff !important; border-color: #cbd5e1; }
+html.light .bg-amber-950\/15 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-indigo-950 { background-color: #eef2ff !important; border-color: #cbd5e1; }
+html.light .bg-slate-950\/45 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-teal-950 { background-color: #f0fdfa !important; border-color: #cbd5e1; }
+html.light .bg-slate-850\/80 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-emerald-950\/50 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/50 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-amber-950\/50 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-blue-950\/50 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-purple-950\/50 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-violet-900 { background-color: #f5f3ff !important; border-color: #cbd5e1; }
+html.light .to-cyan-900 { --tw-gradient-to: #ecfeff !important; }
+html.light .bg-slate-850\/40 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-teal-950\/80 { background-color: #f0fdfa !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/80 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .via-slate-900\/60 { --tw-gradient-via: #ffffff !important; }
+html.light .bg-slate-900\/70 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-green-950\/50 { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-green-950\/30 { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .bg-indigo-950\/30 { background-color: #eef2ff !important; border-color: #cbd5e1; }
+html.light .bg-green-950\/40 { background-color: #f0fdf4 !important; border-color: #cbd5e1; }
+html.light .from-green-950\/40 { --tw-gradient-from: #f0fdf4 !important; }
+html.light .to-emerald-950\/40 { --tw-gradient-to: #ecfdf5 !important; }
+html.light .from-emerald-950\/40 { --tw-gradient-from: #ecfdf5 !important; }
+html.light .to-teal-950\/40 { --tw-gradient-to: #f0fdfa !important; }
+html.light .from-rose-950\/30 { --tw-gradient-from: #fff1f2 !important; }
+html.light .to-orange-950\/20 { --tw-gradient-to: #fff7ed !important; }
+html.light .from-cyan-950\/30 { --tw-gradient-from: #ecfeff !important; }
+html.light .to-blue-950\/20 { --tw-gradient-to: #eff6ff !important; }
+html.light .from-cyan-950\/40 { --tw-gradient-from: #ecfeff !important; }
+html.light .to-sky-950\/40 { --tw-gradient-to: #f0f9ff !important; }
+html.light .to-blue-950\/40 { --tw-gradient-to: #eff6ff !important; }
+html.light .bg-cyan-950\/10 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .from-slate-800 { --tw-gradient-from: #ffffff !important; }
+html.light .bg-emerald-950\/45 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-emerald-900\/60 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-purple-950\/45 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-purple-900\/60 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-red-950\/45 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-red-900\/60 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-orange-950\/45 { background-color: #fff7ed !important; border-color: #cbd5e1; }
+html.light .bg-orange-900\/60 { background-color: #fff7ed !important; border-color: #cbd5e1; }
+html.light .bg-amber-950\/45 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-amber-900\/60 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-teal-950\/45 { background-color: #f0fdfa !important; border-color: #cbd5e1; }
+html.light .bg-teal-900\/60 { background-color: #f0fdfa !important; border-color: #cbd5e1; }
+html.light .bg-blue-950\/45 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-blue-900\/60 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/45 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-cyan-900\/60 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-pink-950\/45 { background-color: #fdf2f8 !important; border-color: #cbd5e1; }
+html.light .bg-pink-900\/60 { background-color: #fdf2f8 !important; border-color: #cbd5e1; }
+html.light .bg-slate-900\/95 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-red-950\/70 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-purple-950\/70 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-blue-950\/70 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/70 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-pink-950\/40 { background-color: #fdf2f8 !important; border-color: #cbd5e1; }
+html.light .bg-cyan-950\/15 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-red-950\/20 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-purple-900\/40 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-purple-900\/50 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .bg-blue-900\/40 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-blue-900\/50 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-emerald-900\/40 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-emerald-900\/50 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-amber-900\/40 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-amber-900\/50 { background-color: #fffbeb !important; border-color: #cbd5e1; }
+html.light .bg-red-900\/40 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-red-900\/50 { background-color: #fef2f2 !important; border-color: #cbd5e1; }
+html.light .bg-orange-900\/40 { background-color: #fff7ed !important; border-color: #cbd5e1; }
+html.light .bg-orange-900\/50 { background-color: #fff7ed !important; border-color: #cbd5e1; }
+html.light .bg-pink-900\/40 { background-color: #fdf2f8 !important; border-color: #cbd5e1; }
+html.light .bg-pink-900\/50 { background-color: #fdf2f8 !important; border-color: #cbd5e1; }
+html.light .bg-rose-900\/40 { background-color: #fff1f2 !important; border-color: #cbd5e1; }
+html.light .bg-cyan-900\/40 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-cyan-900\/50 { background-color: #ecfeff !important; border-color: #cbd5e1; }
+html.light .bg-orange-950\/40 { background-color: #fff7ed !important; border-color: #cbd5e1; }
+html.light .bg-blue-950\/40 { background-color: #eff6ff !important; border-color: #cbd5e1; }
+html.light .bg-purple-950\/40 { background-color: #faf5ff !important; border-color: #cbd5e1; }
+html.light .from-cyan-950\/50 { --tw-gradient-from: #ecfeff !important; }
+html.light .to-teal-950\/50 { --tw-gradient-to: #f0fdfa !important; }
+html.light .bg-slate-800\/85 { background-color: #ffffff !important; border-color: #cbd5e1; }
+html.light .bg-indigo-950\/80 { background-color: #eef2ff !important; border-color: #cbd5e1; }
+html.light .bg-emerald-950\/15 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-rose-950\/60 { background-color: #fff1f2 !important; border-color: #cbd5e1; }
+html.light .bg-emerald-950\/60 { background-color: #ecfdf5 !important; border-color: #cbd5e1; }
+html.light .bg-teal-950\/15 { background-color: #f0fdfa !important; border-color: #cbd5e1; }
+
+/* inner screens set their own accent shades; keep those deep enough on white in the light theme */
+html.light #ncert-container .text-teal-400, html.light #ncert-container .text-teal-300,
+html.light #qbank-container .text-teal-400, html.light #qbank-container .text-teal-300 { color: #0f766e !important; }
+html.light #ncert-container .text-cyan-400, html.light #qbank-container .text-cyan-400,
+html.light #assessment-container .text-cyan-400, html.light #assessment-container .text-cyan-300 { color: #0e7490 !important; }
+html.light #ncert-container .text-emerald-400, html.light #qbank-container .text-emerald-400,
+html.light #assessment-container .text-emerald-400 { color: #047857 !important; }
+html.light #ncert-container .text-amber-400, html.light #qbank-container .text-amber-400,
+html.light #assessment-container .text-amber-400, html.light #assessment-container .text-yellow-400 { color: #b45309 !important; }
+html.light #learn-optics-container .text-cyan-300, html.light #learn-optics-container .text-cyan-400, html.light #learn-optics-container .text-\[\#22d3ee\],
+html.light #learn-chemistry-container .text-cyan-300, html.light #learn-chemistry-container .text-cyan-400, html.light #learn-chemistry-container .text-\[\#22d3ee\] { color: #0e7490 !important; }
