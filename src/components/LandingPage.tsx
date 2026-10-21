@@ -243,7 +243,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Doubts cleared, however small they seem</li>
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Revision papers for the chapters you choose</li>
                 <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Extra sessions to prepare for Class 11</li>
-                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Personal focus on each student's progress</li>
+                <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-cyan-400" /> Personal attention and more clarity, with your mentor right in front of you in class</li>
               </ul>
             </div>
           </div>
