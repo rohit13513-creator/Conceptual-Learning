@@ -1228,6 +1228,94 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       stripOutOfRangeLabels(parsed);
     }
 
+    // Verification pass for every question marked MISSING. A real incident: a follow-up submission
+    // whose last page clearly answered Q2 ("A 60 watt bulb has higher electrical resistance") was
+    // reported as "Q2 is still missing". Missing is the claim most easily made by simply not finding
+    // something in a long file, so each one is re-checked by a second focused call that must go
+    // through the pages one by one (first and LAST page included, answers headed with a different
+    // title such as "Exercise 7" included) and quote any answer it finds. A question is dropped from
+    // the missing list only if that call quotes an answer; if the quoted answer is wrong the question
+    // moves to the incorrect list instead (and is then verified like any other incorrect question).
+    if (!parsed.__wrongHomework && Array.isArray(parsed.missingQuestions) && parsed.missingQuestions.length > 0 && !(parsed.missingQuestions.length === 1 && /all questions/i.test(String(parsed.missingQuestions[0])))) {
+      try {
+        const missTool = {
+          name: "verify_missing",
+          description: "Report whether each question marked missing really has no answer anywhere in the submission.",
+          input_schema: {
+            type: "object",
+            properties: {
+              claims: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    question: { type: "string", description: "The question label exactly as it appears in the list of questions marked missing." },
+                    questionText: { type: "string", description: "What this question asks, copied from the question sheet (or from the assignment if there is no sheet)." },
+                    pageSearch: { type: "string", description: "Go through EVERY page of the submission in order, including the last page, and note for each page whether it holds an answer to this question -- by its number, or by what it answers (its given values or its wording), even when the page is headed with a different title or number such as 'Exercise 7'." },
+                    quotedAnswer: { type: "string", description: "The student's answer, quoted from the page where you found it, with the page number. Write exactly NONE FOUND if no page answers it." },
+                    answerIsCorrect: { type: "boolean", description: "If an answer was found: whether it is correct. Use true when nothing was found." },
+                    problemIfWrong: { type: "string", description: "If an answer was found but is wrong: say exactly what is wrong. Empty string otherwise." },
+                    verdict: { type: "string", enum: ["answer_found", "confirmed_missing"], description: "answer_found if any page answers this question; confirmed_missing only if, after checking every page, nothing answers it and it is not marked doubt." },
+                  },
+                  required: ["question", "questionText", "pageSearch", "quotedAnswer", "answerIsCorrect", "problemIfWrong", "verdict"],
+                },
+              },
+              revisedFeedback: { type: "string", description: "The earlier feedback with every sentence about a question that has an answer deleted. If an answer was found but is wrong, replace that sentence with a short tutor-style sentence about what is wrong. Keep all other wording exactly as it was. If nothing remains to report, write one short sentence saying all assigned questions were attempted correctly." },
+            },
+            required: ["claims", "revisedFeedback"],
+          },
+        };
+        const missText = parsed.missingQuestions.map((q: any) => "- " + String(q)).join("\n");
+        const missNote = `\n\nVERIFICATION PASS. A first check of this submission reported these questions as MISSING (no answer at all):\n${missText}\n\nIts feedback to the student was:\n"""\n${String(parsed.feedback || "")}\n"""\n\nDo not trust that. For EACH of these questions, go through every page of the submission in order -- the first page, the middle pages and especially the LAST page -- and look for an answer to it. A follow-up page is often added at the end of the file, and a page may be headed with a different title or number than the question's own. Match by number AND by content. Quote any answer you find. Then call verify_missing.`;
+        const mresp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({
+            model: CLAUDE_MODEL,
+            system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+            thinking: { type: "adaptive" },
+            output_config: { effort: "medium" },
+            max_tokens: 12000,
+            tools: [missTool],
+            tool_choice: { type: "tool", name: "verify_missing" },
+            messages: [{
+              role: "user",
+              content: questionSheetBlock
+                ? [contentBlock, questionSheetBlock, { type: "text", text: prompt + missNote }]
+                : [contentBlock, { type: "text", text: prompt + missNote }],
+            }],
+          }),
+        });
+        const mdata: any = await mresp.json();
+        const mblock = (mdata?.content || []).find((b: any) => b.type === "tool_use" && b.name === "verify_missing");
+        if (mresp.ok && mblock && Array.isArray(mblock.input?.claims)) {
+          const norm = (x: any) => String(x ?? "").toLowerCase().replace(/\s+/g, "");
+          const found = new Map<string, any>();
+          for (const c of mblock.input.claims) {
+            const quoted = String(c.quotedAnswer ?? "").trim();
+            if (c.verdict === "answer_found" && quoted && !/^none found$/i.test(quoted)) found.set(norm(c.question), c);
+          }
+          const before: string[] = parsed.missingQuestions.map((q: any) => String(q));
+          const stillMissing = before.filter((q) => !found.has(norm(q)));
+          if (stillMissing.length < before.length) {
+            const cleared = before.filter((q) => found.has(norm(q)));
+            console.warn(`Submission ${submissionId}: verification found an answer for ${cleared.join(", ")} -- not missing.`);
+            parsed.missingQuestions = stillMissing;
+            for (const q of cleared) {
+              const c = found.get(norm(q));
+              if (c && c.answerIsCorrect === false) {
+                parsed.incorrectQuestions = Array.isArray(parsed.incorrectQuestions) ? [...parsed.incorrectQuestions, q] : [q];
+              }
+            }
+            const revised = typeof mblock.input.revisedFeedback === "string" ? mblock.input.revisedFeedback.trim() : "";
+            if (revised) parsed.feedback = revised;
+          }
+        }
+      } catch (e: any) {
+        console.warn("Missing-question verification failed, keeping the first result:", e?.message);
+      }
+    }
+
     // Verification pass for every question marked incorrect. A first check can still slip on its own
     // arithmetic (a real incident: it added a column to 290 instead of 295, concluded p^2 = 2, and
     // marked a student's correct p = 1 as wrong -- its own "plug p = 1 back in" check was also
