@@ -1228,6 +1228,88 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       stripOutOfRangeLabels(parsed);
     }
 
+    // Verification pass for every question marked incorrect. A first check can still slip on its own
+    // arithmetic (a real incident: it added a column to 290 instead of 295, concluded p^2 = 2, and
+    // marked a student's correct p = 1 as wrong -- its own "plug p = 1 back in" check was also
+    // miscalculated). So any question that is marked incorrect is re-examined by a second, focused
+    // call that must solve it independently, term by term, and substitute the student's final answer
+    // back into the question's own condition. A question stays marked incorrect only if this second
+    // look confirms the error; everything it does not confirm is given back to the student, and the
+    // feedback is rewritten without those sentences. The score is computed from the final lists below.
+    if (!parsed.__wrongHomework && Array.isArray(parsed.incorrectQuestions) && parsed.incorrectQuestions.length > 0) {
+      try {
+        const verifyTool = {
+          name: "verify_claims",
+          description: "Report the independent verification of each question that was marked incorrect.",
+          input_schema: {
+            type: "object",
+            properties: {
+              claims: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    question: { type: "string", description: "The question label exactly as it appears in the list of flagged questions." },
+                    givenValues: { type: "string", description: "The given values/conditions of this question, copied from the question sheet (or the submission if there is no sheet)." },
+                    independentSolution: { type: "string", description: "Your own complete solution from those given values. Write out every term of every sum, product and fraction digit by digit (e.g. 30 + 51 + 76 + 138 = 295). Do not look at the student's answer or at the earlier reason while doing this." },
+                    studentFinalAnswer: { type: "string", description: "The student's final answer(s) for this question, copied from the LAST (non-crossed-out) version of their working." },
+                    substitutionCheck: { type: "string", description: "Put the student's final answer back into the question's own condition and compute both sides term by term. State plainly whether the condition holds." },
+                    verdict: { type: "string", enum: ["error_confirmed", "student_correct", "cannot_tell"], description: "error_confirmed only if your independent solution AND the substitution check both show the student's final answer is wrong. If the student's final answer satisfies the question's condition, or you cannot be sure, it is NOT a confirmed error." },
+                  },
+                  required: ["question", "givenValues", "independentSolution", "studentFinalAnswer", "substitutionCheck", "verdict"],
+                },
+              },
+              revisedFeedback: { type: "string", description: "The earlier feedback with every sentence about a question that is NOT a confirmed error deleted. Keep all other wording exactly as it was (sentences about confirmed errors, missing questions and doubt-marked questions stay unchanged). If nothing remains to report, write one short sentence saying all assigned questions were attempted correctly." },
+            },
+            required: ["claims", "revisedFeedback"],
+          },
+        };
+        const claimsText = parsed.incorrectQuestions.map((q: any) => "- " + String(q)).join("\n");
+        const verifyNote = `\n\nVERIFICATION PASS. A first check of this submission marked the following questions as INCORRECT:\n${claimsText}\n\nIts feedback to the student was:\n"""\n${String(parsed.feedback || "")}\n"""\n\nDo not trust that feedback. For EACH flagged question: (1) copy out the given values; (2) solve the question yourself from scratch, writing every term of every sum and product digit by digit; (3) copy the student's final answer from the last, non-crossed-out version of their working; (4) put that final answer back into the question's own condition and check both sides term by term. If the student's final answer satisfies the condition, the student is correct, whatever the earlier feedback said. Remember the reading rules above (confusable digits, struck-out working, a question worked twice is judged by its final version). Then call verify_claims.`;
+        const vresp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({
+            model: CLAUDE_MODEL,
+            system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+            thinking: { type: "adaptive" },
+            output_config: { effort: "medium" },
+            max_tokens: 12000,
+            tools: [verifyTool],
+            tool_choice: { type: "tool", name: "verify_claims" },
+            messages: [{
+              role: "user",
+              content: questionSheetBlock
+                ? [contentBlock, questionSheetBlock, { type: "text", text: prompt + verifyNote }]
+                : [contentBlock, { type: "text", text: prompt + verifyNote }],
+            }],
+          }),
+        });
+        const vdata: any = await vresp.json();
+        const vblock = (vdata?.content || []).find((b: any) => b.type === "tool_use" && b.name === "verify_claims");
+        if (vresp.ok && vblock && Array.isArray(vblock.input?.claims)) {
+          const norm = (x: any) => String(x ?? "").toLowerCase().replace(/\s+/g, "");
+          const confirmed = new Set<string>();
+          const checked = new Set<string>();
+          for (const c of vblock.input.claims) {
+            checked.add(norm(c.question));
+            if (c.verdict === "error_confirmed") confirmed.add(norm(c.question));
+          }
+          const before: string[] = parsed.incorrectQuestions.map((q: any) => String(q));
+          // a question is only dropped if the verifier actually looked at it and did not confirm the error
+          const kept = before.filter((q) => !checked.has(norm(q)) || confirmed.has(norm(q)));
+          if (kept.length < before.length) {
+            console.warn(`Submission ${submissionId}: verification cleared ${before.filter((q) => !kept.includes(q)).join(", ")} -- not confirmed as wrong.`);
+            parsed.incorrectQuestions = kept;
+            const revised = typeof vblock.input.revisedFeedback === "string" ? vblock.input.revisedFeedback.trim() : "";
+            if (revised) parsed.feedback = revised;
+          }
+        }
+      } catch (e: any) {
+        console.warn("Verification pass failed, keeping the first result:", e?.message);
+      }
+    }
+
     // Deterministic wrong-homework guard. If a question sheet was attached and the model itself
     // reports that (almost) none of the sheet's questions are answered by this submission, nothing
     // it says about correctness can be trusted to earn marks for THIS assignment -- score 0, every
