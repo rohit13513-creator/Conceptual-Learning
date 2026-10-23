@@ -742,10 +742,52 @@ async function upsertHomeworkSubmission(params: {
       notesForUpdate.totalQuestionCount = existingNotes.totalQuestionCount;
     }
 
+    // An "Improve Score" follow-up is APPENDED to the student's earlier file instead of replacing it.
+    // Replacing it meant the check later saw only the few corrected pages and judged the whole
+    // homework from them: real incidents had a student who fixed one question be told that Q19-Q30
+    // were "completely missing", or have the follow-up page treated as a wrong homework (score 0),
+    // although the earlier pages (still archived) held those answers. The merged file keeps the old
+    // pages first and the new pages last (the grader is told that a later version of a question wins).
+    // Skipped (falls back to replacing) if either file is not a PDF, the result would be too big for the
+    // check (over 80 pages or 20 MB), or anything goes wrong -- never blocks the upload itself.
+    let storedFilePath = params.filePath;
+    let mergedWithEarlier = false;
+    if (existing.file_path && existing.file_path !== params.filePath && existing.file_path.toLowerCase().endsWith(".pdf") && params.filePath.toLowerCase().endsWith(".pdf")) {
+      try {
+        const [oldBlob, newBlob] = await Promise.all([
+          supabase.storage.from(HOMEWORK_BUCKET).download(existing.file_path),
+          supabase.storage.from(HOMEWORK_BUCKET).download(params.filePath),
+        ]);
+        if (oldBlob.data && newBlob.data) {
+          const oldBuf = Buffer.from(await oldBlob.data.arrayBuffer());
+          const newBuf = Buffer.from(await newBlob.data.arrayBuffer());
+          const baseDoc = await PDFDocument.load(oldBuf, { ignoreEncryption: true });
+          const addDoc = await PDFDocument.load(newBuf, { ignoreEncryption: true });
+          if (baseDoc.getPageCount() + addDoc.getPageCount() <= 80) {
+            const copied = await baseDoc.copyPages(addDoc, addDoc.getPageIndices());
+            copied.forEach((p) => baseDoc.addPage(p));
+            const mergedBuf = Buffer.from(await baseDoc.save());
+            if (mergedBuf.length <= 20 * 1024 * 1024) {
+              const mergedPath = `${params.studentEmail}/${Date.now()}-submission.pdf`;
+              const { error: upErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(mergedPath, mergedBuf, { contentType: "application/pdf" });
+              if (!upErr) {
+                storedFilePath = mergedPath;
+                mergedWithEarlier = true;
+              } else {
+                console.warn("Could not save merged follow-up file, replacing instead:", upErr.message);
+              }
+            }
+          }
+        }
+      } catch (mergeErr: any) {
+        console.warn("Could not merge follow-up pages with the earlier file, replacing instead:", mergeErr?.message);
+      }
+    }
+
     const { data: updatedRow, error: updateError } = await supabase
       .from("homework_submissions")
       .update({
-        file_path: params.filePath,
+        file_path: storedFilePath,
         subject: params.subject,
         submitted_at: new Date().toISOString(),
         status: "pending",
@@ -765,9 +807,13 @@ async function upsertHomeworkSubmission(params: {
     // the few corrected pages; deleting the original destroyed the only evidence of what the student
     // had actually written, so a dispute ("I already did Q6, it wasn't recognised") could never be
     // checked against the real pages. Non-fatal: the record update above already succeeded.
-    if (existing.file_path && existing.file_path !== params.filePath) {
+    if (existing.file_path && existing.file_path !== storedFilePath) {
       const { error: moveError } = await supabase.storage.from(HOMEWORK_BUCKET).move(existing.file_path, `superseded/${existing.file_path}`);
       if (moveError) console.warn("Could not archive superseded homework file:", moveError.message);
+    }
+    // the follow-up pages on their own are now part of the merged file; keep the stand-alone copy archived
+    if (mergedWithEarlier && params.filePath !== storedFilePath) {
+      await supabase.storage.from(HOMEWORK_BUCKET).move(params.filePath, `superseded/${params.filePath}`).catch(() => {});
     }
 
     return { row: updatedRow, priorMissingQuestions };
@@ -922,7 +968,7 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
   let resubmissionNote = "";
   if (effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0) {
     const outstanding = effectivePriorMissingQuestions.join(", ");
-    resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions (it may contain only those questions, not the whole assignment). Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
+    resubmissionNote = `This student already submitted homework for this same assignment earlier, and it was checked. At that time, these question numbers were still outstanding (either missing entirely, or attempted but incorrect): ${outstanding}. This new submission is a follow-up meant to fix/complete those specific questions. The file normally holds the student's EARLIER pages first and the NEW follow-up pages at the end (but may hold only the new pages). Where a question appears in both parts, the LATER (new) version is the one to grade. Every other originally-assigned question is already correct and checked from the earlier submission -- do NOT re-flag any question outside this list as missing or wrong just because it doesn't appear in this file, and do NOT dock the score for it. Only evaluate the questions in this list (${outstanding}): for each one, check whether it now appears and is correct, is now correct via the proper CBSE method, or is still missing/wrong/a doubt. If a question that was wrong or missing before is now attempted correctly, treat it as fully correct and score the assignment as a whole accordingly -- a fixed answer must raise the score, not just avoid lowering it further. Base your "missingQuestions" output ONLY on this list (only include a number in it if it is STILL missing or still wrong after this submission), not the full original assigned range.\n`;
   }
 
   const { data: fileBlob, error: downloadError } = await supabase.storage.from(HOMEWORK_BUCKET).download(sub.file_path);
@@ -1233,6 +1279,45 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         }
       }
       stripOutOfRangeLabels(parsed);
+    }
+
+    // Scope guard for a follow-up ("Improve Score") check. Only the questions that were still outstanding
+    // are in play; everything else was already credited. If the model nevertheless names other
+    // questions (a real incident: a one-page follow-up was read alone, and Q19-Q30 were reported
+    // "completely missing" although the student's earlier pages answered them), it gets one explicit
+    // correction, and whatever is still outside the scope afterwards is dropped from the lists so it
+    // can never change the score or the outstanding list.
+    if (isScopedResubmission && effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0) {
+      const allowedNums = new Set<number>();
+      for (const q of effectivePriorMissingQuestions) { const n = topLevelQuestionNumber(q); if (n !== null) allowedNums.add(n); }
+      const outsideScope = (p: any): string[] => {
+        if (allowedNums.size === 0) return [];
+        const labels: any[] = [
+          ...(Array.isArray(p?.doubtQuestions) ? p.doubtQuestions : []),
+          ...(Array.isArray(p?.missingQuestions) ? p.missingQuestions : []),
+          ...(Array.isArray(p?.incorrectQuestions) ? p.incorrectQuestions : []),
+        ];
+        return Array.from(new Set(labels.filter((l) => { const n = topLevelQuestionNumber(l); return n !== null && !allowedNums.has(n); }).map((l) => String(l))));
+      };
+      const stray = outsideScope(parsed);
+      if (stray.length > 0) {
+        console.warn(`Submission ${submissionId}: follow-up check named questions outside its scope (${stray.join(", ")}) -- re-checking once.`);
+        try {
+          const inScope = effectivePriorMissingQuestions.join(", ");
+          const retried = await gradeOnce(
+            `\n\nCORRECTION: a previous attempt at this follow-up check reported questions that are NOT part of this follow-up (${stray.join(", ")}). Those were already credited from the student's earlier submission, and they do not have to appear in this file. Judge ONLY these questions: ${inScope}. Do not mention, list or judge any other question anywhere (not in missingQuestions, incorrectQuestions, doubtQuestions or feedback).`
+          );
+          if (retried && typeof retried.score === "number") parsed = retried;
+        } catch (e: any) {
+          console.warn("Scope correction re-check failed, keeping the first result:", e?.message);
+        }
+      }
+      const finalStray = new Set(outsideScope(parsed));
+      if (finalStray.size > 0) {
+        for (const key of ["doubtQuestions", "missingQuestions", "incorrectQuestions"]) {
+          if (Array.isArray(parsed[key])) parsed[key] = parsed[key].filter((l: any) => !finalStray.has(String(l)));
+        }
+      }
     }
 
     // Verification pass for every question marked MISSING. A real incident: a follow-up submission
