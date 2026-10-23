@@ -207,6 +207,12 @@ function friendlyStorageUploadError(error: { message?: string; statusCode?: stri
 // Applied uniformly across every class's deadline -- see the late-submission penalty comment in
 // checkHomeworkSubmission for why.
 const LATE_SUBMISSION_GRACE_MS = 60 * 1000;
+// Electricity homeworks are never marked late and never lose marks for lateness (teacher's decision).
+// Matched by the assignment title ("Electricity 6 - Heating Effect of Current", "Electricity 8", ...), so
+// future Electricity homeworks are covered automatically. Applies to the grading penalty and to every
+// place that shows or reports a "late" flag.
+const LATE_EXEMPT_TITLE = /^\s*electricity\b/i;
+const isLateExempt = (title?: string | null): boolean => !!title && LATE_EXEMPT_TITLE.test(title);
 const homeworkUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file, matches the Storage bucket limit
@@ -932,11 +938,11 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
 
   let assignmentContext = "";
   let questionSheetBlock: any = null;
-  let assignmentForDeadline: { target_class: string; assigned_date: string; deadline: string | null } | null = null;
+  let assignmentForDeadline: { target_class: string; assigned_date: string; deadline: string | null; title?: string | null } | null = null;
   if (sub.assignment_id) {
     const { data: a } = await supabase.from("homework_assignments").select("title, description, subject, file_path, target_class, assigned_date, deadline").eq("id", sub.assignment_id).maybeSingle();
     if (a) {
-      assignmentForDeadline = { target_class: a.target_class, assigned_date: a.assigned_date, deadline: a.deadline };
+      assignmentForDeadline = { target_class: a.target_class, assigned_date: a.assigned_date, deadline: a.deadline, title: a.title };
       assignmentContext = `This was assigned as: "${a.title}"${a.description ? ` -- ${a.description}` : ""}${a.subject ? ` (Subject: ${a.subject})` : ""}.\n`;
 
       // If the teacher attached an official question sheet (common for textbook homework where
@@ -1503,7 +1509,9 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       const isResubmission = Array.isArray(notesFromRow.outstandingQuestions) && notesFromRow.outstandingQuestions.length > 0;
       let isLate = false;
       let daysLate = 0;
-      if (notesFromRow.lateOverride === "not_late") {
+      if (isLateExempt(assignmentForDeadline?.title)) {
+        isLate = false;
+      } else if (notesFromRow.lateOverride === "not_late") {
         isLate = false;
       } else if (notesFromRow.lateOverride === "late") {
         isLate = true;
@@ -9270,7 +9278,8 @@ function buildApp(): express.Express {
       const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
       const deadline = r.assignment_id ? (deadlineById.get(r.assignment_id) || null) : null;
       const notes = parseAdminNotes(r.admin_notes);
-      const isLate = notes.lateOverride === "not_late" ? false
+      const isLate = isLateExempt(r.assignment_id ? titleById.get(r.assignment_id) : null) ? false
+        : notes.lateOverride === "not_late" ? false
         : notes.lateOverride === "late" ? true
         : !!deadline && new Date(r.submitted_at).getTime() - new Date(deadline).getTime() - LATE_SUBMISSION_GRACE_MS > 0;
       return {
@@ -9520,6 +9529,7 @@ function buildApp(): express.Express {
         const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
         const late = roster
           .filter((u: any) => {
+            if (isLateExempt(a.title)) return false;
             const entry = submitted.get(u.email);
             if (!entry) return false;
             const notes = parseAdminNotes(entry.adminNotes);
@@ -9614,7 +9624,8 @@ function buildApp(): express.Express {
         const sub = submissionByKey.get(`${a.id}|${u.email}`);
         if (!sub) return { assignmentId: a.id, state: "missing" as const, score: 0, isLate: false };
         const notes = parseAdminNotes(sub.admin_notes);
-        const isLate = notes.lateOverride === "not_late" ? false
+        const isLate = isLateExempt(a.title) ? false
+          : notes.lateOverride === "not_late" ? false
           : notes.lateOverride === "late" ? true
           : !!a.deadline && new Date(sub.submitted_at).getTime() - new Date(a.deadline).getTime() - LATE_SUBMISSION_GRACE_MS > 0;
         if (sub.status !== "checked" || typeof sub.ai_score !== "number") {
