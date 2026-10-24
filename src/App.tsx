@@ -22,6 +22,7 @@ import { LearnFoundations9 } from './components/LearnFoundations9';
 import { LearnTissues9 } from './components/LearnTissues9';
 import { LearnDiversity9 } from './components/LearnDiversity9';
 import { HomeHero } from './components/HomeHero';
+import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { LearnMaths8SquareCube } from './components/LearnMaths8SquareCube';
 import { LearnScience8 } from './components/LearnScience8';
@@ -3572,31 +3573,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       <div className={`cl-aurora flex flex-col lg:flex-row items-center justify-center lg:gap-20 min-h-screen p-4 sm:p-8 font-sans select-none relative overflow-y-auto ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
         <div className="cl-grid-bg absolute inset-0 pointer-events-none" />
 
-        {/* Brand panel (wide screens) */}
-        <div className="hidden lg:flex flex-col gap-8 max-w-md relative z-10 cl-view-in">
-          <div className="flex items-center gap-4">
-            <img src="/favicon.svg" alt="" className="w-16 h-16 rounded-2xl shadow-2xl shadow-cyan-500/25" />
-            <div className="leading-none">
-              <p className={`text-2xl font-black tracking-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Conceptual Learning</p>
-              <p className="mt-1.5 text-xs font-black uppercase tracking-[0.5em] cl-gradient-text">Online</p>
-            </div>
-          </div>
-          <h2 className={`text-5xl font-black tracking-tight leading-[1.05] ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-            Learn the concept.<br /><span className="cl-gradient-text">The marks follow.</span>
-          </h2>
-          <ul className="space-y-3.5">
-            {[
-              ['Concept-first notes', 'Clear, pointwise notes with real diagrams'],
-              ['Practice that checks you', 'Solved questions, question banks and timed quizzes'],
-              ['Homework with quick feedback', 'Upload your pages and get them checked'],
-            ].map(([t, d]) => (
-              <li key={t} className="flex items-start gap-3">
-                <span className="mt-0.5 w-6 h-6 shrink-0 rounded-full bg-gradient-to-br from-cyan-400 to-teal-400 text-slate-950 flex items-center justify-center text-[12px] font-black">✓</span>
-                <span className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}><b className={isLightMode ? 'text-slate-900' : 'text-white'}>{t}.</b> {d}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Information panel: advantages of logging in, or of registering plus the two ways to join */}
+        <AuthSidePanel tab={authTab} isLightMode={isLightMode} onSwitch={(t) => { setAuthTab(t); setAuthError(null); setAuthSuccess(null); }} />
+        <AuthMobileInfo tab={authTab} isLightMode={isLightMode} onSwitch={(t) => { setAuthTab(t); setAuthError(null); setAuthSuccess(null); }} />
 
         <div className={`cl-card w-full max-w-md p-6 sm:p-8 relative z-10 space-y-6 shrink-0 cl-view-in ${isLightMode ? 'bg-white/95' : ''}`}>
 
