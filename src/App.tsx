@@ -9497,7 +9497,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                       <p className="text-center py-4 text-slate-500 text-xs font-semibold">No active access invite keys found.</p>
                     ) : (
                       adminInvites.map((invite) => {
-                        const messageText = `Hey ${invite.createdBy}! Create your account on Ray-Optica, verify with your Email and Phone OTPs, and submit. I will instantly approve your request from my desk! Enjoy studying! - Rohit`;
+                        const messageText = `Hey ${invite.createdBy}! Create your account on Conceptual Learning Online, verify with your Email and Phone OTPs, and submit. I will instantly approve your request from my desk! Enjoy studying! - Rohit`;
                         const isCopied = copiedCodeCode === invite.code;
 
                         return (

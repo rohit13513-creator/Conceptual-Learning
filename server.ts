@@ -7829,7 +7829,7 @@ function buildApp(): express.Express {
 
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
     if (existingUser) {
-      return res.status(400).json({ error: "This email address is already registered inside Ray-Optica." });
+      return res.status(400).json({ error: "This email address is already registered inside Conceptual Learning Online." });
     }
 
     // Generate random 4-digit mobile verification code
@@ -7976,12 +7976,12 @@ function buildApp(): express.Express {
       `Review and approve this registration instantly:\n` +
       `👉 Click Approve directly inside the platform or click here to approve via your email client:\n` +
       `${approveUrl}\n\n` +
-      `Warm regards,\nRay-Optica System Daemon`;
+      `Warm regards,\nConceptual Learning Online`;
 
     const htmlBody = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #1e293b; background-color: #f8fafc; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         <h2 style="color: #0f172a; margin-top: 0; font-size: 20px; font-weight: 700; border-bottom: 2px solid #22d3ee; padding-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-          📚 New Ray-Optica Student Enrollment
+          📚 New Conceptual Learning Online Student Enrollment
         </h2>
         <p style="font-size: 15px; line-height: 1.5; color: #334155; margin-bottom: 20px;">
           Hello Rohit, a new student has successfully completed verification/OTP validation and submitted an enrollment request:
@@ -8060,7 +8060,7 @@ function buildApp(): express.Express {
 
     await supabase.from("users").update({ status: "approved" }).eq("email", targetEmail);
 
-    const congradsSubject = "🎉 Account Approved: Welcome to Ray-Optica!";
+    const congradsSubject = "🎉 Account Approved: Welcome to Conceptual Learning Online!";
     const congradsBody = `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`;
 
     // Notify student as well (awaited so it can't be frozen mid-send once the response goes out)
@@ -8076,7 +8076,7 @@ function buildApp(): express.Express {
       <html>
         <head>
           <meta charset="utf-8">
-          <title>Ray-Optica Approvals</title>
+          <title>Conceptual Learning Online Approvals</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -8128,7 +8128,7 @@ function buildApp(): express.Express {
           <div class="card">
             <div class="badge">Success</div>
             <h1>Student Approved!</h1>
-            <p><strong>${targetUser.name}</strong> (${targetEmail}) has been successfully approved as a student on Ray-Optica. They can now access all resources, calculators, and simulators instantly!</p>
+            <p><strong>${targetUser.name}</strong> (${targetEmail}) has been successfully approved as a student on Conceptual Learning Online. They can now access all resources, calculators, and simulators instantly!</p>
             <p style="font-size: 13px; color: #475569;">You can safely close this browser window or return to the application layout.</p>
           </div>
         </body>
@@ -8188,7 +8188,7 @@ function buildApp(): express.Express {
     const allowedDevices = ["Mobile Phone", "Laptop", "Tablet"];
     if (!isTestAccount && userRow.role !== "admin" && (!deviceName || !allowedDevices.includes(deviceName))) {
       return res.status(400).json({
-        error: "Access Denied: Ray-Optica is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
+        error: "Access Denied: Conceptual Learning Online is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
       });
     }
 
@@ -8292,7 +8292,7 @@ function buildApp(): express.Express {
     const allowedDevices = ["Mobile Phone", "Laptop", "Tablet"];
     if (!isTestAccount && userRow.role !== "admin" && (!deviceName || !allowedDevices.includes(deviceName))) {
       return res.status(400).json({
-        error: "Access Denied: Ray-Optica is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
+        error: "Access Denied: Conceptual Learning Online is exclusive to Laptops, Mobile Phones, and Tablets. Other device architectures are unsupported."
       });
     }
 
@@ -12675,7 +12675,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     // Send congrats notification email to Student (awaited so it can't be frozen mid-send)
     await sendSimulatedEmail(
       targetEmail,
-      "🎉 Account Approved: Welcome to Ray Optica",
+      "🎉 Account Approved: Welcome to Conceptual Learning Online",
       `Dear ${targetUser.name},\n\nWe are delighted to inform you that your registration request for Conceptual Learning Online has been officially APPROVED!\n\nYou now have full access to study notes, CBSE Board preparations, and interactive physics ray simulators on up to 3 authorized device browsers.\n\nTo begin exploring, head to the portal and sign in using your account credentials.\n\nWarm regards,\nConceptual Learning Online Team`,
       'outgoing'
     );
@@ -12704,7 +12704,7 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     // Send disapproval notification email to Student (awaited so it can't be frozen mid-send)
     await sendSimulatedEmail(
       targetEmail,
-      "🚫 Account Request Disapproved - Ray Optica",
+      "🚫 Account Request Disapproved - Conceptual Learning Online",
       `Dear ${targetUser.name},\n\nWe regret to inform you that your registration request for Conceptual Learning Online has been disapproved/suspended. If you believe this is a clerical error, please reach out to your teacher directly.\n\nBest regards,\nConceptual Learning Online Support`,
       'outgoing'
     );
