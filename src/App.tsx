@@ -691,7 +691,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     '9th': '5:45 PM',
     '10th': '4:45 PM',
     '12th': '6:45 PM',
-    'canadian': '6:45 PM',
+    'canadian': '7:30 PM (Windsor time)',
   };
   const studentTrack: '8th' | '9th' | '10th' | '12th' | 'canadian' | 'unavailable' | null = isClassExempt
     ? null
@@ -2391,8 +2391,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     return { text: 'Checked', className: isLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-500/10 text-cyan-400' };
   };
 
-  const formatDeadline = (deadline?: string) => {
+  const formatDeadline = (deadline?: string | null, targetClass?: string) => {
     if (!deadline) return null;
+    // Canadian-board homework is due at a Windsor (Ontario) clock time, so show it in that time zone
+    if (targetClass === 'canadian') {
+      return new Date(deadline).toLocaleString('en-CA', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Toronto' }) + ' (Windsor time)';
+    }
     return new Date(deadline).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
   };
 
@@ -5559,7 +5563,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${badge.className}`}>{badge.text}</span>
                         </p>
                         {a.subject && <p className="text-[10px] font-mono text-cyan-400 mt-0.5">{a.subject}</p>}
-                        {getEffectiveDeadline(a) && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(getEffectiveDeadline(a))}</p>}
+                        {getEffectiveDeadline(a) && <p className="text-[10px] font-semibold text-amber-400 mt-0.5">Due {formatDeadline(getEffectiveDeadline(a), a.targetClass)}</p>}
                         {a.fileUrl && (
                           <a
                             href={a.fileUrl}
@@ -5674,7 +5678,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               <div className="min-w-0">
                                 <p className={`text-xs font-black truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{a.title}</p>
                                 <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
+                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a), a.targetClass)}` : ''}
                                 </p>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
@@ -5709,7 +5713,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     <div>
                       <p className={`text-xs font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{selectedAssignment.title}</p>
                       <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment))}` : ''}
+                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment), selectedAssignment.targetClass)}` : ''}
                       </p>
                     </div>
                     <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`text-[10px] font-black uppercase tracking-wide underline cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
@@ -8034,7 +8038,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         <p className={`text-[10px] font-mono mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
                           {formatDateIST(a.createdAt)} • {a.targetClass === 'All' ? 'All Classes' : `${a.targetClass === 'canadian' ? 'Canadian Board' : 'Class ' + a.targetClass}`}
                         </p>
-                        {getEffectiveDeadline(a) && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(getEffectiveDeadline(a))}</p>}
+                        {getEffectiveDeadline(a) && <p className="text-[10px] font-bold text-amber-400 mt-0.5">Deadline: {formatDeadline(getEffectiveDeadline(a), a.targetClass)}</p>}
                         {a.fileUrl && (
                           <a
                             href={a.fileUrl}
@@ -8089,7 +8093,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               <div className="min-w-0">
                                 <p className={`text-xs font-black truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{a.title}</p>
                                 <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a))}` : ''}
+                                  {formatAssignmentDate(a.assignedDate)}{getEffectiveDeadline(a) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(a), a.targetClass)}` : ''}
                                 </p>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
@@ -8124,7 +8128,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     <div>
                       <p className={`text-xs font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{selectedAssignment.title}</p>
                       <p className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment))}` : ''}
+                        {formatAssignmentDate(selectedAssignment.assignedDate)}{getEffectiveDeadline(selectedAssignment) ? ` • Deadline: ${formatDeadline(getEffectiveDeadline(selectedAssignment), selectedAssignment.targetClass)}` : ''}
                       </p>
                     </div>
                     <button type="button" onClick={() => changeView('homeworkGuidelines')} className={`text-[10px] font-black uppercase tracking-wide underline cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>
@@ -9331,7 +9335,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                           <div className="min-w-0">
                             <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
                             <p className="text-[10px] font-mono text-slate-500">{a.targetClass === 'All' ? 'All Classes' : a.targetClass} • {formatDateIST(a.createdAt)}</p>
-                            {a.deadline && <p className="text-[10px] font-bold text-amber-400">Deadline: {formatDeadline(a.deadline)}</p>}
+                            {a.deadline && <p className="text-[10px] font-bold text-amber-400">Deadline: {formatDeadline(a.deadline, a.targetClass)}</p>}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {a.fileUrl && (
@@ -9974,7 +9978,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         <span>{r.submittedCount}/{r.rosterCount} submitted</span>
                         {r.deadline && (
                           <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-black bg-red-500/10 text-red-400 border border-red-500/20`}>
-                            Deadline was {formatDeadline(r.deadline)}
+                            Deadline was {formatDeadline(r.deadline, r.targetClass === 'Canadian' ? 'canadian' : undefined)}
                           </span>
                         )}
                       </p>

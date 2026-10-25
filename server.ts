@@ -1766,7 +1766,31 @@ const DEADLINE_TIME_BY_CLASS: Record<string, string> = {
   "9th": "17:45:00",
   "10th": "16:45:00",
 };
+// The UTC instant at which the wall clock in `timeZone` reads dateStr (YYYY-MM-DD) + timeStr (HH:MM:SS).
+// Handles daylight-saving changes (no date library needed).
+function zonedWallTimeToUtc(dateStr: string, timeStr: string, timeZone: string): Date {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const [h, mi, se] = timeStr.split(":").map(Number);
+  const wanted = Date.UTC(y, mo - 1, d, h, mi, se || 0);
+  let guess = wanted;
+  for (let i = 0; i < 3; i++) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(guess));
+    const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const shown = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
+    guess += wanted - shown;
+  }
+  return new Date(guess);
+}
+// Canadian-board students (Windsor, Ontario): due 7:30 PM Windsor time (America/Toronto) on the day after
+// the assignment date, whatever the clock says in India.
+const CANADIAN_DEADLINE_TZ = "America/Toronto";
+const CANADIAN_DEADLINE_TIME = "19:30:00";
 function computeDeadline(assignedDate: string, targetClass: string): string {
+  if (targetClass === "canadian") {
+    const next = new Date(`${assignedDate}T12:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    return zonedWallTimeToUtc(next.toISOString().slice(0, 10), CANADIAN_DEADLINE_TIME, CANADIAN_DEADLINE_TZ).toISOString();
+  }
   const time = DEADLINE_TIME_BY_CLASS[targetClass] || "18:45:00";
   const next = new Date(`${assignedDate}T00:00:00+05:30`);
   next.setDate(next.getDate() + 1);
