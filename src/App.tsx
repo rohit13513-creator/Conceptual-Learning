@@ -22,6 +22,7 @@ import { LearnFoundations9 } from './components/LearnFoundations9';
 import { LearnTissues9 } from './components/LearnTissues9';
 import { LearnDiversity9 } from './components/LearnDiversity9';
 import { HomeHero } from './components/HomeHero';
+import { LearnCanadianMaths } from './components/LearnCanadianMaths';
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
 import { LearnMaths8 } from './components/LearnMaths8';
 import { LearnMaths8SquareCube } from './components/LearnMaths8SquareCube';
@@ -625,10 +626,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -701,7 +702,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   // Shared filter used by every class-scoped nav dropdown (Notes/Solve NCERT/Question Bank/Self
   // Assessment): exempt accounts see every item unchanged; locked students only ever see the
   // item(s) tagged with their own track, so there is never a switcher to another class's content.
-  type ClassNavItem = { label: string; grade: '8th' | '9th' | '10th' | '12th'; onClick: () => void };
+  type ClassNavItem = { label: string; grade: '8th' | '9th' | '10th' | '12th' | 'canadian'; onClick: () => void };
   const filterNavItemsByClass = (items: ClassNavItem[]): ClassNavItem[] => {
     if (isClassExempt) return items;
     if (!studentTrack || studentTrack === 'unavailable') return [];
@@ -4135,6 +4136,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('chemNotes'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('bioNotes10'); } },
               { label: 'Competitions', grade: '12th', onClick: () => { setPreparingFor('12th'); changeView('competitive'); } },
+              { label: 'Canadian Maths', grade: 'canadian', onClick: () => changeView('canadianNotes') },
             ]);
             const locked = notesItems.length === 0;
             return (
@@ -4146,7 +4148,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     setOpenMenu(openMenu === 'notes' ? null : 'notes');
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'foundationsNotes9' || activeView === 'mathsNotes8' || activeView === 'scienceNotes8' || activeView === 'competitive')
+                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'foundationsNotes9' || activeView === 'mathsNotes8' || activeView === 'scienceNotes8' || activeView === 'canadianNotes' || activeView === 'competitive')
                       ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
                       : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
                   }`}
@@ -5498,6 +5500,20 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             <HomeHero firstName={user.name.split(' ')[0]} studentClass={user.studentClass} studentType={ADMIN_EMAILS.includes(user.email) ? undefined : 'offline'} />
 
+            {isCanadianStudent && (<button
+              onClick={() => changeView('canadianNotes')}
+              className={`w-full flex items-center gap-4 p-5 sm:p-6 rounded-3xl border text-left transition duration-200 cursor-pointer group ${isLightMode ? 'bg-gradient-to-br from-cyan-500 to-teal-500 border-cyan-400 text-white' : 'bg-gradient-to-r from-cyan-500/20 via-teal-500/10 to-slate-900 border-cyan-500/30 text-white hover:border-cyan-400'}`}
+            >
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${isLightMode ? 'bg-white/20' : 'bg-cyan-500/20'}`}>
+                <GraduationCap className="w-7 h-7" />
+              </div>
+              <div className="flex-1">
+                <p className="text-lg sm:text-xl font-black tracking-tight">Maths Notes</p>
+                <p className={`text-xs sm:text-sm font-medium ${isLightMode ? 'text-white/90' : 'text-slate-300'}`}>Data Analysis: box plots, scatter plots and trend lines. Read online or download the PDF.</p>
+              </div>
+              <ChevronRight className="w-6 h-6 shrink-0 opacity-80 group-hover:translate-x-1 transition-transform" />
+            </button>)}
+
             {/* Start Studying -- primary call to action (not for Canadian-board students, whose notes are provided separately) */}
             {!isCanadianStudent && (<button
               onClick={() => { setStudyingClass(null); setUnderConstructionSubject(null); changeView('startStudying'); }}
@@ -5841,15 +5857,20 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         </div>
       )}
 
+      {/* ── CANADIAN MATHS NOTES ── */}
+      {activeView === 'canadianNotes' && (
+        <LearnCanadianMaths isLightMode={isLightMode} onBack={() => changeView('hub')} />
+      )}
+
       {/* ── 1.1B CLASS CONTENT NOT YET AVAILABLE VIEW ── */}
       {activeView === 'classUnavailable' && (
         <div className={`flex-1 overflow-y-auto px-4 py-12 transition-colors duration-300 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'} scrollbar-thin`}>
           <div className="max-w-md mx-auto space-y-4 text-center py-12">
             <div className={`rounded-2xl border p-8 space-y-3 ${isLightMode ? 'bg-amber-50 border-amber-300' : 'bg-amber-950/20 border-amber-500/20'}`}>
-              <p className={`text-base font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>{isCanadianStudent ? 'Your Canadian Maths notes are coming soon' : 'Content for your class is coming soon'}</p>
+              <p className={`text-base font-black ${isLightMode ? 'text-amber-800' : 'text-amber-300'}`}>{isCanadianStudent ? 'Practice for your Canadian Maths course is coming soon' : 'Content for your class is coming soon'}</p>
               <p className={`text-sm font-semibold leading-relaxed ${isLightMode ? 'text-amber-700' : 'text-amber-200/80'}`}>
                 {isCanadianStudent
-                  ? 'Your teacher will add your Canadian Maths notes here. Your homework is on your Home page, and all Simulators remain open to you from the Simulator menu above.'
+                  ? 'Your Canadian Maths notes are in the Notes menu above. Practice sections for your course will be added here by your teacher. Your homework is on your Home page, and all Simulators remain open to you from the Simulator menu above.'
                   : "We're still building dedicated study notes, question banks, and self-assessment tests for your registered class. In the meantime, all Simulators remain fully open to you -- use the Simulator menu above to keep exploring."}
               </p>
             </div>
