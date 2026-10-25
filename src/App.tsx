@@ -7873,14 +7873,16 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 <AlertTriangle className="w-4 h-4 text-amber-400" /> Late submission penalty
               </h2>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                Your ORIGINAL submission for an assignment (not a resubmission -- see below) loses more marks the more days late it is, on top of the regular checking above:
+                Your ORIGINAL submission for an assignment (not an improvement -- see below) loses marks for the days it is late, on top of the regular checking above:
               </p>
               <ul className="space-y-2">
                 {[
-                  '1 day late -- 2 marks deducted.',
+                  '1 day late -- 1 mark deducted.',
                   '2 days late -- 3 marks deducted.',
-                  '3 days late -- 4 marks deducted.',
-                  '...and so on, 1 additional mark for each further full day late.',
+                  '3 days late -- 3 marks deducted.',
+                  '4 days late -- 4 marks deducted.',
+                  '5 days late -- 5 marks deducted.',
+                  'More than 5 days late -- still only 5 marks deducted. 5 marks is the most that can ever be deducted for lateness.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
@@ -7904,7 +7906,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 ))}
               </ul>
               <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                <b>Resubmitting (Improve Score) is different:</b> if you resubmit within 2 days of the original deadline to fix flagged questions, no late penalty applies at all. If you resubmit more than 2 days after the original deadline, a flat 1 mark is deducted -- regardless of how much later than that it is.
+                <b>Electricity homeworks</b> are never marked late and never lose marks for lateness.
+              </p>
+              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                <b>Improving your score (Improve Score) is never penalised:</b> there is no deduction for improving, whether you improve after 1 day, 2 days or any time later. Only the late deduction of your original submission (if it was late) stays; nothing more is ever added for improving.
               </p>
             </div>
 
@@ -7941,7 +7946,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   'Attempt every question that was assigned. If you genuinely don\'t know one, write "doubt" next to its number instead of leaving it blank.',
                   'Show your full working/steps in the proper CBSE format, not just the final answer.',
                   'Submit clear photos of every page (or one combined PDF) -- if a page is completely unreadable, that specific question can\'t be checked.',
-                  'Submit before the deadline for your class -- submitting late is still allowed, but it costs at least 2 marks and more for each additional day late.',
+                  'Submit before the deadline for your class -- submitting late is still allowed, but it costs marks: 1 mark for 1 day, 3 marks for 2 days, and up to 5 marks at most.',
                 ].map((line, i) => (
                   <li key={i} className={`flex items-start gap-2 text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
                     <span className="text-cyan-400 font-black mt-0.5 shrink-0">•</span>
@@ -9873,7 +9878,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                             disabled={togglingLateIds.has(sub.id)}
                                             onClick={() => handleToggleLateStatus(sub)}
                                             className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold text-[10px] uppercase cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                            title={sub.isLate ? "Mark this submission as not late (adds back the 2-mark late penalty)" : "Mark this submission as late (applies the 2-mark late penalty)"}
+                                            title={sub.isLate ? "Mark this submission as not late (removes the late penalty)" : "Mark this submission as late (applies the 1-mark late penalty)"}
                                           >
                                             <AlertTriangle className="w-3.5 h-3.5" /> {togglingLateIds.has(sub.id) ? 'Updating...' : sub.isLate ? 'Mark Not Late' : 'Mark Late'}
                                           </button>

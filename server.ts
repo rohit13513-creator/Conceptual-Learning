@@ -213,6 +213,15 @@ const LATE_SUBMISSION_GRACE_MS = 60 * 1000;
 // place that shows or reports a "late" flag.
 const LATE_EXEMPT_TITLE = /^\s*electricity\b/i;
 const isLateExempt = (title?: string | null): boolean => !!title && LATE_EXEMPT_TITLE.test(title);
+// THE late-submission rule (teacher's wording, one place only). Marks lost by an ORIGINAL submission, by
+// full days late: 1 day = 1 mark, 2 days = 3 marks, 3 days = 3, 4 days = 4, 5 days = 5, and never more than
+// 5 marks however late. An improvement ("Improve Score") is never penalised for lateness at any time.
+function latePenaltyForDays(daysLate: number): number {
+  if (daysLate <= 0) return 0;
+  if (daysLate === 1) return 1;
+  if (daysLate === 2) return 3;
+  return Math.min(daysLate, 5);
+}
 const homeworkUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file, matches the Storage bucket limit
@@ -664,6 +673,12 @@ interface SubmissionNotes {
   // questions = 33%, when the real assignment has 20 questions and the true rate is 5%) --
   // carrying this forward lets every resubmission check use the real total instead.
   totalQuestionCount?: number;
+  // True once the row has been re-uploaded after a completed check ("Improve Score"). An improvement
+  // is never penalised for lateness (see computeLatePenalty).
+  followUp?: boolean;
+  // Marks deducted for lateness on the ORIGINAL submission. It is fixed at the first check and carried
+  // unchanged through every improvement, so improving neither adds a new deduction nor wipes the old one.
+  latePenalty?: number;
   // Epoch ms of when an automatic check claimed this still-"pending" row. Never persisted on a
   // finished row (serializeAdminNotes drops it) -- it only exists while a check is in flight.
   checkingSince?: number;
@@ -684,6 +699,8 @@ function serializeAdminNotes(notes: SubmissionNotes): string | null {
   if (Array.isArray(notes.outstandingQuestions) && notes.outstandingQuestions.length > 0) cleaned.outstandingQuestions = notes.outstandingQuestions;
   if (notes.lateOverride) cleaned.lateOverride = notes.lateOverride;
   if (typeof notes.totalQuestionCount === "number" && notes.totalQuestionCount > 0) cleaned.totalQuestionCount = notes.totalQuestionCount;
+  if (notes.followUp) cleaned.followUp = true;
+  if (typeof notes.latePenalty === "number" && notes.latePenalty > 0) cleaned.latePenalty = notes.latePenalty;
   return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
 }
 
@@ -698,7 +715,7 @@ async function upsertHomeworkSubmission(params: {
 }): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
   const { data: existing, error: existingError } = await supabase
     .from("homework_submissions")
-    .select("id, file_path, status, admin_notes")
+    .select("id, file_path, status, admin_notes, submitted_at")
     .eq("student_email", params.studentEmail)
     .eq("assignment_id", params.assignmentId)
     .order("submitted_at", { ascending: false })
@@ -733,6 +750,33 @@ async function upsertHomeworkSubmission(params: {
     // it here means any later check can still find it on the row itself. See
     // checkHomeworkSubmission's fallback logic for the read side.
     if (priorMissingQuestions) notesForUpdate.outstandingQuestions = priorMissingQuestions;
+    // Re-uploading after a completed check is an improvement: flag it, and fix the ORIGINAL submission's late
+    // deduction now (from the original upload time, which is about to be overwritten) so it is carried
+    // forward unchanged. Rows checked before this rule existed have no stored value, so it is worked out here.
+    if (existing.status === "checked") {
+      notesForUpdate.followUp = true;
+      let carried = existingNotes.latePenalty;
+      if (typeof carried !== "number") {
+        carried = 0;
+        try {
+          const { data: asg } = await supabase.from("homework_assignments").select("title, target_class, assigned_date, deadline").eq("id", params.assignmentId).maybeSingle();
+          if (asg && !isLateExempt(asg.title) && existingNotes.lateOverride !== "not_late") {
+            let deadline: string | null = asg.deadline ?? null;
+            if (asg.target_class === "All") {
+              const { data: st } = await supabase.from("users").select("student_class").eq("email", params.studentEmail).maybeSingle();
+              const mapped = st?.student_class ? CLASS_TO_TARGET[st.student_class] : null;
+              if (mapped && asg.assigned_date) deadline = computeDeadline(asg.assigned_date, mapped);
+            }
+            if (existingNotes.lateOverride === "late") carried = latePenaltyForDays(1);
+            else if (deadline && existing.submitted_at) {
+              const msLate = new Date(existing.submitted_at).getTime() - new Date(deadline).getTime() - LATE_SUBMISSION_GRACE_MS;
+              if (msLate > 0) carried = latePenaltyForDays(Math.floor(msLate / (24 * 60 * 60 * 1000)) + 1);
+            }
+          }
+        } catch { carried = 0; }
+      }
+      if (carried > 0) notesForUpdate.latePenalty = carried;
+    }
     // Same reasoning applies to totalQuestionCount: it must survive this "pending" window too, or
     // the scoped check that eventually runs has no real denominator to fall back on and ends up
     // computing the doubt-percentage rule against just the few resubmitted questions instead of
@@ -1593,7 +1637,10 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // treated as exactly 1 day late (the mildest late tier), since an override carries no day
     // count of its own.
     if (typeof parsed.score === "number") {
-      const isResubmission = Array.isArray(notesFromRow.outstandingQuestions) && notesFromRow.outstandingQuestions.length > 0;
+      // An improvement is a re-upload after a completed check. Never penalised; the original submission's
+      // own late deduction (stored when it was first checked) simply stays.
+      const isResubmission = !!notesFromRow.followUp;
+      let latePenaltyForStore: number | undefined = notesFromRow.latePenalty;
       let isLate = false;
       let daysLate = 0;
       if (isLateExempt(assignmentForDeadline?.title)) {
@@ -1623,22 +1670,23 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         }
       }
       if (isLate) {
-        let penalty = 0;
-        let lateNote: string | null = null;
-        if (isResubmission) {
-          if (daysLate > 2) {
-            penalty = 1;
-            lateNote = "Resubmitted more than 2 days after the original deadline -- 1 mark deducted as per the late-resubmission rule.";
+        if (!isResubmission) {
+          const penalty = latePenaltyForDays(daysLate);
+          latePenaltyForStore = penalty;
+          if (penalty > 0) {
+            const lateNote = `Submitted ${daysLate} day${daysLate === 1 ? "" : "s"} after the homework deadline -- ${penalty} mark${penalty === 1 ? "" : "s"} deducted as per the late-submission rule.`;
+            parsed.score = Math.max(0, parsed.score - penalty);
+            parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
           }
-        } else {
-          penalty = daysLate + 1;
-          lateNote = `Submitted ${daysLate} day${daysLate === 1 ? "" : "s"} after the homework deadline -- ${penalty} mark${penalty === 1 ? "" : "s"} deducted as per the late-submission rule.`;
-        }
-        if (penalty > 0) {
-          parsed.score = Math.max(0, parsed.score - penalty);
-          parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${lateNote}` : lateNote;
         }
       }
+      if (isResubmission && typeof latePenaltyForStore === "number" && latePenaltyForStore > 0) {
+        // the original late deduction stays; improving adds nothing and removes nothing
+        parsed.score = Math.max(0, parsed.score - latePenaltyForStore);
+        const keepNote = `The late-submission deduction of ${latePenaltyForStore} mark${latePenaltyForStore === 1 ? "" : "s"} from your original submission stays. There is no extra deduction for improving.`;
+        parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${keepNote}` : keepNote;
+      }
+      parsed.__latePenalty = latePenaltyForStore;
     }
 
     // Union of truly-missing and attempted-but-wrong questions -- everything still outstanding
@@ -1660,7 +1708,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
       integrity_flag: sanitizePlaceholderText(parsed.integrityFlag),
-      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount }),
+      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount, followUp: notesFromRow.followUp, latePenalty: typeof parsed.__latePenalty === "number" ? parsed.__latePenalty : notesFromRow.latePenalty }),
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
