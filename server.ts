@@ -1565,7 +1565,8 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           doubtNote = `${doubtCount} of ${totalQuestions} assigned questions (over 30%) were marked doubt -- 3 marks deducted as per the doubt-marking policy.`;
         }
         if (doubtNote) {
-          parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${doubtNote}` : doubtNote;
+          // the reason for the lost marks comes FIRST, so feedback that praises the attempted questions never reads as contradicting a low score
+          parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${doubtNote}\n\n${parsed.feedback}` : doubtNote;
         }
       }
     }
