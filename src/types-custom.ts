@@ -1,6 +1,8 @@
+import type { GeoSpec } from "./components/GeoFigure";
 // Unified Custom TypeScript interfaces for all Question Banks and NCERT Solved Questions
 
 export interface QuizQuestion {
+  figure?: GeoSpec;
   id: number;
   question: string;
   options: string[];
@@ -9,6 +11,7 @@ export interface QuizQuestion {
 }
 
 export interface NCERTSolvedQuestion {
+  figure?: GeoSpec;
   id: number;
   questionNumber: string;
   question: string;
@@ -21,6 +24,7 @@ export interface NCERTSolvedQuestion {
 }
 
 export interface ShortQuestion {
+  figure?: GeoSpec;
   id: number;
   question: string;
   answer: string;
@@ -28,6 +32,7 @@ export interface ShortQuestion {
 }
 
 export interface LongQuestion {
+  figure?: GeoSpec;
   id: number;
   question: string;
   markingScheme: string[];
@@ -43,6 +48,7 @@ export interface AssertionReasonQuestion {
 }
 
 export interface CompetencyQuestion {
+  figure?: GeoSpec;
   id: number;
   caseTitle: string;
   caseDescription: string;

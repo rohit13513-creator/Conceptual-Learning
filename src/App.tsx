@@ -21,6 +21,8 @@ import { LearnSound9 } from './components/LearnSound9';
 import { LearnFoundations9 } from './components/LearnFoundations9';
 import { LearnTissues9 } from './components/LearnTissues9';
 import { LearnDiversity9 } from './components/LearnDiversity9';
+import { LearnCircles9 } from './components/LearnCircles9';
+import { GeoFigure } from './components/GeoFigure';
 import { HomeHero } from './components/HomeHero';
 import { LearnCanadianMaths } from './components/LearnCanadianMaths';
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
@@ -221,6 +223,10 @@ import { DIVERSITY9_VERY_SHORT, DIVERSITY9_SHORT } from './data/diversity9_short
 import { DIVERSITY9_LONG, DIVERSITY9_COMPETENCY } from './data/diversity9_long';
 import { DIVERSITY9_NCERT_SOLVED } from './data/diversity9_ncert';
 import { DIVERSITY9_SELF_ASSESSMENT } from './data/diversity9_self';
+import { CIRCLES9_MCQS } from './data/circles9_mcq';
+import { CIRCLES9_VERY_SHORT, CIRCLES9_SHORT } from './data/circles9_short';
+import { CIRCLES9_LONG, CIRCLES9_COMPETENCY } from './data/circles9_long';
+import { CIRCLES9_NCERT_SOLVED } from './data/circles9_ncert';
 import {
   Home,
   BookOpen,
@@ -626,10 +632,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -3196,7 +3202,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   // an "under construction" message instead of navigating away.
   const SUBJECT_AVAILABILITY: Record<'8th' | '9th' | '10th', Record<'Maths' | 'Science' | 'Physics' | 'Chemistry' | 'Biology', boolean>> = {
     '8th': { Maths: true, Science: true, Physics: true, Chemistry: false, Biology: false },
-    '9th': { Maths: false, Science: false, Physics: true, Chemistry: false, Biology: true },
+    '9th': { Maths: true, Science: false, Physics: true, Chemistry: false, Biology: true },
     '10th': { Maths: false, Science: false, Physics: true, Chemistry: true, Biology: true },
   };
 
@@ -3208,6 +3214,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     setUnderConstructionSubject(null);
     setPreparingFor(cls);
     if (subject === 'Physics' && cls === '9th') { setQbSubject('physics'); changeView('physicsNotes9'); }
+    else if (subject === 'Maths' && cls === '9th') { setQbSubject('maths'); changeView('mathsNotes9'); }
     else if (subject === 'Maths' && cls === '8th') { setQbSubject('maths'); changeView('mathsNotes8'); }
     else if (subject === 'Science' && cls === '8th') { setQbSubject('science'); changeView('scienceNotes8'); }
     else if (subject === 'Biology' && cls === '10th') { setQbSubject('biology'); changeView('bioNotes10'); }
@@ -3446,6 +3453,16 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         long: TISSUES9_LONG,
         assertion: [] as typeof CLASSX_ASSERTION_REASON,
         competency: TISSUES9_COMPETENCY,
+      };
+    } else if (preparingFor === '9th' && qbSubject === 'maths') {
+      return {
+        ncert: CIRCLES9_NCERT_SOLVED,
+        mcqs: CIRCLES9_MCQS,
+        veryshort: CIRCLES9_VERY_SHORT,
+        short: CIRCLES9_SHORT,
+        long: CIRCLES9_LONG,
+        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        competency: CIRCLES9_COMPETENCY,
       };
     } else if (preparingFor === '9th' && qbSubject === 'foundations') {
       return {
@@ -4132,6 +4149,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('bioNotes'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('physicsNotes9'); } },
               { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('foundationsNotes9'); } },
+              { label: 'Class IX (Maths)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('maths'); changeView('mathsNotes9'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('learn'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); changeView('chemNotes'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('bioNotes10'); } },
@@ -4148,7 +4166,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     setOpenMenu(openMenu === 'notes' ? null : 'notes');
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'foundationsNotes9' || activeView === 'mathsNotes8' || activeView === 'scienceNotes8' || activeView === 'canadianNotes' || activeView === 'competitive')
+                    (activeView === 'learn' || activeView === 'chemNotes' || activeView === 'bioNotes' || activeView === 'bioNotes10' || activeView === 'physicsNotes9' || activeView === 'foundationsNotes9' || activeView === 'mathsNotes8' || activeView === 'mathsNotes9' || activeView === 'scienceNotes8' || activeView === 'canadianNotes' || activeView === 'competitive')
                       ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
                       : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
                   }`}
@@ -4248,6 +4266,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('ncert'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('ncert'); } },
+              { label: 'Class IX (Maths)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('maths'); changeView('ncert'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('ncert'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('ncert'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); } },
@@ -4303,6 +4322,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               { label: 'Class IX (Biology)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('biology'); changeView('qbank'); } },
               { label: 'Class IX (Physics)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class IX (Foundations of Science)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('foundations'); changeView('qbank'); } },
+              { label: 'Class IX (Maths)', grade: '9th', onClick: () => { setPreparingFor('9th'); setQbSubject('maths'); changeView('qbank'); } },
               { label: 'Class X (Physics)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('physics'); changeView('qbank'); } },
               { label: 'Class X (Chemistry)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('qbank'); } },
               { label: 'Class X (Biology)', grade: '10th', onClick: () => { setPreparingFor('10th'); setQbSubject('biology'); changeView('qbank'); } },
@@ -6264,6 +6284,14 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         />
       )}
 
+      {activeView === 'mathsNotes9' && (
+        <LearnCircles9
+          isLightMode={isLightMode}
+          onCompleteNotes={() => { setPreparingFor('9th'); setQbSubject('maths'); changeView('ncert'); }}
+          onBack={() => changeView('hub')}
+        />
+      )}
+
       {activeView === 'mathsNotes8' && (
         <div className="flex-1 flex flex-col overflow-hidden h-full">
           <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
@@ -6479,7 +6507,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
                     ? `Search & study official ${bioChapter10 === 'heredity' ? 'Heredity' : bioChapter10 === 'reproduction' ? 'How do Organisms Reproduce?' : bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
-                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' && bioChapter9 === 'diversity' ? 'Patterns in Life: Diversity and Classification' : preparingFor === '9th' && bioChapter9 === 'tissues' ? 'Tissues in Action' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
+                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'maths' ? 'Circles' : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' && bioChapter9 === 'diversity' ? 'Patterns in Life: Diversity and Classification' : preparingFor === '9th' && bioChapter9 === 'tissues' ? 'Tissues in Action' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -6632,6 +6660,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     {/* Expandable Worked Content */}
                     {isOpen && (
                       <div className="p-6 border-t border-slate-800 bg-[#070d18] space-y-5">
+
+                        {/* Figure drawn from the question data (Circles) */}
+                        {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
 
                         {/* Figure -- CBSE-pattern diagram, shown before the given values for Maths8 geometry questions */}
                         {preparingFor === '8th' && qbSubject === 'maths' && (
@@ -7096,6 +7127,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h4 className="text-sm font-bold text-slate-100 leading-relaxed">
                               {q.question}
                             </h4>
+                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
 
                             {/* Grid representation of options */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -7212,6 +7244,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h3 className="text-sm font-bold text-slate-200 leading-snug">
                               {q.question}
                             </h3>
+                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
                           </div>
 
                           {showAns && (
@@ -7278,6 +7311,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h3 className="text-sm font-bold text-slate-200 leading-snug">
                               {q.question}
                             </h3>
+                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
                           </div>
 
                           {showAns && (
@@ -7335,6 +7369,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               <h3 className="text-sm font-black text-slate-100 leading-snug">
                                 {q.question}
                               </h3>
+                              {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
                             </div>
                             <button
                               onClick={() => {
@@ -7511,6 +7546,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <p className="text-xs text-slate-300 leading-relaxed p-4 bg-slate-950/40 border border-slate-800 rounded-xl font-semibold">
                               {q.caseDescription}
                             </p>
+                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
                           </div>
  
                           {/* Questions list */}
