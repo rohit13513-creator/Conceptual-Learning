@@ -9,6 +9,7 @@ import { AnalysisDashboard } from './components/AnalysisDashboard';
 import { Quiz } from './components/Quiz';
 import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
 import LearnChemistry from './components/LearnChemistry';
+import { LearnCarbon10 } from './components/LearnCarbon10';
 import { LearnBiology } from './components/LearnBiology';
 import { LearnBiology10 } from './components/LearnBiology10';
 import { LearnControlCoordination10 } from './components/LearnControlCoordination10';
@@ -3186,6 +3187,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   // Class X Biology now has two chapters -- this tracks which one is active whenever qbSubject === 'biology'.
   const [physicsChapter9, setPhysicsChapter9] = useState<'motion' | 'forces' | 'energy' | 'sound'>('motion');
   const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination' | 'reproduction' | 'heredity'>('life-processes');
+  const [chemChapter10, setChemChapter10] = useState<'reactions' | 'carbon'>('reactions');
   const [bioChapter9, setBioChapter9] = useState<'cell' | 'tissues' | 'diversity'>('cell');
   // Class 8 Maths now has two chapters -- this tracks which one is active whenever qbSubject === 'maths'.
   const [mathsChapter8, setMathsChapter8] = useState<'quadrilaterals' | 'square-and-cube'>('quadrilaterals');
@@ -6109,11 +6111,33 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
       {/* ── 1C. LEARN CHEMISTRY STUDY MODULE ── */}
       {activeView === 'chemNotes' && (
-        <LearnChemistry
-          isLightMode={isLightMode}
-          onCompleteNotes={() => { setQbSubject('chemistry'); changeView('ncert'); }}
-          onGoToSelfAssessment={() => { setQbSubject('chemistry'); changeView('assessment'); }}
-        />
+        <div className="flex-1 flex flex-col overflow-hidden h-full">
+          <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
+            <span className="text-[11px] font-black uppercase tracking-widest font-mono mr-1 text-slate-500">Chapter:</span>
+            {(['reactions', 'carbon'] as const).map((ch) => (
+              <button
+                key={ch}
+                onClick={() => setChemChapter10(ch)}
+                className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                  chemChapter10 === ch
+                    ? isLightMode ? 'bg-emerald-600 text-white' : 'bg-emerald-500 text-slate-950'
+                    : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                {ch === 'reactions' ? 'Chemical Reactions' : 'Carbon & its Compounds'}
+              </button>
+            ))}
+          </div>
+          {chemChapter10 === 'carbon' ? (
+            <LearnCarbon10 isLightMode={isLightMode} onBack={() => changeView('hub')} />
+          ) : (
+            <LearnChemistry
+              isLightMode={isLightMode}
+              onCompleteNotes={() => { setQbSubject('chemistry'); changeView('ncert'); }}
+              onGoToSelfAssessment={() => { setQbSubject('chemistry'); changeView('assessment'); }}
+            />
+          )}
+        </div>
       )}
 
       {/* ── 1D. LEARN BIOLOGY (CLASS IX) STUDY MODULE ── */}
