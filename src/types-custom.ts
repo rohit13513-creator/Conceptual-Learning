@@ -3,6 +3,7 @@ import type { GeoSpec } from "./components/GeoFigure";
 
 export interface QuizQuestion {
   figure?: GeoSpec;
+  diagram?: string; // id of a chemistry diagram (see data/carbonDiagrams.ts)
   id: number;
   question: string;
   options: string[];
@@ -12,6 +13,7 @@ export interface QuizQuestion {
 
 export interface NCERTSolvedQuestion {
   figure?: GeoSpec;
+  diagram?: string; // id of a chemistry diagram (see data/carbonDiagrams.ts)
   id: number;
   questionNumber: string;
   question: string;
@@ -25,6 +27,7 @@ export interface NCERTSolvedQuestion {
 
 export interface ShortQuestion {
   figure?: GeoSpec;
+  diagram?: string; // id of a chemistry diagram (see data/carbonDiagrams.ts)
   id: number;
   question: string;
   answer: string;
@@ -33,6 +36,7 @@ export interface ShortQuestion {
 
 export interface LongQuestion {
   figure?: GeoSpec;
+  diagram?: string; // id of a chemistry diagram (see data/carbonDiagrams.ts)
   id: number;
   question: string;
   markingScheme: string[];
@@ -49,6 +53,7 @@ export interface AssertionReasonQuestion {
 
 export interface CompetencyQuestion {
   figure?: GeoSpec;
+  diagram?: string; // id of a chemistry diagram (see data/carbonDiagrams.ts)
   id: number;
   caseTitle: string;
   caseDescription: string;

@@ -112,7 +112,7 @@ const Block: React.FC<{ b: CBlock; light: boolean }> = ({ b, light }) => {
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack }: { isLightMode?: boolean; onBack?: () => void }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void }) {
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
   const topic = TOPICS[idx];
@@ -171,7 +171,9 @@ export function LearnCarbon10({ isLightMode = false, onBack }: { isLightMode?: b
             {idx > 0 ? <button onClick={() => go(TOPICS[idx - 1].id)} className={navBtn}><ChevronLeft className="w-3 h-3" />Previous Topic</button> : <div />}
             {idx < TOPICS.length - 1
               ? <button onClick={() => go(TOPICS[idx + 1].id)} className={navBtn}>Next Topic<ChevronRight className="w-3 h-3" /></button>
-              : onBack && <button onClick={onBack} className={navBtn}>Back to Home<ChevronRight className="w-3 h-3" /></button>}
+              : onCompleteNotes
+                ? <button onClick={onCompleteNotes} className={navBtn}>Go to Solved Questions<ChevronRight className="w-3 h-3" /></button>
+                : onBack && <button onClick={onBack} className={navBtn}>Back to Home<ChevronRight className="w-3 h-3" /></button>}
           </div>
         </div>
       </main>

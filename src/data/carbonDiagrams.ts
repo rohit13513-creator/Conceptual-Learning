@@ -10,6 +10,8 @@ const Me = "CH3";
 
 // ── electron dot structures ──
 Object.entries(LEWIS).forEach(([k, f]) => add("lewis_" + k, f));
+import { LEWIS_RINGS } from "../components/chemLewis";
+Object.entries(LEWIS_RINGS).forEach(([k, f]) => add("lewis_" + k, f));
 
 // ── expanded structures: alkanes ──
 add("m_methane", () => alkane(1, "Methane, CH₄"));
@@ -157,3 +159,13 @@ add("ch_reactions", () => reactionMap());
 add("ch_mindmap", () => chapterMindMap());
 import { boilingPoints } from "../components/chemCharts";
 add("ch_bp", () => boilingPoints());
+add("m_hexyne", () => mol([C_(), C_(), C_(), C_(), C_({ bond: 3 }), C_()], "Hex-1-yne, C₆H₁₀"));
+
+// ── groups of structures used in the question bank ──
+const D = (id: string) => DIAGRAMS[id]();
+add("cmp_c4", () => scheme([[D("m_butane")], [D("m_isobutane")]], "The two isomers of C₄H₁₀"));
+add("cmp_c5", () => scheme([[D("m_pentane")], [D("m_isopentane")], [D("m_neopentane")]], "The three isomers of C₅H₁₂"));
+add("cmp_c3h8o", () => scheme([[D("m_propan1ol")], [D("m_propan2ol")], [D("m_methoxyethane")]], "The three isomers of C₃H₈O"));
+add("cmp_c3h6o", () => scheme([[D("m_propanal")], [D("m_propanone")]], "Functional isomers: C₃H₆O"));
+add("cmp_c4h8", () => scheme([[D("m_but1ene")], [D("m_but2ene")], [D("m_2mpropene")]], "Alkene isomers of C₄H₈"));
+add("cmp_c2h6o", () => scheme([[D("m_ethanol")], [D("m_dimethylether")]], "Functional isomers: C₂H₆O"));

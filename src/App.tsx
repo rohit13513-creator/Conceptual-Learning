@@ -24,6 +24,8 @@ import { LearnTissues9 } from './components/LearnTissues9';
 import { LearnDiversity9 } from './components/LearnDiversity9';
 import { LearnCircles9 } from './components/LearnCircles9';
 import { GeoFigure } from './components/GeoFigure';
+import { SceneFigure } from './components/SceneFigure';
+import { DIAGRAMS as CHEM_DIAGRAMS } from './data/carbonDiagrams';
 import { HomeHero } from './components/HomeHero';
 import { LearnCanadianMaths } from './components/LearnCanadianMaths';
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
@@ -228,6 +230,11 @@ import { CIRCLES9_MCQS } from './data/circles9_mcq';
 import { CIRCLES9_VERY_SHORT, CIRCLES9_SHORT } from './data/circles9_short';
 import { CIRCLES9_LONG, CIRCLES9_COMPETENCY } from './data/circles9_long';
 import { CIRCLES9_NCERT_SOLVED } from './data/circles9_ncert';
+import { CARBON10_MCQ_A } from './data/carbon10_mcqA';
+import { CARBON10_MCQ_B } from './data/carbon10_mcqB';
+import { CARBON10_VERY_SHORT, CARBON10_SHORT } from './data/carbon10_short';
+import { CARBON10_LONG, CARBON10_COMPETENCY } from './data/carbon10_long';
+import { CARBON10_NCERT_SOLVED } from './data/carbon10_ncert';
 import {
   Home,
   BookOpen,
@@ -3336,6 +3343,16 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         assertion: CLASSVIII_ASSERTION_REASON,
         competency: CLASSVIII_CASE_COMPETENCY,
       };
+    } else if (preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon') {
+      return {
+        ncert: CARBON10_NCERT_SOLVED,
+        mcqs: [...CARBON10_MCQ_A, ...CARBON10_MCQ_B],
+        veryshort: CARBON10_VERY_SHORT,
+        short: CARBON10_SHORT,
+        long: CARBON10_LONG,
+        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        competency: CARBON10_COMPETENCY,
+      };
     } else if (preparingFor === '10th' && qbSubject === 'chemistry') {
       return {
         ncert: CHEMISTRY10_NCERT_SOLVED,
@@ -3497,7 +3514,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         competency: [] as typeof CLASSX_CASE_COMPETENCY,
       };
     }
-  }, [preparingFor, qbSubject, physicsChapter9, bioChapter9, bioChapter10, mathsChapter8, scienceChapter8]);
+  }, [preparingFor, qbSubject, physicsChapter9, bioChapter9, bioChapter10, chemChapter10, mathsChapter8, scienceChapter8]);
 
   const [opticsType, setOpticsType] = useState<OpticsType>('concave-mirror');
   const [group, setGroup] = useState<'mirror' | 'lens'>('mirror');
@@ -6129,7 +6146,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             ))}
           </div>
           {chemChapter10 === 'carbon' ? (
-            <LearnCarbon10 isLightMode={isLightMode} onBack={() => changeView('hub')} />
+            <LearnCarbon10 isLightMode={isLightMode} onCompleteNotes={() => { setPreparingFor('10th'); setQbSubject('chemistry'); changeView('ncert'); }} onBack={() => changeView('hub')} />
           ) : (
             <LearnChemistry
               isLightMode={isLightMode}
@@ -6531,7 +6548,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
                     ? `Search & study official ${bioChapter10 === 'heredity' ? 'Heredity' : bioChapter10 === 'reproduction' ? 'How do Organisms Reproduce?' : bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
-                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'maths' ? 'Circles' : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' && bioChapter9 === 'diversity' ? 'Patterns in Life: Diversity and Classification' : preparingFor === '9th' && bioChapter9 === 'tissues' ? 'Tissues in Action' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemical Reactions and Equations' : 'Light'} textbook questions with exact step-by-step solutions.</>}
+                    : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'maths' ? 'Circles' : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' && bioChapter9 === 'diversity' ? 'Patterns in Life: Diversity and Classification' : preparingFor === '9th' && bioChapter9 === 'tissues' ? 'Tissues in Action' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? 'Carbon and its Compounds' : 'Chemical Reactions and Equations') : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-black border border-emerald-500/20 uppercase tracking-widest leading-none block w-fit">
@@ -6547,6 +6564,14 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 className="px-4 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-xl text-slate-200 outline-none focus:border-teal-500/80 w-64 transition font-medium"
               />
             </div>
+
+            {preparingFor === '10th' && qbSubject === 'chemistry' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button onClick={() => setChemChapter10('reactions')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'reactions' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Chemical Reactions</button>
+                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
+              </div>
+            )}
 
             {preparingFor === '9th' && qbSubject === 'biology' && (
               <div className="flex items-center gap-2 flex-wrap">
@@ -6687,6 +6712,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
                         {/* Figure drawn from the question data (Circles) */}
                         {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
 
                         {/* Figure -- CBSE-pattern diagram, shown before the given values for Maths8 geometry questions */}
                         {preparingFor === '8th' && qbSubject === 'maths' && (
@@ -6962,6 +6988,14 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               </div>
             </div>
 
+            {preparingFor === '10th' && qbSubject === 'chemistry' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
+                <button onClick={() => setChemChapter10('reactions')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'reactions' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Chemical Reactions</button>
+                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
+              </div>
+            )}
+
             {preparingFor === '9th' && qbSubject === 'biology' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
@@ -7152,6 +7186,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               {q.question}
                             </h4>
                             {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
 
                             {/* Grid representation of options */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -7269,6 +7304,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               {q.question}
                             </h3>
                             {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
                           </div>
 
                           {showAns && (
@@ -7336,6 +7372,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               {q.question}
                             </h3>
                             {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
                           </div>
 
                           {showAns && (
@@ -7394,6 +7431,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                 {q.question}
                               </h3>
                               {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
                             </div>
                             <button
                               onClick={() => {
@@ -7571,6 +7609,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               {q.caseDescription}
                             </p>
                             {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
+{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
                           </div>
  
                           {/* Questions list */}

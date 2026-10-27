@@ -3,7 +3,7 @@ import { SceneBuilder, Scene, C } from "./sceneKit";
 // Electron dot structures. Atoms sit on a grid (one unit = 62 px). A shared pair is drawn between the two
 // atoms (one marker from each atom); a lone pair is drawn on the side of the atom that is free.
 
-export interface LAtom { el: string; x: number; y: number; m?: "o" | "x"; lone?: string }
+export interface LAtom { el: string; x: number; y: number; m?: "o" | "x"; lone?: string; loneAt?: number[] }
 export type LBond = [number, number, number] | [number, number, number, string];
 
 const U = 62;
@@ -47,10 +47,17 @@ export function lewis(atoms: LAtom[], bonds: LBond[], caption?: string, minW = 0
       marker(sb, cx - tx * 4.5, cy - ty * 4.5, a.m ?? "o");
     });
   });
+  atoms.forEach((a, i) => (a.loneAt ?? []).forEach((deg) => {
+    const t = (deg * Math.PI) / 180, vx = Math.cos(t), vy = -Math.sin(t);
+    const cx = P[i][0] + vx * 19, cy = P[i][1] + vy * 19, tx = -vy, ty = vx;
+    marker(sb, cx + tx * 4.5, cy + ty * 4.5, a.m ?? "o");
+    marker(sb, cx - tx * 4.5, cy - ty * 4.5, a.m ?? "o");
+  }));
   atoms.forEach((a, i) => sb.text(P[i][0], P[i][1] + 5.5, a.el, { size: 19, fill: COL[a.el] ?? C.ink }));
   return sb.build();
 }
 
+export const LEWIS_RINGS: Record<string, () => Scene> = {};
 // ready-made molecules (x = cross, o = dot)
 const o = (el: string, x: number, y: number, lone = ""): LAtom => ({ el, x, y, m: "o", lone });
 const x = (el: string, xx: number, y: number, lone = ""): LAtom => ({ el, x: xx, y, m: "x", lone });
@@ -73,3 +80,22 @@ export const LEWIS = {
   CH3COOH: () => lewis([x("C", 0, 0), x("C", 1, 0), o("H", 0, -1), o("H", 0, 1), o("H", -1, 0), o("O", 1, -1, "lr"), o("O", 2, 0, "ud"), o("H", 3, 0)], [[0, 1, 1, "oo"], [0, 2, 1], [0, 3, 1], [0, 4, 1], [1, 5, 2], [1, 6, 1, "xx"], [6, 7, 1, "xo"]], "Ethanoic acid, CH₃COOH", 360),
   CH3COCH3: () => lewis([x("C", 0, 0), x("C", 1, 0), x("C", 2, 0), o("H", 0, -1), o("H", 0, 1), o("H", -1, 0), o("O", 1, -1, "lr"), o("H", 2, -1), o("H", 2, 1), o("H", 3, 0)], [[0, 1, 1, "oo"], [1, 2, 1, "oo"], [0, 3, 1], [0, 4, 1], [0, 5, 1], [1, 6, 2], [2, 7, 1], [2, 8, 1], [2, 9, 1]], "Propanone, CH₃COCH₃", 400),
 };
+
+// ring molecules: sulphur S8, cyclopentane and cyclohexane
+function ringLewis(n: number, kind: "S" | "C", caption: string): Scene {
+  const atoms: LAtom[] = [], bonds: LBond[] = [];
+  const R = kind === "S" ? 1.45 : n === 5 ? 1.1 : 1.0;
+  for (let i = 0; i < n; i++) {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / n, deg = (a * 180) / Math.PI;
+    atoms.push({ el: kind, x: R * Math.cos(a), y: -R * Math.sin(a), m: kind === "S" ? (i % 2 ? "x" : "o") : "x", loneAt: kind === "S" ? [deg + 38, deg - 38] : undefined });
+  }
+  for (let i = 0; i < n; i++) bonds.push([i, (i + 1) % n, 1, kind === "C" ? "oo" : undefined as any]);
+  if (kind === "C") for (let i = 0; i < n; i++) {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / n;
+    [-0.36, 0.36].forEach((d) => { atoms.push({ el: "H", x: (R + 0.95) * Math.cos(a + d), y: -(R + 0.95) * Math.sin(a + d), m: "o" }); bonds.push([i, atoms.length - 1, 1]); });
+  }
+  return lewis(atoms, bonds.map((b) => (b[3] === undefined ? [b[0], b[1], b[2]] as LBond : b)), caption);
+}
+LEWIS_RINGS.S8 = () => ringLewis(8, "S", "Sulphur, S₈: a ring of 8 atoms, each sharing a pair with its two neighbours");
+LEWIS_RINGS.C5H10 = () => ringLewis(5, "C", "Cyclopentane, C₅H₁₀");
+LEWIS_RINGS.C6H12 = () => ringLewis(6, "C", "Cyclohexane, C₆H₁₂");
