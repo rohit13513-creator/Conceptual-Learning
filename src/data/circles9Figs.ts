@@ -107,8 +107,7 @@ export const parallelChords = (o: { same?: boolean; l1?: string; l2?: string; d1
     segs: [
       { p: ["A", "B"], bold: true, label: o.l1 },
       { p: ["C", "D"], bold: true, label: o.l2 },
-      { p: ["O", "P"], dash: true, label: o.d1 },
-      { p: ["O", "Q"], dash: true, label: o.d2 },
+      ...(y1 * y2 > 0 ? [{ p: ["O", y1 * y1 > y2 * y2 ? "P" : "Q"] as [string, string], dash: true, label: y1 * y1 > y2 * y2 ? o.d1 : o.d2 }] : [{ p: ["O", "P"] as [string, string], dash: true, label: o.d1 }, { p: ["O", "Q"] as [string, string], dash: true, label: o.d2 }]),
     ],
     noLabel: ["P", "Q"],
     labels: o.dist ? [{ x: 0.2, y: (y1 + y2) / 2, t: o.dist, dx: 18, color: "#15803d" }] : [],
@@ -147,9 +146,9 @@ export const circumcircle = (cap?: string): GeoSpec => {
 /** Two points A, B with the perpendicular bisector and three circles through them. */
 export const twoPointCircles = (cap?: string): GeoSpec => ({
   noMain: true,
-  w: 260, h: 262, scale: 68,
-  pts: { A: [-0.6, 0], B: [0.6, 0], M: [0, 0], K: [0, 0.7], L: [0, -0.8], _t: [0, 1.75], _b: [0, -1.75] },
-  circles: [{ c: [0, 0], r: 0.6, color: "#2563eb" }, { c: [0, 0.7], r: Math.hypot(0.6, 0.7), color: "#15803d" }, { c: [0, -0.8], r: Math.hypot(0.6, 0.8), color: "#ea580c" }],
+  w: 260, h: 110, scale: 55,
+  pts: { A: [-0.6, 0], B: [0.6, 0], M: [0, 0], K: [0, 0.7], L: [0, 1.5], _t: [0, 3.3], _b: [0, -1.0] },
+  circles: [{ c: [0, 0], r: 0.6, color: "#2563eb" }, { c: [0, 0.7], r: Math.hypot(0.6, 0.7), color: "#15803d" }, { c: [0, 1.5], r: Math.hypot(0.6, 1.5), color: "#ea580c" }],
   segs: [{ p: ["A", "B"], bold: true }, { p: ["_t", "_b"], dash: true, color: "#475569" }],
   labelAway: "M",
   caption: cap,
@@ -281,6 +280,7 @@ export const semicircleProof = (cap?: string): GeoSpec => ({
 
 /** Proof of the opposite angles: the four isosceles triangles at O (p, q, u, v are the base angles). */
 export const cyclicProof = (cap?: string): GeoSpec => ({
+  w: 330, h: 300, scale: 115,
   pts: { A: ang(105), B: ang(205), C: ang(315), D: ang(30), O: [0, 0] },
   polys: [{ p: ["A", "B", "C", "D"] }],
   segs: [
@@ -288,7 +288,7 @@ export const cyclicProof = (cap?: string): GeoSpec => ({
     { p: ["O", "A"], dash: true }, { p: ["O", "B"], dash: true }, { p: ["O", "C"], dash: true }, { p: ["O", "D"], dash: true },
   ],
   angs: [
-    { at: "A", from: "O", to: "D", label: "p", r: 24, color: "#ea580c" }, { at: "A", from: "O", to: "B", label: "q", r: 24, color: "#2563eb" },
+    { at: "A", from: "O", to: "D", label: "p", r: 28, color: "#ea580c" }, { at: "A", from: "O", to: "B", label: "q", r: 28, color: "#2563eb" },
     { at: "B", from: "O", to: "A", label: "q", r: 24, color: "#2563eb" }, { at: "B", from: "O", to: "C", label: "u", r: 24, color: "#15803d" },
     { at: "C", from: "O", to: "B", label: "u", r: 24, color: "#15803d" }, { at: "C", from: "O", to: "D", label: "v", r: 24, color: "#7c3aed" },
     { at: "D", from: "O", to: "C", label: "v", r: 24, color: "#7c3aed" }, { at: "D", from: "O", to: "A", label: "p", r: 24, color: "#ea580c" },
@@ -306,17 +306,17 @@ export const th9a = (cap?: string): GeoSpec => ({
 
 /** Theorem 9, case 2: DC extended meets the circle at E outside the arc AFB. */
 export const th9b = (cap?: string): GeoSpec => ({
-  pts: { C: [0, 0], A: ang(215), B: ang(285), D: ang(150), E: ang(330) },
+  pts: { C: [0, 0], A: ang(205), B: ang(270), D: ang(140), E: ang(320) },
   segs: [{ p: ["C", "A"] }, { p: ["C", "B"] }, { p: ["D", "A"], bold: true }, { p: ["D", "B"], bold: true }, { p: ["D", "E"], dash: true }],
-  arcs: [{ a1: 215, a2: 285 }],
+  arcs: [{ a1: 205, a2: 270 }],
   caption: cap,
 });
 
 /** Concyclic proof: circle through A, B, C; D is outside (or inside) on the line AE where E is on the circle. */
 export const th10 = (outside = true, cap?: string): GeoSpec => {
-  const A = ang(205), B = ang(335), C = ang(95), E = ang(140);
-  const a = [Math.cos(rad(205)), Math.sin(rad(205))], e = [Math.cos(rad(140)), Math.sin(rad(140))];
-  const k = outside ? 1.45 : 0.62;
+  const A = ang(205), B = ang(335), C = ang(60), E = ang(125);
+  const a = [Math.cos(rad(205)), Math.sin(rad(205))], e = [Math.cos(rad(125)), Math.sin(rad(125))];
+  const k = outside ? 1.7 : 0.55;
   const D: [number, number] = [a[0] + k * (e[0] - a[0]), a[1] + k * (e[1] - a[1])];
   return {
     pts: { A, B, C, D, E },
@@ -336,7 +336,7 @@ export const findX = (cap?: string): GeoSpec => ({
 
 /** Equal chords AB and DE, joined to the centre, with the equal angles at O marked. */
 export const equalChordsAngles = (o: { a?: string; b?: string; cap?: string; len?: string } = {}): GeoSpec => ({
-  pts: { O: [0, 0], A: ang(205), B: ang(335), D: ang(25), E: ang(155) },
+  pts: { O: [0, 0], A: ang(225), B: ang(315), D: ang(15), E: ang(105) },
   segs: [
     { p: ["A", "B"], bold: true, label: o.len }, { p: ["D", "E"], bold: true, label: o.len },
     { p: ["O", "A"], dash: true }, { p: ["O", "B"], dash: true }, { p: ["O", "D"], dash: true }, { p: ["O", "E"], dash: true },
@@ -369,7 +369,7 @@ export const commonChord = (o: { cap?: string; len?: string; r1?: string; r2?: s
   const px = x1 + a, py = Math.sqrt(r1 * r1 - a * a);
   void d;
   return {
-    w: 280, h: 230, scale: 70, noMain: true,
+    w: 360, h: 270, scale: 92, noMain: true,
     pts: { O1: [x1, 0], O2: [x2, 0], P: [px, py], Q: [px, -py], M: [px, 0] },
     circles: [{ c: [x1, 0], r: r1, color: "#2563eb" }, { c: [x2, 0], r: r2, color: "#ea580c" }],
     segs: [{ p: ["P", "Q"], bold: true, label: o.len }, { p: ["O1", "O2"], dash: true }, { p: ["O1", "P"], dash: true, label: o.r1 }, { p: ["O2", "P"], dash: true, label: o.r2 }],
@@ -407,15 +407,15 @@ export const hexagonSide = (cap?: string): GeoSpec => {
 };
 
 /** Two concentric circles (outer radius 1, inner radius k) with a chord of the outer circle at distance dy from O. */
-export const concentric = (o: { k?: number; dy?: number; cap?: string; len?: string } = {}): GeoSpec => {
+export const concentric = (o: { k?: number; dy?: number; cap?: string; len?: string; tangent?: boolean } = {}): GeoSpec => {
   const k = o.k ?? 5 / 13, dy = o.dy ?? 3 / 13;
   const h1 = Math.sqrt(1 - dy * dy), h2 = Math.sqrt(Math.max(0, k * k - dy * dy));
   return {
-    pts: { O: [0, 0], A: [-h1, -dy], B: [h1, -dy], C: [-h2, -dy], D: [h2, -dy], M: [0, -dy] },
+    pts: o.tangent ? { O: [0, 0], A: [-h1, -dy], B: [h1, -dy], M: [0, -dy] } : { O: [0, 0], A: [-h1, -dy], B: [h1, -dy], C: [-h2, -dy], D: [h2, -dy], M: [0, -dy] },
     circles: [{ c: [0, 0], r: k, color: "#2563eb" }],
     segs: [{ p: ["A", "B"], bold: true, label: o.len }, { p: ["O", "M"], dash: true }],
     rights: [["O", "M", "B"]],
-    noLabel: ["M"],
+    noLabel: o.tangent ? [] : ["M"],
     caption: o.cap,
   };
 };
@@ -424,10 +424,11 @@ export const concentric = (o: { k?: number; dy?: number; cap?: string; len?: str
 export const triCentral = (o: { a?: number; b?: number; c?: number; ang?: [string, string, string]; cap?: string } = {}): GeoSpec => {
   const a = o.a ?? 90, b = o.b ?? 190, c = o.c ?? 320;
   return {
+    w: 300, h: 270, scale: 105,
     pts: { A: ang(a), B: ang(b), C: ang(c), O: [0, 0] },
     polys: [{ p: ["A", "B", "C"] }],
     segs: [{ p: ["A", "B"], bold: true }, { p: ["B", "C"], bold: true }, { p: ["C", "A"], bold: true }, { p: ["O", "A"], dash: true }, { p: ["O", "B"], dash: true }, { p: ["O", "C"], dash: true }],
-    angs: o.ang ? [{ at: "O", from: "A", to: "B", label: o.ang[0], r: 18 }, { at: "O", from: "B", to: "C", label: o.ang[1], r: 18, color: "#2563eb" }, { at: "O", from: "C", to: "A", label: o.ang[2], r: 18, color: "#15803d" }] : [],
+    angs: o.ang ? [{ at: "O", from: "A", to: "B", label: o.ang[0], r: 22 }, { at: "O", from: "B", to: "C", label: o.ang[1], r: 22, color: "#2563eb" }, { at: "O", from: "C", to: "A", label: o.ang[2], r: 22, color: "#15803d" }] : [],
     caption: o.cap,
   };
 };

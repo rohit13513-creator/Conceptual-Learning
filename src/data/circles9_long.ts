@@ -153,7 +153,7 @@ export const CIRCLES9_LONG: LongQuestion[] = [
     [["Distance", "Half of each chord = 8 cm. The midpoint M of a chord is the foot of the perpendicular from O, and OM = √(10² − 8²) = 6 cm. This is the same for every such chord."],
      ["Locus", "All midpoints are at a fixed distance 6 cm from O, so they lie on a circle with centre O. Rotating the chord about O gives every point of that circle."],
      ["Radius", "6 cm."],
-     ["Area of ring", "π(10² − 6²) = 64π cm² ≈ 201 cm²."]], F.concentric({ k: 0.6, dy: 0.6, cap: "Midpoints form the inner circle" })),
+     ["Area of ring", "π(10² − 6²) = 64π cm² ≈ 201 cm²."]], F.concentric({ k: 0.6, dy: 0.6, tangent: true, cap: "Midpoints form the inner circle" })),
   L("A point P is 8 cm from the centre of a circle of radius 17 cm. Prove that the shortest chord through P is perpendicular to OP, and find its length. What is the longest chord through P?",
     ["Reason for the shortest chord: 2 marks", "Length of the shortest chord: 2 marks", "Longest chord: 1 mark"],
     [["Reason", "Let a chord through P be at distance d from O. OM ⊥ chord, and OM ≤ OP (M is the foot of the perpendicular from O to a line that contains P). The farther the chord is from O, the shorter it is. The greatest distance OM = OP occurs when M = P, that is, when the chord is perpendicular to OP."],
