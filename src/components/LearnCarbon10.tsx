@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame } from "lucide-react";
+import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame, Trophy } from "lucide-react";
 import { DownloadNotesLink } from "./DownloadNotesLink";
 import { SceneFigure } from "./SceneFigure";
 import { parseMarkup, fm } from "./sceneKit";
@@ -7,17 +7,18 @@ import { DIAGRAMS } from "../data/carbonDiagrams";
 import { CARBON_A } from "../data/carbonNotesA";
 import { CARBON_B } from "../data/carbonNotesB";
 import { CARBON_C } from "../data/carbonNotesC";
+import { CARBON_D } from "../data/carbonNotesD";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry: "Carbon and its Compounds". Simple words, point by point, with clear diagrams.
 
-const TOPICS = [...CARBON_A, ...CARBON_B, ...CARBON_C];
+const TOPICS = [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D];
 const NOTES_PDF_URL = "/Class-10-Carbon-Compounds-Notes.pdf";
 const NOTES_PDF_NAME = "Class-10-Carbon-Compounds-Notes.pdf";
 
 const ICONS: Record<string, React.ElementType> = {
   Carbon: Atom, Bonding: Atom, Allotropes: Atom, Hydrocarbons: FlaskConical, "Series and naming": ListChecks, "Classes of compounds": Beaker,
-  "Properties and reactions": Flame, "Important compounds": Droplets, Revision: Brain,
+  "Properties and reactions": Flame, "Important compounds": Droplets, Revision: Brain, "Competition Zone": Trophy,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts

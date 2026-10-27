@@ -96,3 +96,24 @@ export function chapterMindMap(): Scene {
   });
   return sb.build();
 }
+
+/** boiling points of five compounds with two carbon atoms: the stronger the pull between molecules, the higher the boiling point */
+export function boilingPoints(): Scene {
+  const sb = new SceneBuilder(600, 290, "Boiling points of compounds with 2 carbon atoms (in kelvin)");
+  const rows: [string, number, string, string][] = [
+    ["Ethane  C_{2}H_{6}", 184, "#94a3b8", "no –OH, no C=O"],
+    ["Methoxymethane  C_{2}H_{6}O", 249, "#60a5fa", "ether: no H-bonds"],
+    ["Ethanal  C_{2}H_{4}O", 294, "#34d399", "polar C=O"],
+    ["Ethanol  C_{2}H_{5}OH", 351, "#f59e0b", "H-bonds"],
+    ["Ethanoic acid  CH_{3}COOH", 391, "#ef4444", "strongest H-bonds"],
+  ];
+  const x0 = 205, k = 1.25;
+  rows.forEach(([name, bp, col, note], i) => {
+    const y = 28 + i * 50, len = (bp - 140) * k;
+    sb.text(x0 - 10, y + 16, name, { size: 12.5, anchor: "end" });
+    sb.rect(x0, y, len, 24, { rx: 4, fill: col });
+    sb.text(x0 + len + 8, y + 16, `${bp} K`, { size: 12.5, anchor: "start" });
+    sb.text(x0 + 6, y + 40, note, { size: 11, fill: C.grey, anchor: "start", bold: false });
+  });
+  return sb.build();
+}

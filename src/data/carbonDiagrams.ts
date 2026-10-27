@@ -155,3 +155,5 @@ add("ch_tree", () => hydrocarbonTree());
 add("ch_ladder", () => homologousLadder());
 add("ch_reactions", () => reactionMap());
 add("ch_mindmap", () => chapterMindMap());
+import { boilingPoints } from "../components/chemCharts";
+add("ch_bp", () => boilingPoints());
