@@ -11737,9 +11737,11 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     if (!auth) return;
     const { submissionId } = req.body;
     if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
-    const { data: sub } = await supabase.from("revision_submissions").select("student_email").eq("id", submissionId).maybeSingle();
+    const { data: sub } = await supabase.from("revision_submissions").select("student_email, status").eq("id", submissionId).maybeSingle();
     if (!sub || sub.student_email !== auth.email) return res.status(404).json({ error: "Submission not found." });
-    await checkRevisionSubmission(String(submissionId));
+    // A retried or repeated request for a submission that has already been graded must not grade it
+    // (and pay for it) all over again; an "Improve Score" resubmission is reset to pending first.
+    if (sub.status !== "checked") await checkRevisionSubmission(String(submissionId));
     const { data: updated } = await supabase.from("revision_submissions").select("*").eq("id", submissionId).maybeSingle();
     return res.json({ submission: updated ? { id: updated.id, status: updated.status, aiScore: updated.ai_score, aiFeedback: updated.ai_feedback, isLate: updated.is_late, submittedAt: updated.submitted_at } : null });
   });

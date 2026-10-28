@@ -355,6 +355,44 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // A submission can stay "pending" on screen when the check request never came back (slow
+  // grading, a dropped connection) even though grading finishes on the server a moment later.
+  // Without this the student sat on "your score will appear shortly" until they reloaded the page
+  // (a real report: still the same message after several minutes). Poll for the result, and if
+  // it is still pending after about two minutes, ask for the check again once.
+  useEffect(() => {
+    if (!currentSubmission || currentSubmission.status !== 'pending' || checkingNow) return;
+    const submissionId = currentSubmission.id;
+    const paperId = currentSubmission.revisionPaperId;
+    let stopped = false;
+    let tries = 0;
+    const poll = async () => {
+      tries++;
+      try {
+        if (tries === 14) {
+          fetch('/api/revision/check-mine', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` }, body: JSON.stringify({ submissionId }) }).catch(() => {});
+        }
+        const d = await fetch('/api/revision/mine', { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json());
+        if (stopped) return;
+        const sub = (d?.submissions || []).find((s: RevisionSubmission) => s.id === submissionId);
+        if (!sub || sub.status !== 'checked') return;
+        stopped = true;
+        window.clearInterval(timer);
+        setAllPapers(d.papers || []);
+        setAllSubmissions(d.submissions || []);
+        setCurrentSubmission(sub);
+        const graded = (d.papers || []).find((p: RevisionPaper) => p.id === paperId);
+        if (graded) setCurrentPaper(graded);
+        fetch('/api/revision/setup', { headers: { Authorization: `Bearer ${user.token}` } })
+          .then((r) => r.json())
+          .then((s) => { if (s?.setup) setSetup(s.setup); })
+          .catch(() => {});
+      } catch { /* keep polling */ }
+    };
+    const timer = window.setInterval(() => { if (!stopped && tries < 60) poll(); }, 8000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [currentSubmission?.id, currentSubmission?.status, checkingNow, user.token]);
+
   // Fetches the real chapter list to offer in the dropdown for both subjects at once -- refetched
   // whenever the setup form opens, again if a Class 8 student switches Old/New NCERT, and again the
   // moment a class becomes known (an account with no class on file -- chiefly the admin's own login
@@ -596,7 +634,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
           });
         }, 350);
         try {
-          const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId } });
+          // Grading a multi-page answer sheet routinely takes longer than the 30s default, and every
+          // abort-and-retry started the whole grading again on the server -- so wait out the
+          // server's own limit (120s) and retry at most once.
+          const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId }, timeoutMs: 115000, maxRetries: 1 });
           if (checkingIntervalRef.current !== null) { window.clearInterval(checkingIntervalRef.current); checkingIntervalRef.current = null; }
           if (checkResult.ok && checkResult.data.submission) {
             // Let the student actually see the bar reach 100 before the summary replaces it --
