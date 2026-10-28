@@ -234,6 +234,7 @@ import { CARBON10_MCQ_A } from './data/carbon10_mcqA';
 import { CARBON10_MCQ_B } from './data/carbon10_mcqB';
 import { CARBON10_VERY_SHORT, CARBON10_SHORT } from './data/carbon10_short';
 import { CARBON10_LONG, CARBON10_COMPETENCY } from './data/carbon10_long';
+import { CARBON10_ASSERTIONS } from './data/carbon10_ar';
 import { CARBON10_NCERT_SOLVED } from './data/carbon10_ncert';
 import { CARBON10_SELF_ASSESSMENT } from './data/carbon10_self';
 import {
@@ -3351,7 +3352,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         veryshort: CARBON10_VERY_SHORT,
         short: CARBON10_SHORT,
         long: CARBON10_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
+        assertion: CARBON10_ASSERTIONS,
         competency: CARBON10_COMPETENCY,
       };
     } else if (preparingFor === '10th' && qbSubject === 'chemistry') {
