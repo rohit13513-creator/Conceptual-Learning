@@ -8284,7 +8284,7 @@ function buildApp(): express.Express {
       // Most common real cause of "Google login not working": the Gmail they are signed into is not
       // the email they registered with. Logged so the teacher can tell which email to look for.
       console.warn(`Google sign-in rejected: no account registered with ${emailNormalized}.`);
-      return res.status(401).json({ error: "No account found with this email. Please register first." });
+      return res.status(401).json({ error: `No account is registered with ${emailNormalized}. Please register first using this same email, or log in with the email and password you registered with.` });
     }
 
     if (userRow.status === "pending") {
