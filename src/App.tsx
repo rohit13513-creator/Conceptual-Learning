@@ -1568,20 +1568,33 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   // whatever DOM node exists at render time, and that node gets unmounted when the tab switches away.
   useEffect(() => {
     if (authTab !== 'login') return;
-    const google = (window as any).google;
-    if (!google?.accounts?.id) return;
-    const container = document.getElementById('google-signin-button');
-    if (!container) return;
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredentialResponse,
-    });
-    google.accounts.id.renderButton(container, {
-      theme: isLightMode ? 'outline' : 'filled_black',
-      size: 'large',
-      width: 320,
-      text: 'signin_with',
-    });
+    // Google's script is loaded asynchronously and, on a slow mobile connection, can arrive after
+    // this screen has already appeared -- the old one-shot check then silently drew no button at
+    // all. Keep trying (up to about 30s) until the script and the placeholder are both ready.
+    const draw = (): boolean => {
+      const google = (window as any).google;
+      if (!google?.accounts?.id) return false;
+      const container = document.getElementById('google-signin-button');
+      if (!container) return false;
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+      });
+      google.accounts.id.renderButton(container, {
+        theme: isLightMode ? 'outline' : 'filled_black',
+        size: 'large',
+        width: 320,
+        text: 'signin_with',
+      });
+      return true;
+    };
+    if (draw()) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries++;
+      if (draw() || tries >= 60) window.clearInterval(timer);
+    }, 500);
+    return () => window.clearInterval(timer);
   }, [authTab, isLightMode, handleGoogleCredentialResponse, showAuthForm]);
 
   const handleRequestOtp = async (successMessage?: string) => {

@@ -8255,6 +8255,7 @@ function buildApp(): express.Express {
     try {
       const verifyResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
       if (!verifyResp.ok) {
+        console.warn(`Google sign-in rejected: Google's token check returned ${verifyResp.status}.`);
         return res.status(401).json({ error: "Your Google sign-in could not be verified. Please try again." });
       }
       payload = await verifyResp.json();
@@ -8266,6 +8267,7 @@ function buildApp(): express.Express {
     // The audience MUST be this app's own Client ID -- otherwise a valid Google ID token issued to
     // some completely different website could be replayed here to log into this app instead.
     if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+      console.warn("Google sign-in rejected: the token was issued for a different Client ID than this server's GOOGLE_CLIENT_ID.");
       return res.status(401).json({ error: "Your Google sign-in could not be verified. Please try again." });
     }
     if (payload.email_verified !== "true" && payload.email_verified !== true) {
@@ -8279,6 +8281,9 @@ function buildApp(): express.Express {
     const isTestAccount = emailNormalized === "test@rayoptica.com";
     const { data: userRow } = await supabase.from("users").select("*").eq("email", emailNormalized).maybeSingle();
     if (!userRow) {
+      // Most common real cause of "Google login not working": the Gmail they are signed into is not
+      // the email they registered with. Logged so the teacher can tell which email to look for.
+      console.warn(`Google sign-in rejected: no account registered with ${emailNormalized}.`);
       return res.status(401).json({ error: "No account found with this email. Please register first." });
     }
 
