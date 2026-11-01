@@ -1,242 +1,59 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { lazyView } from './lazyView';
+import { peekBank, loadBank } from './data/banks';
+import type { Bank } from './data/bankTypes';
 import OpticsCanvas, {
   computeImage,
   getImageDescription,
   getPositionNote,
 } from './components/OpticsCanvas';
 import type { OpticsType } from './components/OpticsCanvas';
-import { AnalysisDashboard } from './components/AnalysisDashboard';
-import { Quiz } from './components/Quiz';
-import { LearnOptics, renderGradePdfNotes } from './components/LearnOptics';
-import LearnChemistry from './components/LearnChemistry';
-import { LearnCarbon10 } from './components/LearnCarbon10';
-import { LearnBiology } from './components/LearnBiology';
-import { LearnBiology10 } from './components/LearnBiology10';
-import { LearnControlCoordination10 } from './components/LearnControlCoordination10';
-import { LearnReproduction10 } from './components/LearnReproduction10';
-import { LearnHeredity10 } from './components/LearnHeredity10';
-import { LearnPhysics9 } from './components/LearnPhysics9';
-import { LearnForces9 } from './components/LearnForces9';
-import { LearnEnergy9 } from './components/LearnEnergy9';
-import { LearnSound9 } from './components/LearnSound9';
-import { LearnFoundations9 } from './components/LearnFoundations9';
-import { LearnTissues9 } from './components/LearnTissues9';
-import { LearnDiversity9 } from './components/LearnDiversity9';
-import { LearnCircles9 } from './components/LearnCircles9';
-import { GeoFigure } from './components/GeoFigure';
-import { SceneFigure } from './components/SceneFigure';
-import { DIAGRAMS as CHEM_DIAGRAMS } from './data/carbonDiagrams';
+const AnalysisDashboard = lazyView(() => import('./components/AnalysisDashboard').then((m) => ({ default: m.AnalysisDashboard })));
+const Quiz = lazyView(() => import('./components/Quiz').then((m) => ({ default: m.Quiz })));
+const LearnOptics = lazyView(() => import('./components/LearnOptics').then((m) => ({ default: m.LearnOptics })));
+const GradePdfNotes = lazyView(() => import('./components/GradePdfNotes'));
+const LearnChemistry = lazyView(() => import('./components/LearnChemistry'));
+const LearnCarbon10 = lazyView(() => import('./components/LearnCarbon10').then((m) => ({ default: m.LearnCarbon10 })));
+const LearnBiology = lazyView(() => import('./components/LearnBiology').then((m) => ({ default: m.LearnBiology })));
+const LearnBiology10 = lazyView(() => import('./components/LearnBiology10').then((m) => ({ default: m.LearnBiology10 })));
+const LearnControlCoordination10 = lazyView(() => import('./components/LearnControlCoordination10').then((m) => ({ default: m.LearnControlCoordination10 })));
+const LearnReproduction10 = lazyView(() => import('./components/LearnReproduction10').then((m) => ({ default: m.LearnReproduction10 })));
+const LearnHeredity10 = lazyView(() => import('./components/LearnHeredity10').then((m) => ({ default: m.LearnHeredity10 })));
+const LearnPhysics9 = lazyView(() => import('./components/LearnPhysics9').then((m) => ({ default: m.LearnPhysics9 })));
+const LearnForces9 = lazyView(() => import('./components/LearnForces9').then((m) => ({ default: m.LearnForces9 })));
+const LearnEnergy9 = lazyView(() => import('./components/LearnEnergy9').then((m) => ({ default: m.LearnEnergy9 })));
+const LearnSound9 = lazyView(() => import('./components/LearnSound9').then((m) => ({ default: m.LearnSound9 })));
+const LearnFoundations9 = lazyView(() => import('./components/LearnFoundations9').then((m) => ({ default: m.LearnFoundations9 })));
+const LearnTissues9 = lazyView(() => import('./components/LearnTissues9').then((m) => ({ default: m.LearnTissues9 })));
+const LearnDiversity9 = lazyView(() => import('./components/LearnDiversity9').then((m) => ({ default: m.LearnDiversity9 })));
+const LearnCircles9 = lazyView(() => import('./components/LearnCircles9').then((m) => ({ default: m.LearnCircles9 })));
+const QuestionFigure = lazyView(() => import('./components/QuestionFigure'));
 import { HomeHero } from './components/HomeHero';
-import { LearnCanadianMaths } from './components/LearnCanadianMaths';
+const LearnCanadianMaths = lazyView(() => import('./components/LearnCanadianMaths').then((m) => ({ default: m.LearnCanadianMaths })));
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
-import { LearnMaths8 } from './components/LearnMaths8';
-import { LearnMaths8SquareCube } from './components/LearnMaths8SquareCube';
-import { LearnScience8 } from './components/LearnScience8';
-import { LearnScience8InvisibleWorld } from './components/LearnScience8InvisibleWorld';
-import { LearnScience8Health } from './components/LearnScience8Health';
-import { LearnScience8Matter } from './components/LearnScience8Matter';
-import { LearnScience8ElementsCompounds } from './components/LearnScience8ElementsCompounds';
-import { Maths8SolvedDiagram } from './components/Maths8SolvedDiagrams';
+const LearnMaths8 = lazyView(() => import('./components/LearnMaths8').then((m) => ({ default: m.LearnMaths8 })));
+const LearnMaths8SquareCube = lazyView(() => import('./components/LearnMaths8SquareCube').then((m) => ({ default: m.LearnMaths8SquareCube })));
+const LearnScience8 = lazyView(() => import('./components/LearnScience8').then((m) => ({ default: m.LearnScience8 })));
+const LearnScience8InvisibleWorld = lazyView(() => import('./components/LearnScience8InvisibleWorld').then((m) => ({ default: m.LearnScience8InvisibleWorld })));
+const LearnScience8Health = lazyView(() => import('./components/LearnScience8Health').then((m) => ({ default: m.LearnScience8Health })));
+const LearnScience8Matter = lazyView(() => import('./components/LearnScience8Matter').then((m) => ({ default: m.LearnScience8Matter })));
+const LearnScience8ElementsCompounds = lazyView(() => import('./components/LearnScience8ElementsCompounds').then((m) => ({ default: m.LearnScience8ElementsCompounds })));
+const Maths8SolvedDiagram = lazyView(() => import('./components/Maths8SolvedDiagrams').then((m) => ({ default: m.Maths8SolvedDiagram })));
 import { PhotoUploader } from './components/PhotoUploader';
 import { LandingPage } from './components/LandingPage';
 import { shrinkPdf, PDF_SHRINK_THRESHOLD_BYTES, PDF_MAX_UPLOAD_BYTES } from './utils/shrinkPdf';
-import { Revision } from './components/Revision';
-import { RevisionLeaderboard, CategoryCard as RevisionCategoryCard } from './components/RevisionLeaderboard';
-import { HomeworkLeaderboard, LeaderboardTable as HomeworkLeaderboardTable } from './components/HomeworkLeaderboard';
-import { NcertDownloads } from './components/NcertDownloads';
-import ChapterNotesViewer from './components/ChapterNotesViewer';
-import html2pdf from 'html2pdf.js';
+const Revision = lazyView(() => import('./components/Revision').then((m) => ({ default: m.Revision })));
+const RevisionLeaderboard = lazyView(() => import('./components/RevisionLeaderboard').then((m) => ({ default: m.RevisionLeaderboard })));
+const RevisionCategoryCard = lazyView(() => import('./components/RevisionLeaderboard').then((m) => ({ default: m.CategoryCard })));
+const HomeworkLeaderboard = lazyView(() => import('./components/HomeworkLeaderboard').then((m) => ({ default: m.HomeworkLeaderboard })));
+const HomeworkLeaderboardTable = lazyView(() => import('./components/HomeworkLeaderboard').then((m) => ({ default: m.LeaderboardTable })));
+const NcertDownloads = lazyView(() => import('./components/NcertDownloads').then((m) => ({ default: m.NcertDownloads })));
+const ChapterNotesViewer = lazyView(() => import('./components/ChapterNotesViewer'));
 import { uploadWithRetry, fetchJsonWithRetry } from './utils/uploadWithRetry';
-import { CompetitiveOptics } from './components/CompetitiveOptics';
+const CompetitiveOptics = lazyView(() => import('./components/CompetitiveOptics').then((m) => ({ default: m.CompetitiveOptics })));
 import { AboutUs } from './components/AboutUs';
-import ReactionSimulator from './components/ReactionSimulator';
-import KnowYourChemicals from './components/KnowYourChemicals';
-import {
-  NCERT_SOLVED_QUESTIONS,
-  SHORT_ANSWER_QUESTIONS,
-  LONG_ANSWER_QUESTIONS,
-  ASSERTION_REASON_QUESTIONS,
-  COMPETENCY_QUESTIONS,
-} from './examData';
-import {
-  CLASS10_NCERT_SOLVED as CLASSX_NCERT_SOLVED,
-  CLASS10_MCQS as CLASSX_MCQS,
-  CLASS10_ASSERTIONS as CLASSX_ASSERTION_REASON,
-  CLASS10_VERY_SHORT as CLASSX_VERY_SHORT,
-  CLASS10_SHORT as CLASSX_SHORT,
-  CLASS10_LONG as CLASSX_LONG,
-  CLASS10_COMPETENCY as CLASSX_CASE_COMPETENCY,
-  CLASS10_SELF_ASSESSMENT as CLASSX_SELF_ASSESSMENT,
-} from './data/class10';
-import {
-  CLASS8_NCERT_SOLVED as CLASSVIII_NCERT_SOLVED,
-  CLASS8_MCQS as CLASSVIII_MCQS,
-  CLASS8_ASSERTIONS as CLASSVIII_ASSERTION_REASON,
-  CLASS8_VERY_SHORT as CLASSVIII_VERY_SHORT,
-  CLASS8_SHORT as CLASSVIII_SHORT,
-  CLASS8_LONG as CLASSVIII_LONG,
-  CLASS8_COMPETENCY as CLASSVIII_CASE_COMPETENCY,
-  CLASS8_SELF_ASSESSMENT as CLASSVIII_SELF_ASSESSMENT,
-} from './data/class8';
-import {
-  CHEMISTRY10_NCERT_SOLVED,
-  CHEMISTRY10_MCQS,
-  CHEMISTRY10_ASSERTIONS as CHEMISTRY10_ASSERTION_REASON,
-  CHEMISTRY10_VERY_SHORT,
-  CHEMISTRY10_SHORT,
-  CHEMISTRY10_LONG,
-  CHEMISTRY10_COMPETENCY,
-  CHEMISTRY10_SELF_ASSESSMENT,
-} from './data/chemistry10';
-import {
-  BIOLOGY9_NCERT_SOLVED,
-  BIOLOGY9_MCQS,
-  BIOLOGY9_VERY_SHORT,
-  BIOLOGY9_SHORT,
-  BIOLOGY9_LONG,
-  BIOLOGY9_COMPETENCY,
-  BIOLOGY9_SELF_ASSESSMENT,
-} from './data/biology9';
-import {
-  PHYSICS9_NCERT_SOLVED,
-  PHYSICS9_MCQS,
-  PHYSICS9_ASSERTION_REASON,
-  PHYSICS9_VERY_SHORT,
-  PHYSICS9_SHORT,
-  PHYSICS9_LONG,
-  PHYSICS9_COMPETENCY,
-  PHYSICS9_SELF_ASSESSMENT,
-} from './data/physics9';
-import {
-  COMPETITION_MCQS,
-  COMPETITION_SELF_ASSESSMENT,
-} from './data/competitions';
-import {
-  MATHS8_SOLVED_QUESTIONS,
-  MATHS8_MCQS,
-  MATHS8_ASSERTION_REASON,
-  MATHS8_VERY_SHORT,
-  MATHS8_SHORT,
-  MATHS8_LONG,
-  MATHS8_COMPETENCY,
-  MATHS8_SELF_ASSESSMENT,
-} from './data/maths8';
-import {
-  MATHS8SC_SOLVED_QUESTIONS,
-  MATHS8SC_MCQS,
-  MATHS8SC_VERY_SHORT,
-  MATHS8SC_SHORT,
-  MATHS8SC_LONG,
-  MATHS8SC_COMPETENCY,
-  MATHS8SC_SELF_ASSESSMENT,
-} from './data/maths8SquareCube';
-import {
-  SCIENCE8_SOLVED_QUESTIONS,
-  SCIENCE8_MCQS,
-  SCIENCE8_VERY_SHORT,
-  SCIENCE8_SHORT,
-  SCIENCE8_LONG,
-  SCIENCE8_COMPETENCY,
-  SCIENCE8_SELF_ASSESSMENT,
-} from './data/science8';
-import {
-  SCIENCE8IW_SOLVED_QUESTIONS,
-  SCIENCE8IW_MCQS,
-  SCIENCE8IW_VERY_SHORT,
-  SCIENCE8IW_SHORT,
-  SCIENCE8IW_LONG,
-  SCIENCE8IW_COMPETENCY,
-  SCIENCE8IW_SELF_ASSESSMENT,
-} from './data/science8InvisibleWorld';
-import {
-  SCIENCE8H_SOLVED_QUESTIONS,
-  SCIENCE8H_MCQS,
-  SCIENCE8H_VERY_SHORT,
-  SCIENCE8H_SHORT,
-  SCIENCE8H_LONG,
-  SCIENCE8H_COMPETENCY,
-  SCIENCE8H_SELF_ASSESSMENT,
-} from './data/science8Health';
-import {
-  SCIENCE8M_SOLVED_QUESTIONS,
-  SCIENCE8M_MCQS,
-  SCIENCE8M_VERY_SHORT,
-  SCIENCE8M_SHORT,
-  SCIENCE8M_LONG,
-  SCIENCE8M_COMPETENCY,
-  SCIENCE8M_SELF_ASSESSMENT,
-} from './data/science8Matter';
-import {
-  SCIENCE8EC_SOLVED_QUESTIONS,
-  SCIENCE8EC_MCQS,
-  SCIENCE8EC_VERY_SHORT,
-  SCIENCE8EC_SHORT,
-  SCIENCE8EC_LONG,
-  SCIENCE8EC_COMPETENCY,
-  SCIENCE8EC_SELF_ASSESSMENT,
-} from './data/science8ElementsCompounds';
-import {
-  BIOLOGY10_NCERT_SOLVED,
-  BIOLOGY10_MCQS,
-  BIOLOGY10_VERY_SHORT,
-  BIOLOGY10_SHORT,
-  BIOLOGY10_LONG,
-  BIOLOGY10_COMPETENCY,
-  BIOLOGY10_SELF_ASSESSMENT,
-} from './data/biology10';
-import {
-  CC10_NCERT_SOLVED,
-  CC10_MCQS,
-  CC10_VERY_SHORT,
-  CC10_SHORT,
-  CC10_LONG,
-  CC10_COMPETENCY,
-  CC10_SELF_ASSESSMENT,
-} from './data/controlCoordination10';
-import { REPRO10_MCQS } from './data/reproduction10_mcq';
-import { REPRO10_VERY_SHORT, REPRO10_SHORT } from './data/reproduction10_short';
-import { REPRO10_LONG, REPRO10_COMPETENCY } from './data/reproduction10_long';
-import { REPRO10_NCERT_SOLVED, REPRO10_SELF_ASSESSMENT } from './data/reproduction10_practice';
-import { HEREDITY10_MCQS } from './data/heredity10_mcq';
-import { HEREDITY10_VERY_SHORT, HEREDITY10_SHORT } from './data/heredity10_short';
-import { HEREDITY10_LONG, HEREDITY10_COMPETENCY } from './data/heredity10_long';
-import { HEREDITY10_NCERT_SOLVED, HEREDITY10_SELF_ASSESSMENT } from './data/heredity10_practice';
-import { FORCES9_MCQS } from './data/forces9_mcq';
-import { FORCES9_VERY_SHORT, FORCES9_SHORT } from './data/forces9_short';
-import { FORCES9_LONG, FORCES9_COMPETENCY } from './data/forces9_long';
-import { FORCES9_NCERT_SOLVED, FORCES9_SELF_ASSESSMENT } from './data/forces9_practice';
-import { ENERGY9_MCQS } from './data/energy9_mcq';
-import { ENERGY9_VERY_SHORT, ENERGY9_SHORT } from './data/energy9_short';
-import { ENERGY9_LONG, ENERGY9_COMPETENCY } from './data/energy9_long';
-import { ENERGY9_NCERT_SOLVED, ENERGY9_SELF_ASSESSMENT } from './data/energy9_practice';
-import { SOUND9_MCQS } from './data/sound9_mcq';
-import { SOUND9_VERY_SHORT, SOUND9_SHORT } from './data/sound9_short';
-import { SOUND9_LONG, SOUND9_COMPETENCY } from './data/sound9_long';
-import { SOUND9_NCERT_SOLVED, SOUND9_SELF_ASSESSMENT } from './data/sound9_practice';
-import { FOUNDATIONS9_MCQS } from './data/foundations9_mcq';
-import { FOUNDATIONS9_VERY_SHORT, FOUNDATIONS9_SHORT } from './data/foundations9_short';
-import { FOUNDATIONS9_LONG, FOUNDATIONS9_COMPETENCY } from './data/foundations9_long';
-import { FOUNDATIONS9_NCERT_SOLVED, FOUNDATIONS9_SELF_ASSESSMENT } from './data/foundations9_practice';
-import { TISSUES9_MCQS } from './data/tissues9_mcq';
-import { TISSUES9_VERY_SHORT, TISSUES9_SHORT } from './data/tissues9_short';
-import { TISSUES9_LONG, TISSUES9_COMPETENCY } from './data/tissues9_long';
-import { TISSUES9_NCERT_SOLVED, TISSUES9_SELF_ASSESSMENT } from './data/tissues9_practice';
-import { DIVERSITY9_MCQS } from './data/diversity9_mcq';
-import { DIVERSITY9_VERY_SHORT, DIVERSITY9_SHORT } from './data/diversity9_short';
-import { DIVERSITY9_LONG, DIVERSITY9_COMPETENCY } from './data/diversity9_long';
-import { DIVERSITY9_NCERT_SOLVED } from './data/diversity9_ncert';
-import { DIVERSITY9_SELF_ASSESSMENT } from './data/diversity9_self';
-import { CIRCLES9_MCQS } from './data/circles9_mcq';
-import { CIRCLES9_VERY_SHORT, CIRCLES9_SHORT } from './data/circles9_short';
-import { CIRCLES9_LONG, CIRCLES9_COMPETENCY } from './data/circles9_long';
-import { CIRCLES9_NCERT_SOLVED } from './data/circles9_ncert';
-import { CARBON10_MCQ_A } from './data/carbon10_mcqA';
-import { CARBON10_MCQ_B } from './data/carbon10_mcqB';
-import { CARBON10_VERY_SHORT, CARBON10_SHORT } from './data/carbon10_short';
-import { CARBON10_LONG, CARBON10_COMPETENCY } from './data/carbon10_long';
-import { CARBON10_ASSERTIONS } from './data/carbon10_ar';
-import { CARBON10_NCERT_SOLVED } from './data/carbon10_ncert';
-import { CARBON10_SELF_ASSESSMENT } from './data/carbon10_self';
+const ReactionSimulator = lazyView(() => import('./components/ReactionSimulator'));
+const KnowYourChemicals = lazyView(() => import('./components/KnowYourChemicals'));
 import {
   Home,
   BookOpen,
@@ -607,7 +424,7 @@ function PrintView({ grade }: PrintViewProps) {
       </div>
 
       <div className="max-w-4xl mx-auto">
-        {renderGradePdfNotes(displayGrade, mirrorCase, setMirrorCase, lensCase, setLensCase, () => {})}
+        <GradePdfNotes args={[displayGrade, mirrorCase, setMirrorCase, lensCase, setLensCase, () => {}]} />
       </div>
     </div>
   );
@@ -619,6 +436,9 @@ const ADMIN_EMAILS = ['rohit13513@gmail.com', 'conceptuallearningonline@gmail.co
 // secret, a Client ID is meant to be visible; it only tells Google which app is asking, the actual
 // proof of identity is the signed token Google itself hands back after the student authenticates).
 const GOOGLE_CLIENT_ID = '334975414855-jafdetqco1le8rgmklt727vnshibchfv.apps.googleusercontent.com';
+
+const EMPTY_LIST: any[] = [];
+const EMPTY_BANK: Bank = { ncert: EMPTY_LIST, mcqs: EMPTY_LIST, veryshort: EMPTY_LIST, short: EMPTY_LIST, long: EMPTY_LIST, assertion: EMPTY_LIST, competency: EMPTY_LIST };
 
 export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 'register' } = {}) {
   const [isLightMode, setIsLightMode] = useState<boolean>(() => {
@@ -972,7 +792,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     }
   };
 
-  const handleDownloadRevisionPdf = (kind: 'questions' | 'answers') => {
+  const handleDownloadRevisionPdf = async (kind: 'questions' | 'answers') => {
     if (revisionPaperPdfDownloading || !revisionPaperDetail || revisionPaperDetail.error) return;
     const element = (kind === 'questions' ? revisionQuestionsPrintRef : revisionAnswersPrintRef).current;
     if (!element) return;
@@ -987,7 +807,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
     };
-    const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
+    const html2pdfModule: any = await import('html2pdf.js');
+    const html2pdfFunc = typeof html2pdfModule === 'function' ? html2pdfModule : html2pdfModule.default || (window as any).html2pdf;
     if (!html2pdfFunc) { setRevisionPaperPdfDownloading(null); return; }
     html2pdfFunc().set(opt).from(element).save()
       .then(() => setRevisionPaperPdfDownloading(null))
@@ -2144,7 +1965,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       .map((s: any, idx: number) => ({ ...s, rank: idx + 1 }));
   };
 
-  const handleDownloadReportPdf = () => {
+  const handleDownloadReportPdf = async () => {
     if (reportPdfDownloading || !reportData) return;
     const element = reportPrintRef.current;
     if (!element) return;
@@ -2166,7 +1987,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       pagebreak: { mode: ['css', 'legacy'] },
     };
 
-    const html2pdfFunc = typeof html2pdf === 'function' ? html2pdf : (html2pdf as any).default || (window as any).html2pdf;
+    const html2pdfModule: any = await import('html2pdf.js');
+    const html2pdfFunc = typeof html2pdfModule === 'function' ? html2pdfModule : html2pdfModule.default || (window as any).html2pdf;
     if (!html2pdfFunc) {
       setReportPdfError('Could not initialize the PDF compiler engine.');
       setReportPdfDownloading(false);
@@ -3277,259 +3099,21 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const [qbankMcqSelections, setQbankMcqSelections] = useState<Record<string, number>>({});
   const [qbankMcqRevealed, setQbankMcqRevealed] = useState<Set<string>>(new Set());
 
-  const activeQuestions = useMemo(() => {
-    if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'square-and-cube') {
-      return {
-        ncert: MATHS8SC_SOLVED_QUESTIONS,
-        mcqs: MATHS8SC_MCQS,
-        veryshort: MATHS8SC_VERY_SHORT,
-        short: MATHS8SC_SHORT,
-        long: MATHS8SC_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: MATHS8SC_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'maths') {
-      return {
-        ncert: MATHS8_SOLVED_QUESTIONS,
-        mcqs: MATHS8_MCQS,
-        veryshort: MATHS8_VERY_SHORT,
-        short: MATHS8_SHORT,
-        long: MATHS8_LONG,
-        assertion: MATHS8_ASSERTION_REASON,
-        competency: MATHS8_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'elements-compounds') {
-      return {
-        ncert: SCIENCE8EC_SOLVED_QUESTIONS,
-        mcqs: SCIENCE8EC_MCQS,
-        veryshort: SCIENCE8EC_VERY_SHORT,
-        short: SCIENCE8EC_SHORT,
-        long: SCIENCE8EC_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: SCIENCE8EC_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'matter') {
-      return {
-        ncert: SCIENCE8M_SOLVED_QUESTIONS,
-        mcqs: SCIENCE8M_MCQS,
-        veryshort: SCIENCE8M_VERY_SHORT,
-        short: SCIENCE8M_SHORT,
-        long: SCIENCE8M_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: SCIENCE8M_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'health') {
-      return {
-        ncert: SCIENCE8H_SOLVED_QUESTIONS,
-        mcqs: SCIENCE8H_MCQS,
-        veryshort: SCIENCE8H_VERY_SHORT,
-        short: SCIENCE8H_SHORT,
-        long: SCIENCE8H_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: SCIENCE8H_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world') {
-      return {
-        ncert: SCIENCE8IW_SOLVED_QUESTIONS,
-        mcqs: SCIENCE8IW_MCQS,
-        veryshort: SCIENCE8IW_VERY_SHORT,
-        short: SCIENCE8IW_SHORT,
-        long: SCIENCE8IW_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: SCIENCE8IW_COMPETENCY,
-      };
-    } else if (preparingFor === '8th' && qbSubject === 'science') {
-      return {
-        ncert: SCIENCE8_SOLVED_QUESTIONS,
-        mcqs: SCIENCE8_MCQS,
-        veryshort: SCIENCE8_VERY_SHORT,
-        short: SCIENCE8_SHORT,
-        long: SCIENCE8_LONG,
-        assertion: [] as typeof MATHS8_ASSERTION_REASON,
-        competency: SCIENCE8_COMPETENCY,
-      };
-    } else if (preparingFor === '8th') {
-      return {
-        ncert: CLASSVIII_NCERT_SOLVED,
-        mcqs: CLASSVIII_MCQS,
-        veryshort: CLASSVIII_VERY_SHORT,
-        short: CLASSVIII_SHORT,
-        long: CLASSVIII_LONG,
-        assertion: CLASSVIII_ASSERTION_REASON,
-        competency: CLASSVIII_CASE_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon') {
-      return {
-        ncert: CARBON10_NCERT_SOLVED,
-        mcqs: [...CARBON10_MCQ_A, ...CARBON10_MCQ_B],
-        veryshort: CARBON10_VERY_SHORT,
-        short: CARBON10_SHORT,
-        long: CARBON10_LONG,
-        assertion: CARBON10_ASSERTIONS,
-        competency: CARBON10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'chemistry') {
-      return {
-        ncert: CHEMISTRY10_NCERT_SOLVED,
-        mcqs: CHEMISTRY10_MCQS,
-        veryshort: CHEMISTRY10_VERY_SHORT,
-        short: CHEMISTRY10_SHORT,
-        long: CHEMISTRY10_LONG,
-        assertion: CHEMISTRY10_ASSERTION_REASON,
-        competency: CHEMISTRY10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'heredity') {
-      return {
-        ncert: HEREDITY10_NCERT_SOLVED,
-        mcqs: HEREDITY10_MCQS,
-        veryshort: HEREDITY10_VERY_SHORT,
-        short: HEREDITY10_SHORT,
-        long: HEREDITY10_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: HEREDITY10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'reproduction') {
-      return {
-        ncert: REPRO10_NCERT_SOLVED,
-        mcqs: REPRO10_MCQS,
-        veryshort: REPRO10_VERY_SHORT,
-        short: REPRO10_SHORT,
-        long: REPRO10_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: REPRO10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'control-coordination') {
-      return {
-        ncert: CC10_NCERT_SOLVED,
-        mcqs: CC10_MCQS,
-        veryshort: CC10_VERY_SHORT,
-        short: CC10_SHORT,
-        long: CC10_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: CC10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th' && qbSubject === 'biology') {
-      return {
-        ncert: BIOLOGY10_NCERT_SOLVED,
-        mcqs: BIOLOGY10_MCQS,
-        veryshort: BIOLOGY10_VERY_SHORT,
-        short: BIOLOGY10_SHORT,
-        long: BIOLOGY10_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: BIOLOGY10_COMPETENCY,
-      };
-    } else if (preparingFor === '10th') {
-      return {
-        ncert: CLASSX_NCERT_SOLVED,
-        mcqs: CLASSX_MCQS,
-        veryshort: CLASSX_VERY_SHORT,
-        short: CLASSX_SHORT,
-        long: CLASSX_LONG,
-        assertion: CLASSX_ASSERTION_REASON,
-        competency: CLASSX_CASE_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'sound') {
-      return {
-        ncert: SOUND9_NCERT_SOLVED,
-        mcqs: SOUND9_MCQS,
-        veryshort: SOUND9_VERY_SHORT,
-        short: SOUND9_SHORT,
-        long: SOUND9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: SOUND9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'energy') {
-      return {
-        ncert: ENERGY9_NCERT_SOLVED,
-        mcqs: ENERGY9_MCQS,
-        veryshort: ENERGY9_VERY_SHORT,
-        short: ENERGY9_SHORT,
-        long: ENERGY9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: ENERGY9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'forces') {
-      return {
-        ncert: FORCES9_NCERT_SOLVED,
-        mcqs: FORCES9_MCQS,
-        veryshort: FORCES9_VERY_SHORT,
-        short: FORCES9_SHORT,
-        long: FORCES9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: FORCES9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'physics') {
-      return {
-        ncert: PHYSICS9_NCERT_SOLVED,
-        mcqs: PHYSICS9_MCQS,
-        veryshort: PHYSICS9_VERY_SHORT,
-        short: PHYSICS9_SHORT,
-        long: PHYSICS9_LONG,
-        assertion: PHYSICS9_ASSERTION_REASON,
-        competency: PHYSICS9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'diversity') {
-      return {
-        ncert: DIVERSITY9_NCERT_SOLVED,
-        mcqs: DIVERSITY9_MCQS,
-        veryshort: DIVERSITY9_VERY_SHORT,
-        short: DIVERSITY9_SHORT,
-        long: DIVERSITY9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: DIVERSITY9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'tissues') {
-      return {
-        ncert: TISSUES9_NCERT_SOLVED,
-        mcqs: TISSUES9_MCQS,
-        veryshort: TISSUES9_VERY_SHORT,
-        short: TISSUES9_SHORT,
-        long: TISSUES9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: TISSUES9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'maths') {
-      return {
-        ncert: CIRCLES9_NCERT_SOLVED,
-        mcqs: CIRCLES9_MCQS,
-        veryshort: CIRCLES9_VERY_SHORT,
-        short: CIRCLES9_SHORT,
-        long: CIRCLES9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: CIRCLES9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th' && qbSubject === 'foundations') {
-      return {
-        ncert: FOUNDATIONS9_NCERT_SOLVED,
-        mcqs: FOUNDATIONS9_MCQS,
-        veryshort: FOUNDATIONS9_VERY_SHORT,
-        short: FOUNDATIONS9_SHORT,
-        long: FOUNDATIONS9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: FOUNDATIONS9_COMPETENCY,
-      };
-    } else if (preparingFor === '9th') {
-      return {
-        ncert: BIOLOGY9_NCERT_SOLVED,
-        mcqs: BIOLOGY9_MCQS,
-        veryshort: BIOLOGY9_VERY_SHORT,
-        short: BIOLOGY9_SHORT,
-        long: BIOLOGY9_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: BIOLOGY9_COMPETENCY,
-      };
-    } else {
-      return {
-        ncert: [] as typeof CLASSX_NCERT_SOLVED,
-        mcqs: COMPETITION_MCQS,
-        veryshort: [] as typeof CLASSX_VERY_SHORT,
-        short: [] as typeof CLASSX_SHORT,
-        long: [] as typeof CLASSX_LONG,
-        assertion: [] as typeof CLASSX_ASSERTION_REASON,
-        competency: [] as typeof CLASSX_CASE_COMPETENCY,
-      };
-    }
-  }, [preparingFor, qbSubject, physicsChapter9, bioChapter9, bioChapter10, chemChapter10, mathsChapter8, scienceChapter8]);
+  // The question banks for a class are downloaded the first time one of the three screens that show
+  // them is opened (not at log-in). Until then the lists are empty and those screens show a loading note.
+  const bankParams = useMemo(() => ({ preparingFor, qbSubject, physicsChapter9, bioChapter9, bioChapter10, chemChapter10, mathsChapter8, scienceChapter8 }), [preparingFor, qbSubject, physicsChapter9, bioChapter9, bioChapter10, chemChapter10, mathsChapter8, scienceChapter8]);
+  const needsBank = activeView === 'ncert' || activeView === 'qbank' || activeView === 'assessment';
+  const [bankVersion, setBankVersion] = useState(0);
+  useEffect(() => {
+    if (!needsBank || peekBank(bankParams)) return;
+    let cancelled = false;
+    loadBank(bankParams).then(() => { if (!cancelled) setBankVersion((v) => v + 1); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [needsBank, bankParams]);
+  const loadedBank = useMemo(() => (needsBank ? peekBank(bankParams) : null), [needsBank, bankParams, bankVersion]);
+  const bankReady = loadedBank !== null;
+  const activeQuestions: Bank = loadedBank ? loadedBank.bank : EMPTY_BANK;
+  const selfAssessmentQuestions: any[] = loadedBank ? loadedBank.self : EMPTY_LIST;
 
   const [opticsType, setOpticsType] = useState<OpticsType>('concave-mirror');
   const [group, setGroup] = useState<'mirror' | 'lens'>('mirror');
@@ -6479,7 +6063,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       )}
 
       {/* ── 2. SOLVED NCERT QUESTIONS EXPLORER ── */}
-      {activeView === 'ncert' && (
+      {activeView === 'ncert' && !bankReady && (<div className="py-24 text-center text-sm font-semibold opacity-70">Loading your questions...</div>)}
+      {activeView === 'ncert' && bankReady && (
         <div 
           id="ncert-container" 
           className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin transition-colors duration-300 ${
@@ -6726,8 +6311,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                       <div className="p-6 border-t border-slate-800 bg-[#070d18] space-y-5">
 
                         {/* Figure drawn from the question data (Circles) */}
-                        {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                        <QuestionFigure q={q as any} />
 
                         {/* Figure -- CBSE-pattern diagram, shown before the given values for Maths8 geometry questions */}
                         {preparingFor === '8th' && qbSubject === 'maths' && (
@@ -6865,7 +6449,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       )}
 
       {/* ── 3. COMPREHENSIVE PRACTICE QUESTION BANK VIEW ── */}
-      {activeView === 'qbank' && (
+      {activeView === 'qbank' && !bankReady && (<div className="py-24 text-center text-sm font-semibold opacity-70">Loading your questions...</div>)}
+      {activeView === 'qbank' && bankReady && (
         <div 
           id="qbank-container" 
           className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin transition-colors duration-300 ${
@@ -7200,8 +6785,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h4 className="text-sm font-bold text-slate-100 leading-relaxed">
                               {q.question}
                             </h4>
-                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                            <QuestionFigure q={q as any} />
 
                             {/* Grid representation of options */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -7318,8 +6902,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h3 className="text-sm font-bold text-slate-200 leading-snug">
                               {q.question}
                             </h3>
-                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                            <QuestionFigure q={q as any} />
                           </div>
 
                           {showAns && (
@@ -7386,8 +6969,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <h3 className="text-sm font-bold text-slate-200 leading-snug">
                               {q.question}
                             </h3>
-                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                            <QuestionFigure q={q as any} />
                           </div>
 
                           {showAns && (
@@ -7445,8 +7027,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                               <h3 className="text-sm font-black text-slate-100 leading-snug">
                                 {q.question}
                               </h3>
-                              {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                              <QuestionFigure q={q as any} />
                             </div>
                             <button
                               onClick={() => {
@@ -7623,8 +7204,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <p className="text-xs text-slate-300 leading-relaxed p-4 bg-slate-950/40 border border-slate-800 rounded-xl font-semibold">
                               {q.caseDescription}
                             </p>
-                            {(q as any).figure && (<div className="flex justify-center"><GeoFigure spec={(q as any).figure} max={320} /></div>)}
-{(q as any).diagram && CHEM_DIAGRAMS[(q as any).diagram] && (<div className="flex justify-center"><SceneFigure scene={CHEM_DIAGRAMS[(q as any).diagram]()} max={420} /></div>)}
+                            <QuestionFigure q={q as any} />
                           </div>
  
                           {/* Questions list */}
@@ -7717,7 +7297,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       )}
 
       {/* ── 6. INTERACTIVE SELF ASSESSMENT VIEW ── */}
-      {activeView === 'assessment' && (
+      {activeView === 'assessment' && !bankReady && (<div className="py-24 text-center text-sm font-semibold opacity-70">Loading your questions...</div>)}
+      {activeView === 'assessment' && bankReady && (
         <div 
           id="assessment-container" 
           className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin transition-colors duration-300 ${
@@ -7925,29 +7506,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               <Quiz
                 key={`${preparingFor}_${qbSubject}_${bioChapter10}_${chemChapter10}_${mathsChapter8}_${scienceChapter8}`}
                 initialGrade={preparingFor === '8th' ? '8th' : preparingFor === '9th' ? '9th' : preparingFor === '10th' ? '10th' : 'jee'}
-                customQuestions={
-                  preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'square-and-cube'
-                    ? MATHS8SC_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'maths'
-                    ? MATHS8_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world'
-                    ? SCIENCE8IW_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'health'
-                    ? SCIENCE8H_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'matter'
-                    ? SCIENCE8M_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'elements-compounds'
-                    ? SCIENCE8EC_SELF_ASSESSMENT
-                    : preparingFor === '8th' && qbSubject === 'science'
-                    ? SCIENCE8_SELF_ASSESSMENT
-                    : preparingFor === '8th'
-                    ? CLASSVIII_SELF_ASSESSMENT
-                    : preparingFor === '9th'
-                    ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? SOUND9_SELF_ASSESSMENT : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : qbSubject === 'foundations' ? FOUNDATIONS9_SELF_ASSESSMENT : bioChapter9 === 'diversity' ? DIVERSITY9_SELF_ASSESSMENT : bioChapter9 === 'tissues' ? TISSUES9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT)
-                    : preparingFor === '10th'
-                    ? (qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? CARBON10_SELF_ASSESSMENT : CHEMISTRY10_SELF_ASSESSMENT) : qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT)
-                    : COMPETITION_SELF_ASSESSMENT
-                }
+                customQuestions={selfAssessmentQuestions}
                 subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : qbSubject === 'foundations' ? 'Science Self-Assessment' : 'Biology Self-Assessment') : undefined}
                 subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? 'Ready to test your knowledge of Carbon and its Compounds? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Chemical Reactions and Equations?') : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Ready to test your knowledge of Heredity? (80 questions, 50 minutes)' : bioChapter10 === 'reproduction' ? 'Ready to test your knowledge of How do Organisms Reproduce? (80 questions, 50 minutes)' : bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Ready to test your knowledge of Sound? (80 questions, 50 minutes)' : physicsChapter9 === 'energy' ? 'Ready to test your knowledge of Work, Energy and Simple Machines? (80 questions, 50 minutes)' : physicsChapter9 === 'forces' ? 'Ready to test your knowledge of Forces? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Motion?') : qbSubject === 'foundations' ? 'Ready to test your knowledge of How Science Works? (80 questions, 50 minutes)' : bioChapter9 === 'diversity' ? 'Ready to test your knowledge of Diversity and Classification? (80 questions, 45 minutes)' : bioChapter9 === 'tissues' ? 'Ready to test your knowledge of Tissues in Action? (80 questions, 50 minutes)' : 'Ready to test your knowledge of the Cell?') : undefined}
                 durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter' || scienceChapter8 === 'elements-compounds') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'reproduction' || bioChapter10 === 'heredity' ? 3000 : 1800) : preparingFor === '9th' && qbSubject === 'physics' && (physicsChapter9 === 'forces' || physicsChapter9 === 'energy' || physicsChapter9 === 'sound') ? 3000 : preparingFor === '9th' && qbSubject === 'foundations' ? 3000 : preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'tissues' ? 3000 : preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'diversity' ? 2700 : preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon' ? 3000 : undefined}
@@ -11492,14 +11051,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     {/* Standalone clean printable section (only visible during print) */}
     <div className="hidden print:block bg-white text-slate-900 p-8 sm:p-12 font-serif select-text study-notes-container leading-relaxed">
       <div className="max-w-4xl mx-auto">
-        {renderGradePdfNotes(
-          preparingFor === '8th' || preparingFor === '9th' ? '8th' : preparingFor === '12th' ? '12th' : '10th',
-          0,
-          () => {},
-          0,
-          () => {},
-          () => {}
-        )}
+        <GradePdfNotes args={[preparingFor === '8th' || preparingFor === '9th' ? '8th' : preparingFor === '12th' ? '12th' : '10th', 0, () => {}, 0, () => {}, () => {}]} />
       </div>
     </div>
   </>
