@@ -11,6 +11,7 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import AdmZip from "adm-zip";
 import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url } from "./sessionToken.js";
+import { makeAccountGate } from "./accountGate.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -2026,6 +2027,17 @@ function buildApp(): express.Express {
   // JSON and URL-encoded parsers
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // Every request that carries a login token also checks the account is STILL approved, right now -- so
+  // rejecting or suspending a student cuts them off at their very next click instead of after the token expires.
+  app.use("/api", makeAccountGate({
+    verifyToken: verifySessionToken,
+    lookupStatus: async (email) => {
+      const { data, error } = await supabase.from("users").select("status").eq("email", email).maybeSingle();
+      if (error) return { status: null, failed: true };
+      return { status: data ? String(data.status) : null, failed: false };
+    },
+  }));
 
   // ── API ROUTES ──
 
@@ -8371,6 +8383,14 @@ function buildApp(): express.Express {
     const header = (req.headers["authorization"] as string) || "";
     setLoginCookie(req, res, header.slice(7).trim());
     return res.json({ success: true });
+  });
+
+  // The app asks this every 30 seconds while someone is logged in; the account check above answers it, so a student
+  // who was just rejected is logged out within seconds even if they are only reading.
+  app.get("/api/session/ping", (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    return res.json({ ok: true });
   });
 
   // Logging out also removes the cookie, so protected study files stop opening in this browser.

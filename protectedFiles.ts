@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { verifyToken, readCookie, SESSION_COOKIE } from "./sessionToken.js";
 
@@ -32,6 +33,17 @@ function send(res: ServerResponse, status: number, message: string) {
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(message);
+}
+
+// The browser may keep a copy, but must ask the server (which checks the login and the account) before every use;
+// when nothing changed the server answers "304 not modified" without resending the file.
+function sendWithEtag(req: IncomingMessage, res: ServerResponse, body: Buffer, etag: string) {
+  res.setHeader("Cache-Control", "private, no-cache");
+  res.setHeader("ETag", etag);
+  if (req.headers["if-none-match"] === etag) { res.statusCode = 304; return void res.end(); }
+  res.statusCode = 200;
+  res.setHeader("Content-Length", String(body.length));
+  return void res.end(req.method === "HEAD" ? undefined : body);
 }
 
 function cleanRelative(p: string): string | null {
@@ -73,9 +85,7 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     res.statusCode = 200;
     res.setHeader("Content-Type", TYPES[rel.split(".").pop() as string] || "application/octet-stream");
     if (encoded) res.setHeader("Content-Encoding", "br");
-    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
-    res.setHeader("Content-Length", String(body.length));
-    return void res.end(req.method === "HEAD" ? undefined : body);
+    return sendWithEtag(req, res, body, `"${rel}-${encoded ? "br" : "raw"}-${body.length}"`);
   }
 
   if (kind === "d") {
@@ -89,9 +99,7 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     if (!body) return send(res, 404, "Not found");
     res.statusCode = 200;
     res.setHeader("Content-Type", TYPES[rel.split(".").pop()!.toLowerCase()] || "application/octet-stream");
-    res.setHeader("Cache-Control", "private, max-age=86400");
-    res.setHeader("Content-Length", String(body.length));
-    return void res.end(req.method === "HEAD" ? undefined : body);
+    return sendWithEtag(req, res, body, `"${crypto.createHash("sha1").update(body).digest("hex").slice(0, 20)}"`);
   }
 
   if (kind === "f") {
@@ -112,8 +120,6 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
 }
 
 // ── the real dependencies (used by the live function and the local server) ──
-const userCache = new Map<string, { at: number; value: { status: string; studentType: string | null; role: string } | null }>();
-
 export function realDeps(): ProtectedDeps {
   const url = process.env.SUPABASE_URL as string;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
@@ -123,17 +129,13 @@ export function realDeps(): ProtectedDeps {
   return {
     secret: process.env.SESSION_SECRET as string,
     baseDir: candidates.find((d) => fs.existsSync(d)) || candidates[0],
-    // The account's status is re-checked at most every 2 minutes, so suspending someone cuts off study
-    // material within minutes without a database call for every single file.
+    // Read from the database on EVERY request, never cached: a student who is rejected or suspended loses
+    // access to study files on their very next request.
     lookupUser: async (email) => {
-      const hit = userCache.get(email);
-      if (hit && Date.now() - hit.at < 2 * 60_000) return hit.value;
       const r = await fetch(`${url}/rest/v1/users?select=status,student_type,role&email=eq.${encodeURIComponent(email)}`, { headers });
-      if (!r.ok) return hit ? hit.value : null;
+      if (!r.ok) return null;
       const rows = (await r.json()) as any[];
-      const value = rows[0] ? { status: String(rows[0].status), studentType: rows[0].student_type ?? null, role: String(rows[0].role || "student") } : null;
-      userCache.set(email, { at: Date.now(), value });
-      return value;
+      return rows[0] ? { status: String(rows[0].status), studentType: rows[0].student_type ?? null, role: String(rows[0].role || "student") } : null;
     },
     readStorage: async (bucket, objectPath) => {
       const r = await fetch(`${url}/storage/v1/object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { headers });

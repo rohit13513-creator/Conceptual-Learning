@@ -13,10 +13,11 @@ const users: Record<string, { status: string; studentType: string | null; role: 
   "pending@x.com": { status: "pending", studentType: "offline", role: "student" },
   "admin@x.com": { status: "approved", studentType: "offline", role: "admin" },
 };
+let lookups = 0;
 const deps: ProtectedDeps = {
   secret: SECRET,
   baseDir: "protected",
-  lookupUser: async (email) => users[email] || null,
+  lookupUser: async (email) => { lookups++; return users[email] || null; },
   readStorage: async (bucket, p) => (bucket === "study-notes" && p === "biology10-diagrams/a.webp" ? Buffer.from("IMG") : null),
   signStorage: async (bucket, p) => `https://example.supabase.co/storage/v1/object/sign/${bucket}/${p}?token=T`,
 };
@@ -37,6 +38,7 @@ const wrongSecret = signToken({ email: "offline@x.com", role: "student" }, "some
 const chunk = fs.readdirSync("protected/assets").find((f) => f.startsWith("LearnCarbon10") && f.endsWith(".js"))!;
 const diagram = (() => { const d = fs.readdirSync("protected/diagrams"); const sub = d[0]; return `${sub}/${fs.readdirSync(`protected/diagrams/${sub}`)[0]}`; })();
 let pass = 0, fail = 0;
+const ok1 = (name: string, cond: boolean, extra = '') => { if (cond) { pass++; console.log('ok  ', name); } else { fail++; console.log('FAIL', name, extra); } };
 async function check(name: string, k: string, p: string, opts: { cookie?: string; bearer?: string; method?: string; enc?: string }, expectStatus: number, extra?: (r: Response) => string | null) {
   const headers: Record<string, string> = {};
   if (opts.cookie) headers["cookie"] = `cl_session=${encodeURIComponent(opts.cookie)}`;
@@ -77,7 +79,55 @@ await check("asset wrong extension", "a", "x.json", { cookie: tok("offline@x.com
 await check("asset sub-folder", "a", "sub/x.js", { cookie: tok("offline@x.com") }, 400);
 await check("unknown file", "a", "nothere-abc.js", { cookie: tok("offline@x.com") }, 404);
 await check("POST not allowed", "a", chunk, { cookie: tok("offline@x.com"), method: "POST" }, 405);
+// ── immediate cut-off ──
+{
+  const cookie = `cl_session=${encodeURIComponent(tok("cut@x.com"))}`;
+  users["cut@x.com"] = { status: "approved", studentType: "offline", role: "student" };
+  const url = `http://127.0.0.1:${port}/?k=a&p=${encodeURIComponent(chunk)}`;
+  const first = await fetch(url, { headers: { cookie } });
+  const etag = first.headers.get("etag") || "";
+  const beforeLookups = lookups;
+  const again = await fetch(url, { headers: { cookie, "if-none-match": etag } });
+  ok1("saved copy: server answers 304 (not modified) after re-checking the account", again.status === 304 && lookups === beforeLookups + 1 && /no-cache/.test(first.headers.get("cache-control") || ""), `${again.status} lookups+${lookups - beforeLookups} ${first.headers.get("cache-control")}`);
+  users["cut@x.com"].status = "rejected"; // the teacher rejects the student
+  const after = await fetch(url, { headers: { cookie, "if-none-match": etag } });
+  ok1("rejected student: very next request refused, even with a saved copy", after.status === 403, String(after.status));
+  const afterPdf = await fetch(`http://127.0.0.1:${port}/?k=f&p=downloads%2Fx.pdf`, { headers: { cookie } });
+  ok1("rejected student: PDF refused", afterPdf.status === 403, String(afterPdf.status));
+}
 await check("unknown kind", "z", chunk, { cookie: tok("offline@x.com") }, 400);
+// ── the account check that runs on every API request ──
+{
+  const { makeAccountGate } = await import("../accountGate.ts");
+  const status: Record<string, string | null> = { "good@x.com": "approved", "rej@x.com": "rejected", "pen@x.com": "pending" };
+  let down = false;
+  const gate = makeAccountGate({
+    verifyToken: (t) => { try { return JSON.parse(Buffer.from(t, "base64").toString()); } catch { return null; } },
+    lookupStatus: async (email) => (down ? { status: null, failed: true } : { status: email in status ? status[email] : null, failed: false }),
+  });
+  const run = async (path: string, auth?: string) => {
+    let code = 0, passedOn = false;
+    const req: any = { path, headers: auth ? { authorization: "Bearer " + auth } : {} };
+    const res: any = { status(c: number) { code = c; return this; }, json() {} };
+    await gate(req, res, () => { passedOn = true; });
+    return { code, passedOn };
+  };
+  const t = (email: string) => Buffer.from(JSON.stringify({ email, role: "student" })).toString("base64");
+  const cases: [string, string, string | undefined, number, boolean][] = [
+    ["approved student passes", "/homework/mine", t("good@x.com"), 0, true],
+    ["rejected student refused at once", "/homework/mine", t("rej@x.com"), 401, false],
+    ["pending account refused", "/revision/mine", t("pen@x.com"), 401, false],
+    ["deleted account refused", "/announcements", t("ghost@x.com"), 401, false],
+    ["public endpoint (login) always open", "/login", undefined, 0, true],
+    ["no token: endpoint's own check decides", "/homework/mine", undefined, 0, true],
+    ["not-ours token (scheduled job secret) passes on", "/cron/check-homework", "not-a-token", 0, true],
+    ["rejected student cannot use change-password", "/change-password", t("rej@x.com"), 401, false],
+  ];
+  for (const [name, path, auth, code, passed] of cases) { const r = await run(path, auth); ok1("account check: " + name, r.code === code && r.passedOn === passed, JSON.stringify(r)); }
+  down = true;
+  const r = await run("/homework/mine", t("good@x.com"));
+  ok1("account check: database down -> asks to retry, never lets through", r.code === 503 && !r.passedOn, JSON.stringify(r));
+}
 server.close();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

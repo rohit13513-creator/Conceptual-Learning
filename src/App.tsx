@@ -1294,6 +1294,19 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     return () => { window.fetch = originalFetch; };
   }, []);
 
+  // While someone is logged in, ask the server every 30 seconds (and whenever they return to the tab) whether the
+  // account is still approved. If the teacher rejected or suspended the student, the server answers 401 and the
+  // global guard above logs them out -- so even a student who is only reading is cut off within about 30 seconds.
+  useEffect(() => {
+    const token = user?.token;
+    if (!token) return;
+    const ping = () => { fetch('/api/session/ping', { headers: { Authorization: `Bearer ${token}` } }).catch(() => {}); };
+    const timer = window.setInterval(ping, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, [user?.token]);
+
   // Click outside listener for dropdown global menus
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
