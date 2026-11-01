@@ -175,6 +175,33 @@ function requireAuth(req: express.Request, res: express.Response): { email: stri
   return payload;
 }
 
+// Basic request limiter for the endpoints anyone on the internet can call (sign-up, one-time codes,
+// login, password reset) and for the paid chemistry lookups. It keeps its counts in memory, so each
+// server instance counts separately -- not perfect, but it stops the easy abuse: hammering one
+// endpoint to spam emails, guess passwords or run up the AI bill. Limits are generous enough that a
+// whole classroom sharing one internet connection is not affected.
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function clientIp(req: express.Request): string {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket?.remoteAddress || "unknown";
+}
+function rateLimited(req: express.Request, res: express.Response, name: string, max: number, windowMs: number, extraKey = "", includeIp = true): boolean {
+  const now = Date.now();
+  if (rateBuckets.size > 5000) for (const [k, v] of rateBuckets) if (v.resetAt < now) rateBuckets.delete(k);
+  const key = `${name}|${includeIp ? clientIp(req) : "any"}|${extraKey}`;
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt < now) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  bucket.count++;
+  if (bucket.count > max) {
+    res.status(429).json({ error: "Too many attempts. Please wait a few minutes and try again." });
+    return true;
+  }
+  return false;
+}
+
 // A short-lived, single-purpose signed token used only in the account-approval email link, so
 // that link can't be forged just by knowing (or guessing) the target's email address.
 function signApprovalToken(email: string): string {
@@ -3254,6 +3281,10 @@ function buildApp(): express.Express {
   }) : null;
 
   app.post("/api/simulate-reaction", async (req, res) => {
+    // Paid AI call: logged-in students only, and not more than 40 per 10 minutes per student.
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (rateLimited(req, res, "simulate", 40, 10 * 60_000, auth.email)) return;
     const { reactants, reactantA, reactantB, temperature, pressure, solvent, addedPeroxide, catalyst } = req.body;
     
     let reactantList: Array<{ formula: string; concentration: "dilute" | "concentrated"; gasSupply?: "limited" | "excess" }> = [];
@@ -4147,6 +4178,10 @@ function buildApp(): express.Express {
   // "Know Your Chemicals (KYC)" Chemistry Encyclopedia API Endpoint
   // —————————————————————————————————————————————————————————————————————
   app.post("/api/kyc/lookup", async (req, res) => {
+    // Paid AI call: logged-in students only, and not more than 60 per 10 minutes per student.
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (rateLimited(req, res, "kyc", 60, 10 * 60_000, auth.email)) return;
     const { query } = req.body;
     if (!query || typeof query !== "string" || query.trim() === "") {
       return res.status(400).json({ error: "Please enter a valid chemical name, common name, drug name, or molecular formula." });
@@ -7819,6 +7854,7 @@ function buildApp(): express.Express {
 
   // Request Registration OTP for the phone number
   app.post("/api/otp/send", async (req, res) => {
+    if (rateLimited(req, res, "otp-send", 20, 10 * 60_000)) return;
     const { email, phone } = req.body;
     if (!email || !phone) {
       return res.status(400).json({ error: "Email and Phone Number are both required to dispatch verification codes." });
@@ -7870,6 +7906,7 @@ function buildApp(): express.Express {
 
   // User Profile registration (Requires Phone OTP + Phone Number)
   app.post("/api/register", async (req, res) => {
+    if (rateLimited(req, res, "register", 30, 60 * 60_000)) return;
     const { name, email, password, phone, whatsappNumber, phoneOtp, studentClass: requestedClass, studentType: requestedType, board } = req.body;
     // Canadian-board students are stored with student_class "Canadian" and are always regular
     // ("offline") students -- they get separately posted homework but no Indian class level.
@@ -8138,6 +8175,9 @@ function buildApp(): express.Express {
 
   // User Login & Device Limitation Gate
   app.post("/api/login", async (req, res) => {
+    // On top of the per-account lockout below: no single internet address may try more than 80
+    // logins in 10 minutes (generous enough for a whole classroom behind one connection).
+    if (rateLimited(req, res, "login", 80, 10 * 60_000)) return;
     const { email, password, deviceId, deviceName } = req.body;
 
     if (!email || !password || !deviceId) {
@@ -8145,6 +8185,10 @@ function buildApp(): express.Express {
     }
 
     const emailNormalized = email.toLowerCase().trim();
+    // The database-based lockout below needs two columns that have never existed in the live
+    // database, so it never actually locked anyone out. This limit does not depend on them: one
+    // account may be tried at most 15 times in 15 minutes, from anywhere.
+    if (rateLimited(req, res, "login-account", 15, 15 * 60_000, emailNormalized, false)) return;
     const isTestAccount = emailNormalized === "test@rayoptica.com";
     const { data: userRow } = await supabase.from("users").select("*").eq("email", emailNormalized).maybeSingle();
 
@@ -8238,6 +8282,7 @@ function buildApp(): express.Express {
   // email address it likes -- verifying that token against Google itself is what actually proves
   // the person on the other end really does control that Google account right now.
   app.post("/api/login/google", async (req, res) => {
+    if (rateLimited(req, res, "login-google", 80, 10 * 60_000)) return;
     const { idToken, deviceId, deviceName } = req.body;
     if (!idToken || !deviceId) {
       return res.status(400).json({ error: "Missing required parameters: idToken and deviceId are mandatory." });
@@ -8328,21 +8373,28 @@ function buildApp(): express.Express {
 
   // Logged-in user changes their own password (must know the current one)
   app.post("/api/change-password", async (req, res) => {
-    const { email, currentPassword, newPassword } = req.body;
-    if (!email || !currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Email, current password, and new password are all required." });
+    // Must be logged in, and can only change the password of the account that is logged in. This used
+    // to take any email from the request body with no login at all, which let anyone try unlimited
+    // guesses at any account's current password (the login lockout did not apply here).
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current password and new password are both required." });
     }
     if (String(newPassword).length < 6) {
       return res.status(400).json({ error: "New password must be at least 6 characters." });
     }
 
-    const emailNormalized = email.toLowerCase().trim();
+    const emailNormalized = auth.email.toLowerCase().trim();
+    // At most 8 tries per 15 minutes for this account, from anywhere.
+    if (rateLimited(req, res, "pw-change", 8, 15 * 60_000, emailNormalized, false)) return;
     const { data: userRow } = await supabase.from("users").select("password_hash").eq("email", emailNormalized).maybeSingle();
     if (!userRow) {
       return res.status(404).json({ error: "Account not found." });
     }
 
-    const currentMatches = await bcrypt.compare(currentPassword, userRow.password_hash);
+    const currentMatches = await bcrypt.compare(String(currentPassword), userRow.password_hash);
     if (!currentMatches) {
       return res.status(401).json({ error: "Current password is incorrect." });
     }
@@ -8361,6 +8413,7 @@ function buildApp(): express.Express {
   // Always returns the same generic message regardless of whether the account exists, so this
   // can't be used to check which emails are registered.
   app.post("/api/forgot-password/request", async (req, res) => {
+    if (rateLimited(req, res, "forgot-request", 15, 10 * 60_000)) return;
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required." });
 
@@ -8397,6 +8450,7 @@ function buildApp(): express.Express {
 
   // Forgot password, step 2: verify the code and set a new password.
   app.post("/api/forgot-password/reset", async (req, res) => {
+    if (rateLimited(req, res, "forgot-reset", 20, 10 * 60_000)) return;
     const { email, otp, newPassword } = req.body;
     if (!email || !otp || !newPassword) {
       return res.status(400).json({ error: "Email, code, and new password are all required." });
@@ -9564,13 +9618,29 @@ function buildApp(): express.Express {
 
   // Everyone (students + admin) can view the list of posted homework assignments
   app.get("/api/homework/assignments", async (req, res) => {
+    // Logged-in users only, and a student only receives the homework meant for their own class
+    // ("All Classes" plus their class; Canadian-board students only their own). This used to be open
+    // to anyone on the internet, including the signed download links of every question sheet.
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const { data: rows } = await supabase
       .from("homework_assignments")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(100);
 
-    const assignments = await Promise.all((rows || []).map(async (r) => {
+    let visibleRows = rows || [];
+    if (!ADMIN_EMAILS.includes(auth.email)) {
+      const { data: me } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
+      const cls = me?.student_class as string | undefined;
+      if (cls === "Canadian") {
+        visibleRows = visibleRows.filter((r: any) => r.target_class === "canadian");
+      } else if (cls && CLASS_TO_TARGET[cls]) {
+        visibleRows = visibleRows.filter((r: any) => r.target_class === "All" || r.target_class === CLASS_TO_TARGET[cls]);
+      }
+    }
+
+    const assignments = await Promise.all(visibleRows.map(async (r) => {
       let fileUrl: string | null = null;
       if (r.file_path) {
         const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
@@ -9933,6 +10003,8 @@ function buildApp(): express.Express {
 
   // Everyone (students + admin) can view the list of posted announcements/updates
   app.get("/api/announcements", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const { data: rows } = await supabase
       .from("announcements")
       .select("*")

@@ -1531,8 +1531,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     try {
       const resp = await fetch('/api/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, currentPassword: currentPasswordInput, newPassword: newPasswordInput })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+        body: JSON.stringify({ currentPassword: currentPasswordInput, newPassword: newPasswordInput })
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to change password.');
@@ -2180,7 +2180,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const fetchAssignments = async () => {
     setAssignmentsLoading(true);
     try {
-      const resp = await fetch('/api/homework/assignments');
+      const resp = await fetch('/api/homework/assignments', { headers: { 'Authorization': `Bearer ${user?.token}` } });
       const data = await resp.json();
       setAssignments(data.assignments || []);
     } catch (err) {
@@ -2285,7 +2285,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const fetchAnnouncements = async () => {
     setAnnouncementsLoading(true);
     try {
-      const resp = await fetch('/api/announcements');
+      const resp = await fetch('/api/announcements', { headers: { 'Authorization': `Bearer ${user?.token}` } });
       const data = await resp.json();
       setAnnouncements(data.announcements || []);
     } catch (err) {

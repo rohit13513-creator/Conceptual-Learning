@@ -1,3 +1,4 @@
+import { authHeaders } from '../utils/session';
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -1128,7 +1129,7 @@ export default function KnowYourChemicals({ isLightMode = false }: KnowYourChemi
     try {
       const response = await fetch("/api/kyc/lookup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ query: trimmed }),
       });
 

@@ -1,3 +1,4 @@
+import { authHeaders } from '../utils/session';
 import React, { useState, useEffect } from "react";
 import { 
   Flame, 
@@ -1048,7 +1049,7 @@ export default function ReactionSimulator({ isLightMode = false }: ReactionSimul
     try {
       const response = await fetch("/api/simulate-reaction", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           reactants: reactants.slice(0, numReactants),
           temperature,
