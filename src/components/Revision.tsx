@@ -1322,7 +1322,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                 </div>
                 <div>
                   <h3 className={`text-base font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Your paper is submitted!</h3>
-                  <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Checking has started -- this usually takes under a minute. The page isn't stuck, please don't close it.</p>
+                  <p className={`text-xs font-semibold mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Checking has started -- this usually takes one to three minutes. The page isn't stuck; if you leave, your score will be waiting here.</p>
                 </div>
                 <div className="space-y-1.5 max-w-xs mx-auto">
                   <div className={`h-3 rounded-full overflow-hidden ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}>
@@ -1354,6 +1354,16 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
                           {overall}
                         </p>
                       )}
+                      {(() => {
+                        const open = rows.filter((r) => r.awarded < r.max);
+                        if (open.length === 0) return null;
+                        const openMarks = open.reduce((sum, r) => sum + (r.max - r.awarded), 0);
+                        return (
+                          <p className={`text-xs font-semibold p-3 rounded-lg border ${isLightMode ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
+                            {openMarks} mark{openMarks === 1 ? '' : 's'} still to earn in: {open.map((r) => `${r.questionId} (${r.max - r.awarded})`).join(', ')}. Marks you already earned are kept. To earn these, write your own answer to each of these questions (even if you think it is difficult) and press Improve Score -- a question you do not answer stays at its current marks.
+                          </p>
+                        );
+                      })()}
                       {rows.length > 0 && (
                         <div className={`rounded-lg border divide-y overflow-hidden ${isLightMode ? 'border-slate-200 divide-slate-200' : 'border-slate-800 divide-slate-800'}`}>
                           {rows.map((row) => {

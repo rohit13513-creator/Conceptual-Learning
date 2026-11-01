@@ -10600,6 +10600,28 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   // REVISION_CONTENT_VERSION -- an older paper is treated as a cache miss, falling through to a
   // fresh (currently-correct) generation instead of perpetuating a since-fixed defect. Returns null
   // on a miss.
+  // Known, recurring defects that the generation prompt asks the model to avoid but that still
+  // slipped through in real papers. Checked in code, because a rule in a very long prompt is only a
+  // request while a check here is a guarantee: a paper with one of these is regenerated, and an
+  // already-stored paper with one is never reused for another student.
+  //  - Class X "Polynomials": relationship between zeroes and coefficients of a CUBIC is not
+  //    examinable (a real paper asked for it, and the student rightly questioned it).
+  //  - A word problem that says the area "is represented by the polynomial p(x)" and then treats the
+  //    two zeroes of p(x) as the length and width: the area would depend on x and be the constant
+  //    term at the same time, which is self-contradictory (a real student called it a wrong question).
+  function revisionPaperDefect(chapterName: string, classLabel: string, questions: any[]): string | null {
+    const all = (Array.isArray(questions) ? questions : []).map((q) => String(q?.text || ""));
+    // Class X only: in Class IX Polynomials, cubic polynomials (factor theorem etc.) are fully examinable.
+    if (classLabel === "X" && /^polynomials$/i.test(chapterName.trim())) {
+      const asksCubicRelations = (t: string) => /cubic|x³/i.test(t) && /verify|relationship|sum of (the )?zeroes|α\s*\+\s*β\s*\+\s*γ|αβγ/i.test(t);
+      if (all.some(asksCubicRelations)) return "cubic polynomial zeroes-and-coefficients question (out of examination syllabus)";
+    }
+    if (all.some((t) => /area[^.]*represented by (the )?polynomial/i.test(t) && /(length|width|dimensions)[^.]*zeroes/i.test(t))) {
+      return "area-polynomial word problem whose dimensions are the zeroes (self-contradictory)";
+    }
+    return null;
+  }
+
   async function findReusableRevisionQuestions(subject: string, chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[] | null> {
     const { data: candidates } = await supabase
       .from("revision_papers")
@@ -10615,7 +10637,7 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
     const { data: users } = await supabase.from("users").select("email, student_class").in("email", emails);
     const classByEmail = new Map((users || []).map((u: any) => [u.email, u.student_class]));
 
-    const match = candidates.find((c: any) => classByEmail.get(c.student_email) === classLabel && c.content?.version === REVISION_CONTENT_VERSION);
+    const match = candidates.find((c: any) => classByEmail.get(c.student_email) === classLabel && c.content?.version === REVISION_CONTENT_VERSION && !revisionPaperDefect(chapterName, classLabel, c.content?.questions));
     const questions = match?.content?.questions;
     return Array.isArray(questions) && questions.length > 0 ? questions : null;
   }
@@ -10626,7 +10648,14 @@ For every question in Sections B, C, D, and E, write markingPoints as a genuine 
   async function getRevisionQuestionsForTarget(subject: string, chapterName: string, classLabel: string, cycleNumber: number): Promise<RevisionQuestion[]> {
     const reused = await findReusableRevisionQuestions(subject, chapterName, classLabel, cycleNumber);
     if (reused) return reused;
-    return generateRevisionPaper(subject, chapterName, classLabel, cycleNumber);
+    // Up to three tries to get a paper without a known defect (see revisionPaperDefect); if every
+    // try has one, the last paper is still returned rather than leaving the student with no paper.
+    let draft = await generateRevisionPaper(subject, chapterName, classLabel, cycleNumber);
+    for (let retry = 0; retry < 2 && revisionPaperDefect(chapterName, classLabel, draft); retry++) {
+      console.warn(`Revision paper for ${chapterName} had a known defect (${revisionPaperDefect(chapterName, classLabel, draft)}); regenerating.`);
+      draft = await generateRevisionPaper(subject, chapterName, classLabel, cycleNumber);
+    }
+    return draft;
   }
 
   function mapRevisionPaperForStudent(row: any) {
