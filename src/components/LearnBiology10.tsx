@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PdfOnly } from "./PdfOnly";
 import {
   BookOpen,
   Award,
@@ -21,11 +22,11 @@ import {
   FlaskConical,
 } from "lucide-react";
 
-const LIFE_PROCESSES_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-life-processes.pdf";
+const LIFE_PROCESSES_NOTES_PDF_URL = "/download/study-notes/class10-biology-life-processes.pdf";
 
 // Real diagram images cropped from the admin's own downloadable notes PDF -- used instead of
 // hand-drawn SVGs, which reviewed as too unclear to keep.
-const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/biology10-diagrams/";
+const DIAGRAM_BASE = "/diagrams/study-notes/biology10-diagrams/";
 // "?v=2" cache-busts every diagram URL below so browsers/CDN edges that cached the
 // earlier (mis-cropped, lower-resolution) images fetch the corrected files instead
 // of silently reusing a stale copy.
@@ -279,7 +280,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
             <HeartPulse className="w-4 h-4 text-green-500" />
             <span className={`text-sm uppercase tracking-widest font-black font-mono ${isLightMode ? "text-slate-800" : "text-green-400"}`}>Life Processes</span>
           </div>
-          <a
+          <PdfOnly><a
             href={LIFE_PROCESSES_NOTES_PDF_URL}
             target="_blank"
             rel="noopener noreferrer"
@@ -287,7 +288,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
           >
             <Download className="w-2.5 h-2.5" />
             PDF
-          </a>
+          </a></PdfOnly>
         </div>
       </div>
 
@@ -303,7 +304,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               Nutrition, respiration, transportation, and excretion -- how living things keep themselves running.
             </p>
           </div>
-          <a
+          <PdfOnly><a
             href={LIFE_PROCESSES_NOTES_PDF_URL}
             target="_blank"
             rel="noopener noreferrer"
@@ -315,7 +316,7 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
           >
             <Download className="w-3.5 h-3.5" />
             Download Notes
-          </a>
+          </a></PdfOnly>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">

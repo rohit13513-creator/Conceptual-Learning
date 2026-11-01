@@ -1,4 +1,5 @@
 import type { Bank, BankParams } from './bankTypes';
+import { ensureSessionCookie } from '../utils/session';
 
 // Question banks are loaded one class at a time, the first time a student opens the question bank,
 // solved questions or a self assessment. Once a class has loaded, switching chapter inside it is instant.
@@ -14,5 +15,6 @@ export function peekBank(p: BankParams): { bank: Bank; self: any[] } | null {
 export async function loadBank(p: BankParams): Promise<void> {
   const g = groupOf(p);
   if (loaded[g]) return;
+  await ensureSessionCookie();
   loaded[g] = g === '8' ? await import('./bank8') : g === '9' ? await import('./bank9') : g === '10' ? await import('./bank10') : await import('./bankCompetition');
 }

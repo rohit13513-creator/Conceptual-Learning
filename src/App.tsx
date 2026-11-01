@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { setDownloadAccess } from './utils/downloadAccess';
 import { lazyView } from './lazyView';
 import { peekBank, loadBank } from './data/banks';
 import type { Bank } from './data/bankTypes';
@@ -534,6 +535,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     ? null
     : (CLASS_TRACK_MAP[user?.studentClass || ''] || 'unavailable');
   const isCanadianStudent = studentTrack === 'canadian';
+  // Only offline (classroom) students and the teacher may see Download PDF options; online students may not.
+  const canDownloadPdf = !!user && user.studentType !== 'online';
+  useLayoutEffect(() => { setDownloadAccess(canDownloadPdf); }, [canDownloadPdf]);
 
   // Shared filter used by every class-scoped nav dropdown (Notes/Solve NCERT/Question Bank/Self
   // Assessment): exempt accounts see every item unchanged; locked students only ever see the
@@ -1505,6 +1509,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   };
 
   const handleLogout = () => {
+    // Also removes the study-file cookie, so protected notes stop opening in this browser.
+    fetch('/api/session/clear', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
     setUser(null);
     setShowAuthForm(false);
     localStorage.removeItem('optics_v1_user');
@@ -4072,8 +4078,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             <span>Revision</span>
           </button>
 
-          {/* Tab: Download NCERT -- chapter-wise textbook PDFs for the student's own class */}
-          <button
+          {/* Tab: Download NCERT -- chapter-wise textbook PDFs for the student's own class (offline students and the teacher only) */}
+          {canDownloadPdf && (<button
             onClick={() => { changeView('ncertDownloads'); setOpenMenu(null); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeView === 'ncertDownloads'
@@ -4083,7 +4089,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
           >
             <Download className="w-3.5 h-3.5" />
             <span>Download NCERT</span>
-          </button>
+          </button>)}
 
           {/* Tab: Forum */}
           <button
@@ -5074,7 +5080,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             </button>
             {user && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
-            <button
+            {canDownloadPdf && (<button
               onClick={() => changeView('ncertDownloads')}
               className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-slate-50 to-slate-100 border-slate-300' : 'from-slate-800/40 to-slate-900/40 border-slate-700'}`}
             >
@@ -5084,7 +5090,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Chapter-wise textbook PDFs for your class, ready to download.</p>
               </div>
               <ChevronRight className={`w-5 h-5 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`} />
-            </button>
+            </button>)}
 
             <div className="space-y-2">
               <h2 className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Choose a Subject</h2>
@@ -5284,7 +5290,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             {user && !isCanadianStudent && <RevisionLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />}
 
             {/* Download NCERT box */}
-            {!isCanadianStudent && (<button
+            {canDownloadPdf && !isCanadianStudent && (<button
               onClick={() => changeView('ncertDownloads')}
               className={`w-full flex items-center gap-3 p-5 rounded-2xl border text-left transition duration-200 cursor-pointer bg-gradient-to-br ${isLightMode ? 'from-slate-50 to-slate-100 border-slate-300' : 'from-slate-800/40 to-slate-900/40 border-slate-700'}`}
             >
@@ -7997,7 +8003,16 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
           </div>
         </div>
       )}
-      {activeView === 'ncertDownloads' && user && !isCanadianStudent && (
+      {activeView === 'ncertDownloads' && user && !isCanadianStudent && !canDownloadPdf && (
+        <div className={`flex-1 overflow-y-auto px-4 py-12 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
+          <div className="max-w-md mx-auto text-center space-y-3">
+            <p className="text-base font-black">PDF downloads are for classroom students</p>
+            <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>Downloads are available to students registered for the offline (classroom) batch. You can read all your notes and practise on the website.</p>
+            <button onClick={() => changeView('hub')} className={`text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl ${isLightMode ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-200'}`}>Back to home</button>
+          </div>
+        </div>
+      )}
+      {activeView === 'ncertDownloads' && user && !isCanadianStudent && canDownloadPdf && (
         <NcertDownloads isLightMode={isLightMode} user={{ email: user.email, token: user.token }} />
       )}
 

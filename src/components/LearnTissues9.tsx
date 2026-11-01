@@ -6,7 +6,7 @@ import { OrganisationLevelsDiagram, MeristemLocationsDiagram, DifferentiationDia
 // Notes for "Tissues in Action". Simple words, short sentences, point by point.
 
 const IMG_BASE = "/diagrams/tissues9/";
-const NOTES_PDF_URL = "/Class-9-Biology-Tissues-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Class-9-Biology-Tissues-Notes.pdf";
 const NOTES_PDF_NAME = "Class-9-Biology-Tissues-Notes.pdf";
 interface Pic { file: string; alt: string; caption: string; }
 type SvgKey = "levels" | "meristem-loc" | "differentiation" | "plant-map" | "stomata" | "animal-map" | "voluntary" | "mind";

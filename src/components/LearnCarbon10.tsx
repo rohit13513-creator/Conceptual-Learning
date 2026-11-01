@@ -13,7 +13,7 @@ import type { CBlock } from "../data/carbonNotesTypes";
 // Class X Chemistry: "Carbon and its Compounds". Simple words, point by point, with clear diagrams.
 
 const TOPICS = [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D];
-const NOTES_PDF_URL = "/Class-10-Carbon-Compounds-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf";
 const NOTES_PDF_NAME = "Class-10-Carbon-Compounds-Notes.pdf";
 
 const ICONS: Record<string, React.ElementType> = {

@@ -6,7 +6,7 @@ import { CANADA_DATA_TOPICS, CBlock } from "../data/canadaDataAnalysis";
 // Canadian Maths notes: "Data Analysis: Box Plots, Scatter Plots and Trend Lines".
 
 const IMG_BASE = "/diagrams/canada-data/";
-const NOTES_PDF_URL = "/Canadian-Maths-Data-Analysis-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Canadian-Maths-Data-Analysis-Notes.pdf";
 const NOTES_PDF_NAME = "Canadian-Maths-Data-Analysis-Notes.pdf";
 
 const ICONS: Record<string, React.ElementType> = { Data: BarChart3, Graphs: BarChart3, Models: BarChart3, Exercise: PenLine, Answers: CheckCircle2 };

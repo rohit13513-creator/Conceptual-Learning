@@ -1,4 +1,5 @@
 import { useState, ReactNode, useMemo, useEffect } from 'react';
+import { PdfOnly } from "./PdfOnly";
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 import OpticsCanvas, { computeImage, computeRays } from './OpticsCanvas';
@@ -3535,7 +3536,7 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
   const handleDownloadNotes = () => {
     if (preparingFor === '10th') {
       const link = document.createElement('a');
-      link.href = '/Class-10-Optics-Notes.pdf';
+      link.href = '/download/downloads/Class-10-Optics-Notes.pdf';
       link.download = 'Class-10-Optics-Notes.pdf';
       document.body.appendChild(link);
       link.click();
@@ -3939,13 +3940,13 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
               {preparingFor === '8th' || preparingFor === '9th' ? 'Class VIII Notes' : preparingFor === '10th' ? 'Class X Notes' : 'Class XII Notes'}
             </span>
           </div>
-          <button
+          <PdfOnly><button
             onClick={handleDownloadNotes}
             className={`flex items-center gap-1 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded transition ${isLightMode ? 'bg-cyan-600 hover:bg-cyan-700 text-white' : 'bg-cyan-500 hover:bg-cyan-400 text-[#0d1424]'}`}
           >
             <Printer className="w-2.5 h-2.5" />
             PDF
-          </button>
+          </button></PdfOnly>
         </div>
 
         {/* Row 2: Selected Topic dropdown (below) */}
@@ -3989,7 +3990,7 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
                 : 'Comprehensive textbook coverage with standard SI Units and definitions.'}
             </p>
           </div>
-          <button
+          <PdfOnly><button
             onClick={handleDownloadNotes}
             className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${
               isLightMode 
@@ -3999,7 +4000,7 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
           >
             <Printer className="w-3.5 h-3.5" />
             Download {preparingFor === '8th' || preparingFor === '9th' ? 'Class VIII' : preparingFor === '10th' ? 'Class X' : 'Class XII'} Notes (Handwritten & PDF)
-          </button>
+          </button></PdfOnly>
         </div>
         
         {/* Navigation list */}
@@ -4223,13 +4224,13 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
                   <h4 className="font-extrabold text-[#22d3ee] tracking-tight">Class X: optics notes</h4>
                 </div>
               </div>
-              <button
+              <PdfOnly><button
                 onClick={handleDownloadNotes}
                 className="shrink-0 flex items-center gap-1.5 py-2 px-4 bg-cyan-500 hover:bg-cyan-400 text-[#0d1424] font-black uppercase tracking-wider text-[11px] rounded-xl transition cursor-pointer hover:shadow-lg hover:shadow-cyan-400/5 active:scale-95"
               >
                 <Printer className="w-3.5 h-3.5" />
                 Download Class 10 Notes (Handwritten & PDF)
-              </button>
+              </button></PdfOnly>
             </div>
           )}
 

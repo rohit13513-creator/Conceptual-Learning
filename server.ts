@@ -10,6 +10,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import AdmZip from "adm-zip";
+import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url } from "./sessionToken.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -130,35 +131,24 @@ if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required and must not be empty.");
 }
 const SESSION_SECRET = process.env.SESSION_SECRET;
-const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function base64url(input: Buffer): string {
-  return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
+// The signing and checking itself lives in sessionToken.ts so the small function that serves protected
+// study files applies exactly the same rules.
 function signSessionToken(payload: { email: string; role: string }): string {
-  const body = { ...payload, exp: Date.now() + SESSION_MAX_AGE_MS };
-  const payloadB64 = base64url(Buffer.from(JSON.stringify(body)));
-  const sig = base64url(crypto.createHmac("sha256", SESSION_SECRET).update(payloadB64).digest());
-  return `${payloadB64}.${sig}`;
+  return signToken(payload, SESSION_SECRET);
 }
 
 function verifySessionToken(token: string): { email: string; role: string } | null {
-  if (!token || !SESSION_SECRET) return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [payloadB64, sig] = parts;
-  const expectedSig = base64url(crypto.createHmac("sha256", SESSION_SECRET).update(payloadB64).digest());
-  const sigBuf = Buffer.from(sig);
-  const expectedBuf = Buffer.from(expectedSig);
-  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(payloadB64.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!payload.exp || payload.exp < Date.now() || !payload.email) return null;
-    return { email: String(payload.email).toLowerCase().trim(), role: String(payload.role || "student") };
-  } catch {
-    return null;
-  }
+  return verifyToken(token, SESSION_SECRET);
+}
+
+// The login also sets a cookie holding the same token, so the browser can fetch protected study files
+// (notes, question banks, diagrams) after login -- those requests cannot carry an Authorization header.
+function isHttps(req: express.Request): boolean {
+  return String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https" || req.secure;
+}
+function setLoginCookie(req: express.Request, res: express.Response, token: string) {
+  res.setHeader("Set-Cookie", sessionCookie(token, isHttps(req)));
 }
 
 // Verifies the Authorization: Bearer <token> header and returns the authenticated identity, or
@@ -8266,6 +8256,7 @@ function buildApp(): express.Express {
     // Return authenticated user state without payload password
     const safeUser = mapUserRow({ ...userRow, devices });
     const token = signSessionToken({ email: emailNormalized, role: userRow.role });
+    setLoginCookie(req, res, token);
     return res.status(200).json({
       message: "Login successful!",
       user: safeUser,
@@ -8364,11 +8355,28 @@ function buildApp(): express.Express {
 
     const safeUser = mapUserRow({ ...userRow, devices });
     const token = signSessionToken({ email: emailNormalized, role: userRow.role });
+    setLoginCookie(req, res, token);
     return res.status(200).json({
       message: "Login successful!",
       user: safeUser,
       token
     });
+  });
+
+  // Sets (or refreshes) the study-file cookie for someone who is already logged in -- used for sessions that
+  // started before the cookie existed, and whenever the browser has lost it. Needs the normal login token.
+  app.post("/api/session/cookie", (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const header = (req.headers["authorization"] as string) || "";
+    setLoginCookie(req, res, header.slice(7).trim());
+    return res.json({ success: true });
+  });
+
+  // Logging out also removes the cookie, so protected study files stop opening in this browser.
+  app.post("/api/session/clear", (req, res) => {
+    res.setHeader("Set-Cookie", clearedSessionCookie(isHttps(req)));
+    return res.json({ success: true });
   });
 
   // Logged-in user changes their own password (must know the current one)
@@ -12289,6 +12297,11 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
   app.get("/api/revision/reference-books/download", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
+    // PDF downloads are only for offline (classroom) students and the teacher.
+    if (!ADMIN_EMAILS.includes(auth.email)) {
+      const { data: me } = await supabase.from("users").select("student_type").eq("email", auth.email).maybeSingle();
+      if (me?.student_type === "online") return res.status(403).json({ error: "PDF downloads are available to offline (classroom) students only." });
+    }
     const { classKey, subject, fileName } = req.query as { classKey?: string; subject?: string; fileName?: string };
     if (!classKey || !REVISION_REFERENCE_CLASS_KEYS.includes(classKey as any) || !subject || !REVISION_REFERENCE_SUBJECTS.includes(subject as any) || !fileName) {
       return res.status(400).json({ error: "Invalid request." });

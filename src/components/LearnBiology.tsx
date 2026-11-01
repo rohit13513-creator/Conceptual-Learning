@@ -21,7 +21,7 @@ import {
   Trophy,
 } from "lucide-react";
 
-const NOTES_PDF_URL = "/Class-9-Biology-Cell-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Class-9-Biology-Cell-Notes.pdf";
 const NOTES_PDF_NAME = "Class-9-Biology-Cell-Notes.pdf";
 
 type BioTopicId =

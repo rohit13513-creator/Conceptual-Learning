@@ -6,6 +6,10 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      // Needed by scripts/protect-build.mjs to tell which files belong to the public log-in shell.
+      manifest: true,
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

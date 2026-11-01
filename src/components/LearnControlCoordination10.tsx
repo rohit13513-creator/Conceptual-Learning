@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PdfOnly } from "./PdfOnly";
 import {
   Award,
   HelpCircle,
@@ -18,9 +19,9 @@ import {
   Shield,
 } from "lucide-react";
 
-const CONTROL_COORDINATION_NOTES_PDF_URL = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/class10-biology-control-coordination.pdf";
+const CONTROL_COORDINATION_NOTES_PDF_URL = "/download/study-notes/class10-biology-control-coordination.pdf";
 
-const DIAGRAM_BASE = "https://hcofglrixcokhhchivvi.supabase.co/storage/v1/object/public/study-notes/control-coordination10-diagrams/";
+const DIAGRAM_BASE = "/diagrams/study-notes/control-coordination10-diagrams/";
 // "?v=2" cache-busts every diagram URL below so browsers/CDN edges that cached the
 // earlier (watermarked) images fetch the corrected, clean files instead of a stale copy.
 const DIAGRAM_V = "?v=2";
@@ -261,7 +262,7 @@ export function LearnControlCoordination10({ isLightMode = false, onCompleteNote
             <Brain className="w-4 h-4 text-green-500" />
             <span className={`text-sm uppercase tracking-widest font-black font-mono ${isLightMode ? "text-slate-800" : "text-green-400"}`}>Control & Coordination</span>
           </div>
-          <a
+          <PdfOnly><a
             href={CONTROL_COORDINATION_NOTES_PDF_URL}
             target="_blank"
             rel="noopener noreferrer"
@@ -269,7 +270,7 @@ export function LearnControlCoordination10({ isLightMode = false, onCompleteNote
           >
             <Download className="w-2.5 h-2.5" />
             PDF
-          </a>
+          </a></PdfOnly>
         </div>
       </div>
 
@@ -285,7 +286,7 @@ export function LearnControlCoordination10({ isLightMode = false, onCompleteNote
               Nerves, the brain, hormones, and how plants coordinate too -- without a single neuron.
             </p>
           </div>
-          <a
+          <PdfOnly><a
             href={CONTROL_COORDINATION_NOTES_PDF_URL}
             target="_blank"
             rel="noopener noreferrer"
@@ -297,7 +298,7 @@ export function LearnControlCoordination10({ isLightMode = false, onCompleteNote
           >
             <Download className="w-3.5 h-3.5" />
             Download Notes
-          </a>
+          </a></PdfOnly>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">

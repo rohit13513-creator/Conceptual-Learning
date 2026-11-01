@@ -1,5 +1,6 @@
 import React from "react";
 import { Download } from "lucide-react";
+import { useCanDownload } from "../utils/downloadAccess";
 
 // "Download Notes" button for a chapter's PDF (a file in /public). Two sizes: a full-width button
 // for the desktop sidebar, and a small "PDF" chip for the mobile header.
@@ -10,8 +11,9 @@ interface Props {
   compact?: boolean;
 }
 
-export const DownloadNotesLink: React.FC<Props> = ({ href, fileName, isLightMode, compact = false }) =>
-  compact ? (
+export const DownloadNotesLink: React.FC<Props> = ({ href, fileName, isLightMode, compact = false }) => {
+  if (!useCanDownload()) return null;
+  return compact ? (
     <a href={href} download={fileName} className={`shrink-0 flex items-center gap-1 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg ${isLightMode ? "bg-green-600 text-white" : "bg-green-500 text-slate-950"}`}>
       <Download className="w-3 h-3" />
       PDF
@@ -22,3 +24,4 @@ export const DownloadNotesLink: React.FC<Props> = ({ href, fileName, isLightMode
       Download Notes
     </a>
   );
+};

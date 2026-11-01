@@ -11,7 +11,7 @@ import { TOPICS_D } from "./diversity9TopicsD";
 // Lesson: "Patterns in Life: Diversity and Classification". Simple words, short sentences, point by point.
 
 const IMG_BASE = "/diagrams/diversity9/";
-const NOTES_PDF_URL = "/Class-9-Biology-Diversity-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Class-9-Biology-Diversity-Notes.pdf";
 const NOTES_PDF_NAME = "Class-9-Biology-Diversity-Notes.pdf";
 const TOPICS: Topic[] = [...TOPICS_A, ...TOPICS_B, ...TOPICS_C, ...TOPICS_D];
 

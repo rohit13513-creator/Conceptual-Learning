@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PdfOnly } from "./PdfOnly";
 import {
   BookOpen,
   Award,
@@ -170,7 +171,7 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
 
   const handleDownloadNotes = () => {
     const link = document.createElement("a");
-    link.href = "/Class-10-Chemical-Reactions-Notes.pdf";
+    link.href = "/download/downloads/Class-10-Chemical-Reactions-Notes.pdf";
     link.download = "Class-10-Chemical-Reactions-Notes.pdf";
     document.body.appendChild(link);
     link.click();
@@ -186,13 +187,13 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
             <FlaskConical className="w-4 h-4 text-emerald-500" />
             <span className={`text-xs uppercase tracking-widest font-black font-mono ${isLightMode ? "text-slate-800" : "text-emerald-400"}`}>Chemical Reactions & Equations</span>
           </div>
-          <button
+          <PdfOnly><button
             onClick={handleDownloadNotes}
             className={`flex items-center gap-1 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded transition ${isLightMode ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-emerald-500 hover:bg-emerald-400 text-[#0d1424]"}`}
           >
             <Printer className="w-2.5 h-2.5" />
             PDF
-          </button>
+          </button></PdfOnly>
         </div>
       </div>
 
@@ -208,13 +209,13 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
               Reactions, equations, and everyday chemical change -- concept-first notes with worked examples.
             </p>
           </div>
-          <button
+          <PdfOnly><button
             onClick={handleDownloadNotes}
             className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${isLightMode ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/10" : "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-450/5"}`}
           >
             <Printer className="w-3.5 h-3.5" />
             Download Notes (PDF)
-          </button>
+          </button></PdfOnly>
         </div>
 
         <nav className="flex-1 p-2 space-y-1">
@@ -273,13 +274,13 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
                 <h4 className="font-extrabold text-emerald-400 tracking-tight">Class X: chemical reactions notes</h4>
               </div>
             </div>
-            <button
+            <PdfOnly><button
               onClick={handleDownloadNotes}
               className="shrink-0 flex items-center gap-1.5 py-2 px-4 bg-emerald-500 hover:bg-emerald-400 text-[#0d1424] font-black uppercase tracking-wider text-[11px] rounded-xl transition cursor-pointer hover:shadow-lg hover:shadow-emerald-400/5 active:scale-95"
             >
               <Printer className="w-3.5 h-3.5" />
               Download Chemistry Notes (PDF)
-            </button>
+            </button></PdfOnly>
           </div>
 
           {activeTopic === "what-is-a-reaction" && (

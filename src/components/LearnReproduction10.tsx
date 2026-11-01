@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PdfOnly } from "./PdfOnly";
 import { Award, Download, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConical, Sprout, Heart, Baby, Shield, Dna } from "lucide-react";
 
 // Reproduction notes built from the chapter and
@@ -6,7 +7,7 @@ import { Award, Download, HelpCircle, Leaf, ChevronLeft, ChevronRight, FlaskConi
 // chapter and is deliberately excluded).
 
 const IMG_BASE = "/diagrams/reproduction10/";
-const NOTES_PDF_URL = "/Class-10-Reproduction-Notes.pdf";
+const NOTES_PDF_URL = "/download/downloads/Class-10-Reproduction-Notes.pdf";
 const NOTES_PDF_NAME = "Class-10-Reproduction-Notes.pdf";
 interface Pic { file: string; alt: string; caption: string; }
 
@@ -752,10 +753,10 @@ export function LearnReproduction10({ isLightMode = false, onCompleteNotes, onGo
           <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`flex-1 min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
             {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
           </select>
-          <a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`shrink-0 flex items-center gap-1 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg ${isLightMode ? "bg-green-600 text-white" : "bg-green-500 text-slate-950"}`}>
+          <PdfOnly><a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`shrink-0 flex items-center gap-1 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg ${isLightMode ? "bg-green-600 text-white" : "bg-green-500 text-slate-950"}`}>
             <Download className="w-3 h-3" />
             PDF
-          </a>
+          </a></PdfOnly>
         </div>
       </div>
 
@@ -763,10 +764,10 @@ export function LearnReproduction10({ isLightMode = false, onCompleteNotes, onGo
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Sprout className="w-5 h-5 text-green-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>How do Organisms Reproduce?</h3></div>
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Asexual and sexual reproduction, plants and humans, reproductive health.</p>
-          <a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${isLightMode ? "bg-green-600 hover:bg-green-700 text-white" : "bg-green-500 hover:bg-green-400 text-slate-950"}`}>
+          <PdfOnly><a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${isLightMode ? "bg-green-600 hover:bg-green-700 text-white" : "bg-green-500 hover:bg-green-400 text-slate-950"}`}>
             <Download className="w-3.5 h-3.5" />
             Download Notes
-          </a>
+          </a></PdfOnly>
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t) => (
