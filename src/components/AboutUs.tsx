@@ -12,6 +12,7 @@ import {
   Rocket,
   Quote,
   ArrowRight,
+  GraduationCap,
 } from 'lucide-react';
 import { Reveal } from './Reveal';
 
@@ -46,7 +47,7 @@ const HIGHLIGHTS = [
   { icon: TrendingUp, tone: 'text-rose-400', title: 'Subject Mastery', text: <>A large majority of our students consistently score <b>90+ marks out of 100</b> in Mathematics and Science.</> },
 ];
 
-function Leader({ initials, name, role, accent, paragraphs, footer }: { initials: string; name: string; role: string; accent: string; paragraphs: string[]; footer: string }) {
+function Leader({ initials, name, role, accent, paragraphs, footer, qualification }: { initials: string; name: string; role: string; accent: string; paragraphs: string[]; footer: string; qualification?: string }) {
   return (
     <div className="cl-card cl-card-hover p-6 sm:p-7 flex flex-col h-full relative overflow-hidden">
       <div className={`absolute -top-16 -right-16 w-44 h-44 rounded-full bg-gradient-to-br ${accent} opacity-15 blur-2xl pointer-events-none`} />
@@ -62,6 +63,15 @@ function Leader({ initials, name, role, accent, paragraphs, footer }: { initials
           <span className="cl-eyebrow mt-1.5" style={{ fontSize: '.6rem' }}>{role}</span>
         </div>
       </div>
+      {qualification && (
+        <div className="mt-4 relative flex items-center gap-3 self-start rounded-xl px-3.5 py-2.5" style={{ background: 'var(--cl-surface-flat)', border: '1px solid var(--cl-border)' }}>
+          <GraduationCap className="w-5 h-5 text-cyan-400 shrink-0" />
+          <div className="leading-tight">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] cl-muted">Qualification</p>
+            <p className="mt-0.5 text-sm font-black cl-heading">{qualification}</p>
+          </div>
+        </div>
+      )}
       <div className="mt-5 space-y-3 flex-1 relative">
         {paragraphs.map((p, i) => (
           <p key={i} className="text-sm leading-relaxed font-medium cl-page">{p}</p>
@@ -135,25 +145,17 @@ export function AboutUs({ isLightMode = false }: { isLightMode?: boolean }) {
           <div className="text-center space-y-2">
             <span className="cl-eyebrow">The leadership</span>
             <h2 className="text-3xl sm:text-4xl font-black tracking-tight cl-heading">Our story and <span className="cl-gradient-text">academic vision</span></h2>
-            <p className="text-sm font-medium cl-muted max-w-xl mx-auto">Meet the people bridging the gap between rote learning and real understanding.</p>
+            <p className="text-sm font-medium cl-muted max-w-xl mx-auto">Meet the person bridging the gap between rote learning and real understanding.</p>
           </div>
         </Reveal>
-        <div className="grid md:grid-cols-2 gap-6 items-stretch">
+        <div className="max-w-2xl mx-auto">
           <Reveal className="h-full">
             <Leader
-              initials="NS" name="Mrs. Nisha Sharma" role="Founder" accent="from-teal-400 to-cyan-500" footer="Founder"
+              initials="NS" name="Mrs. Nisha Sharma" role="Owner, Developer and Founder" accent="from-teal-400 to-cyan-500" footer="Owner, Developer and Founder"
+              qualification="B.Tech, Computer Science"
               paragraphs={[
                 "The idea behind Conceptual Learning is Mrs. Nisha Sharma's. She believes that a student learns best when every topic is understood from the basics, and not just learnt by heart. The whole platform is built on this thought.",
                 'Her way is simple. Explain the reason first, let the student try the questions, and correct the mistakes together. No doubt is too small to ask, and every student can be good at Maths and Science.',
-              ]}
-            />
-          </Reveal>
-          <Reveal delay={100} className="h-full">
-            <Leader
-              initials="RS" name="Mr. Rohit Sharma" role="Core Academic Lead" accent="from-amber-400 to-orange-500" footer="Academic Mentor"
-              paragraphs={[
-                'At the heart of this academic platform is Mr. Rohit Sharma. He is passionate about his work and has conquered many competitive examinations. As a proficient teacher who excels at explaining concepts to students, he transforms complex, challenging topics into clear, highly intuitive lessons.',
-                'His clear and well-planned way of teaching helps students do well in school examinations and also builds a strong base for engineering and medical entrance tests.',
               ]}
             />
           </Reveal>
