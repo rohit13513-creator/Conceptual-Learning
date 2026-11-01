@@ -369,7 +369,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
     const poll = async () => {
       tries++;
       try {
-        if (tries === 14) {
+        if (tries === 40) {
           fetch('/api/revision/check-mine', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` }, body: JSON.stringify({ submissionId }) }).catch(() => {});
         }
         const d = await fetch('/api/revision/mine', { headers: { Authorization: `Bearer ${user.token}` } }).then((r) => r.json());
@@ -635,9 +635,10 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
         }, 350);
         try {
           // Grading a multi-page answer sheet routinely takes longer than the 30s default, and every
-          // abort-and-retry started the whole grading again on the server -- so wait out the
-          // server's own limit (120s) and retry at most once.
-          const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId }, timeoutMs: 115000, maxRetries: 1 });
+          // abort-and-retry started the whole grading again on the server. Grading can now run up to
+          // 300s on the server, so this request is not retried at all: if it gives up first, the
+          // polling effect above picks the finished result up without starting a second grading.
+          const checkResult = await fetchJsonWithRetry({ url: '/api/revision/check-mine', token: user.token, body: { submissionId }, timeoutMs: 120000, maxRetries: 0 });
           if (checkingIntervalRef.current !== null) { window.clearInterval(checkingIntervalRef.current); checkingIntervalRef.current = null; }
           if (checkResult.ok && checkResult.data.submission) {
             // Let the student actually see the bar reach 100 before the summary replaces it --
@@ -1448,7 +1449,7 @@ export function Revision({ isLightMode = false, user }: RevisionProps) {
 
             {currentPaper && currentSubmission?.status === 'pending' && !checkingNow && (
               <div className={`${cardClass(isLightMode)} text-center`}>
-                <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Your submission is being checked -- your score will appear here shortly.</p>
+                <p className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>Your submission is being checked -- this usually takes one to three minutes. Your score will appear here by itself; you can also leave and come back later.</p>
               </div>
             )}
           </>
