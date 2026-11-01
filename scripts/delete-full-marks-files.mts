@@ -32,13 +32,22 @@ async function allRows(table: string, columns: string) {
 
 const homework = await allRows("homework_submissions", "id, student_email, file_path, ai_score, submitted_at, status");
 const revision = await allRows("revision_submissions", "id, student_email, file_path, ai_score, submitted_at, status");
+// Question papers and worksheets are never deleted: homework worksheets are listed here and kept, and
+// revision question papers are stored in the database, not as files.
+const assignments = await allRows("homework_assignments", "file_path");
+const questionPaperFiles = new Set(assignments.map((a) => a.file_path).filter(Boolean));
 
 const qualifies = (r: any, full: number) =>
   r.status === "checked" && Number(r.ai_score) === full && new Date(r.submitted_at).getTime() <= new Date(CUTOFF_UTC).getTime();
 
 const all = [...homework.map((r) => ({ ...r, kind: "homework", full: HOMEWORK_FULL })), ...revision.map((r) => ({ ...r, kind: "revision", full: REVISION_FULL }))];
 const stillNeeded = new Set(all.filter((r) => !qualifies(r, r.full)).map((r) => r.file_path));
-const targets = all.filter((r) => qualifies(r, r.full) && r.file_path && !stillNeeded.has(r.file_path));
+// Only a student's uploaded answer sheet qualifies: it must sit in a student folder named after an
+// email address ("<email>/..." -- an older email folder is fine for a student whose email was later
+// changed) and must not be a worksheet/question paper file.
+const targets = all.filter((r) =>
+  qualifies(r, r.full) && r.file_path && !stillNeeded.has(r.file_path)
+  && !questionPaperFiles.has(r.file_path) && String(r.file_path).split("/")[0].includes("@"));
 const paths = [...new Set(targets.map((r) => r.file_path as string))];
 
 // File sizes, looked up folder by folder.
