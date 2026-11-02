@@ -11,6 +11,10 @@ export interface MarksEntry {
   examDate: string | null;
   studentClass: string | null;
   createdAt?: string;
+  // whether the mark has been checked against the student's result page / test copy
+  verificationStatus?: 'unverified' | 'verified' | 'mismatch' | 'review';
+  verificationNote?: string | null;
+  hasProof?: boolean;
 }
 
 export const EXAM_PRESETS = ['PT1', 'PT2', 'Half Yearly', 'PT3', 'PT4', 'Final Exam'];

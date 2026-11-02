@@ -3,6 +3,7 @@ import { User, Lock, GraduationCap, Eye, EyeOff, Pencil, Camera, Check } from 'l
 import { ProfileCardBody, PublicProfile, classLabel } from './ProfileCardBody';
 import { SchoolMarksPanel, MarksPayload } from './SchoolMarksPanel';
 import type { MarksEntry } from './schoolMarksUtil';
+import type { VerifyOutcome } from './VerifyMarksModal';
 
 // The student's own profile: a social-style page (photo, class, city, school, interests ...), the privacy choices
 // that decide what other students see, and the School Marks tracker. Class is taken automatically from the account.
@@ -142,11 +143,12 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   const [entries, setEntries] = useState<MarksEntry[]>([]);
   const [marksLoaded, setMarksLoaded] = useState(false);
   const [marksUnavailable, setMarksUnavailable] = useState(false);
+  const [verificationReady, setVerificationReady] = useState(false);
   const loadMarks = useCallback(async () => {
     try {
       const r = await fetch('/api/school-marks', { headers: { Authorization: `Bearer ${user.token}` } });
       const d = await r.json();
-      setEntries(d.entries || []); setMarksUnavailable(!!d.unavailable);
+      setEntries(d.entries || []); setMarksUnavailable(!!d.unavailable); setVerificationReady(!!d.verificationReady);
     } catch { /* leave as is */ }
     setMarksLoaded(true);
   }, [user.token]);
@@ -158,6 +160,22 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     if (!r.ok) return d.error || 'Could not save these marks.';
     await loadMarks();
     return null;
+  };
+  const verifyMarks = async (exam: { academicYear: string; examName: string }, files: File[]): Promise<VerifyOutcome> => {
+    const fd = new FormData();
+    fd.append('academicYear', exam.academicYear);
+    fd.append('examName', exam.examName);
+    files.forEach((f) => fd.append('files', f));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 170_000);
+    try {
+      const r = await fetch('/api/school-marks/verify', { method: 'POST', headers: { Authorization: `Bearer ${user.token}` }, body: fd, signal: controller.signal });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { error: d.error || 'Could not check the document. Please try again.' };
+      await loadMarks();
+      return d as VerifyOutcome;
+    } catch { return { error: 'The check took too long or the connection dropped. Please try again.' }; }
+    finally { window.clearTimeout(timer); }
   };
   const deleteMarks = async (id: string): Promise<string | null> => {
     const r = await fetch('/api/school-marks/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` }, body: JSON.stringify({ id }) });
@@ -280,7 +298,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
         ) : !marksLoaded ? (
           <p className={`text-sm font-semibold text-center py-10 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Loading your marks...</p>
         ) : (
-          <SchoolMarksPanel entries={entries} isLightMode={light} editable onSave={saveMarks} onDelete={deleteMarks} />
+          <SchoolMarksPanel entries={entries} isLightMode={light} editable onSave={saveMarks} onDelete={deleteMarks} verificationReady={verificationReady} onVerify={verifyMarks} />
         )
       )}
     </div>

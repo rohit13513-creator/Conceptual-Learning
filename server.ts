@@ -12,6 +12,7 @@ import { PDFDocument } from "pdf-lib";
 import AdmZip from "adm-zip";
 import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url } from "./sessionToken.js";
 import { makeAccountGate } from "./accountGate.js";
+import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "./marksVerification.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -263,6 +264,9 @@ const chunkUpload = multer({
 });
 
 const AVATAR_BUCKET = "avatars";
+// Result pages / test copies uploaded to check school marks: up to 3 files, each under 4 MB (the website shrinks photos first).
+const proofUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024, files: 3 } });
+
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, matches the Storage bucket limit
@@ -1885,11 +1889,17 @@ function effectiveVisibility(raw: any): Record<string, boolean> {
 
 // The new profile columns and the school-marks table are created by a SQL script that is run once in Supabase.
 // Until then these report "not ready" and the related features stay quietly off instead of failing.
-const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false } };
+const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false }, verify: { at: 0, ok: false } };
 async function profileColumnsReady(): Promise<boolean> {
   if (Date.now() - schemaState.profile.at < 30_000) return schemaState.profile.ok;
   const { error } = await supabase.from("users").select("city, school, ambition, profile_visibility").limit(1);
   schemaState.profile = { at: Date.now(), ok: !error };
+  return !error;
+}
+async function marksVerificationReady(): Promise<boolean> {
+  if (Date.now() - schemaState.verify.at < 30_000) return schemaState.verify.ok;
+  const { error } = await supabase.from("school_marks").select("verification_status, proof_paths").limit(1);
+  schemaState.verify = { at: Date.now(), ok: !error };
   return !error;
 }
 async function marksTableReady(): Promise<boolean> {
@@ -8676,7 +8686,7 @@ function buildApp(): express.Express {
       if (!isNaN(d.getTime())) profile.birthday = d.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
     }
     if (show("schoolMarks") && (await marksTableReady())) {
-      const { data: marks } = await supabase.from("school_marks").select("academic_year,exam_name,subject,marks_obtained,max_marks,exam_date,created_at").eq("student_email", target);
+      const { data: marks } = await supabase.from("school_marks").select("*").eq("student_email", target);
       profile.schoolProgress = latestPerSubject((marks || []).map(mapMarksRow));
     }
     if (isSelf || viewerIsTeacher) profile.visibility = vis;
@@ -8698,6 +8708,10 @@ function buildApp(): express.Express {
     examDate: m.exam_date || null,
     studentClass: m.student_class || null,
     createdAt: m.created_at,
+    verificationStatus: (m.verification_status as string | undefined) ?? undefined,
+    verificationNote: (m.verification_note as string | null | undefined) ?? null,
+    verifiedAt: (m.verified_at as string | null | undefined) ?? null,
+    hasProof: Array.isArray(m.proof_paths) && m.proof_paths.length > 0,
   });
   // chronological order: academic year, then the usual exam order (PT1, PT2, Half Yearly...), then date entered
   const compareMarks = (a: any, b: any) =>
@@ -8707,7 +8721,7 @@ function buildApp(): express.Express {
   function latestPerSubject(entries: any[]) {
     const bySubject = new Map<string, any>();
     for (const e of entries.slice().sort(compareMarks)) bySubject.set(e.subject, e);
-    return [...bySubject.values()].map((e) => ({ subject: e.subject, examName: e.examName, academicYear: e.academicYear, percentage: e.percentage }));
+    return [...bySubject.values()].map((e) => ({ subject: e.subject, examName: e.examName, academicYear: e.academicYear, percentage: e.percentage, verified: e.verificationStatus === "verified" }));
   }
 
   app.get("/api/school-marks", async (req, res) => {
@@ -8716,7 +8730,7 @@ function buildApp(): express.Express {
     if (!(await marksTableReady())) return res.json({ entries: [], unavailable: true });
     const { data, error } = await supabase.from("school_marks").select("*").eq("student_email", auth.email);
     if (error) return res.status(500).json({ error: "Could not load your marks. Please try again." });
-    return res.json({ entries: (data || []).map(mapMarksRow).sort(compareMarks), presets: EXAM_PRESETS });
+    return res.json({ entries: (data || []).map(mapMarksRow).sort(compareMarks), presets: EXAM_PRESETS, verificationReady: await marksVerificationReady() });
   });
 
   app.post("/api/school-marks", async (req, res) => {
@@ -8750,15 +8764,18 @@ function buildApp(): express.Express {
     }
 
     const { data: me } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
-    const { data: existing } = await supabase.from("school_marks").select("id").eq("student_email", auth.email).eq("academic_year", academicYear).eq("exam_name", examName).eq("subject", subject).maybeSingle();
+    const { data: existing } = await supabase.from("school_marks").select("id, marks_obtained, max_marks").eq("student_email", auth.email).eq("academic_year", academicYear).eq("exam_name", examName).eq("subject", subject).maybeSingle();
     if (!existing) {
       const { count } = await supabase.from("school_marks").select("id", { count: "exact", head: true }).eq("student_email", auth.email);
       if ((count || 0) >= MAX_MARKS_ROWS_PER_STUDENT) return res.status(400).json({ error: "You have reached the limit of saved marks." });
     }
+    // If the marks were changed (or are new), any earlier "verified" tick no longer applies to them.
+    const marksChanged = !existing || Number(existing.marks_obtained) !== round2(obtained) || Number(existing.max_marks) !== round2(max);
+    const resetVerification = marksChanged && (await marksVerificationReady()) ? { verification_status: "unverified", verification_note: null, verified_at: null, proof_paths: null } : {};
     const { data: saved, error } = await supabase.from("school_marks").upsert({
       student_email: auth.email, academic_year: academicYear, exam_name: examName, subject,
       marks_obtained: round2(obtained), max_marks: round2(max), exam_date: examDate,
-      student_class: me?.student_class || null, updated_at: new Date().toISOString(),
+      student_class: me?.student_class || null, updated_at: new Date().toISOString(), ...resetVerification,
     }, { onConflict: "student_email,academic_year,exam_name,subject" }).select().single();
     if (error || !saved) { console.error("school marks save:", error?.message); return res.status(500).json({ error: "Could not save these marks. Please try again." }); }
     return res.json({ success: true, entry: mapMarksRow(saved), updated: !!existing });
@@ -8773,6 +8790,103 @@ function buildApp(): express.Express {
     if (error) return res.status(500).json({ error: "Could not delete this entry." });
     return res.json({ success: true });
   });
+
+  // ── CHECKING SCHOOL MARKS AGAINST A RESULT PAGE OR TEST COPY ──
+  // The student uploads photos (or one PDF) of their school result page or the front page of a test copy. The model only
+  // READS what is printed or written on it; every comparison and every decision is made here in code, so a model slip
+  // cannot make a wrong mark look verified. Anything unusual (a different school or student name, signs of editing)
+  // is not rejected outright but sent to the teacher to look at ("review"), and the teacher can open the uploaded proof.
+  app.post("/api/school-marks/verify", (req, res, next) => {
+    proofUpload.array("files", 3)(req, res, (err: any) => {
+      if (err) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Each file must be smaller than 4 MB. Please take a clearer, smaller photo." : "Could not read the uploaded files. Please try again." });
+      next();
+    });
+  }, async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    // every check costs money, so a student gets a limited number per hour
+    if (rateLimited(req, res, "marks-verify", 8, 60 * 60_000, auth.email, false)) return;
+    if (!(await marksTableReady()) || !(await marksVerificationReady())) return res.status(503).json({ error: "Marks checking is being switched on. Please try again in a little while." });
+
+    const academicYear = String(req.body.academicYear || "").trim();
+    const examName = String(req.body.examName || "").trim();
+    const files = ((req as any).files || []) as { buffer: Buffer; mimetype: string; originalname: string }[];
+    if (!academicYear || !examName) return res.status(400).json({ error: "Which exam is this for?" });
+    if (files.length === 0) return res.status(400).json({ error: "Please add a photo of your result page or test copy." });
+
+    const { data: rows } = await supabase.from("school_marks").select("*").eq("student_email", auth.email).eq("academic_year", academicYear).eq("exam_name", examName);
+    if (!rows || rows.length === 0) return res.status(404).json({ error: "Add your marks for this exam first, then check them." });
+
+    // Prepare the files: photos are re-encoded as clean JPEGs (this also removes odd metadata); a PDF is accepted as it is.
+    const pdfs = files.filter((f) => f.mimetype === "application/pdf");
+    if (pdfs.length > 0 && files.length > 1) return res.status(400).json({ error: "Please upload either one PDF or up to 3 photos, not both." });
+    const prepared: { buf: Buffer; ext: "jpg" | "pdf" }[] = [];
+    for (const f of files) {
+      if (f.mimetype === "application/pdf") {
+        if (f.buffer.subarray(0, 5).toString() !== "%PDF-") return res.status(400).json({ error: "That PDF could not be opened." });
+        prepared.push({ buf: f.buffer, ext: "pdf" });
+      } else {
+        try {
+          const jpg = await sharp(f.buffer).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+          prepared.push({ buf: jpg, ext: "jpg" });
+        } catch { return res.status(400).json({ error: "One of the files is not a usable photo. Please take the photo again." }); }
+      }
+    }
+
+    const ready = await profileColumnsReady();
+    const { data: me } = await supabase.from("users").select(ready ? "name,school" : "name").eq("email", auth.email).maybeSingle();
+    const profileName = String((me as any)?.name || "");
+    const profileSchool = String((me as any)?.school || "");
+
+    const claimed = rows.map((r: any) => ({ entryId: r.id, subject: r.subject, marksObtained: Number(r.marks_obtained), maxMarks: Number(r.max_marks) }));
+    const claimText = buildClaimText(examName, academicYear, claimed);
+    const content: any[] = prepared.map((p) => p.ext === "pdf"
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.buf.toString("base64") } }
+      : { type: "image", source: { type: "base64", media_type: "image/jpeg", data: p.buf.toString("base64") } });
+    content.push({ type: "text", text: claimText });
+
+    let read: any;
+    try { read = await callClaudeTool({ system: VERIFY_SYSTEM, content, tool: VERIFY_TOOL, maxTokens: 3000 }); }
+    catch (err: any) { console.error("marks verification read failed:", err?.message); return res.status(502).json({ error: "We could not check the document just now. Please try again in a few minutes." }); }
+
+    const decided = decideVerification({ claimed, read, profileName, profileSchool });
+    if ("refusal" in decided) return res.status(422).json({ error: decided.refusal });
+    const results = decided.decisions;
+
+    // keep the uploaded proof (private) so the teacher can look at it
+    const stamp = Date.now();
+    const proofPaths: string[] = [];
+    for (let i = 0; i < prepared.length; i++) {
+      const p = `marks-proof/${auth.email}/${stamp}-${i + 1}.${prepared[i].ext}`;
+      const { error: upErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(p, prepared[i].buf, { contentType: prepared[i].ext === "pdf" ? "application/pdf" : "image/jpeg" });
+      if (!upErr) proofPaths.push(p);
+    }
+
+    const now = new Date().toISOString();
+    for (const r of results) {
+      await supabase.from("school_marks").update({
+        verification_status: r.status, verification_note: r.note, verified_at: r.status === "verified" ? now : null,
+        proof_paths: proofPaths.length ? proofPaths : null, updated_at: now,
+      }).eq("id", r.id).eq("student_email", auth.email);
+    }
+    return res.json({ success: true, results, schoolOnDocument: String(read.schoolNameOnDocument).slice(0, 100), profileSchoolMissing: !profileSchool });
+  });
+
+  // Teacher: open the page a student uploaded as proof (links last 5 minutes).
+  app.get("/api/admin/school-marks/proof", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const id = String(req.query.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: "Which entry?" });
+    const { data } = await supabase.from("school_marks").select("proof_paths").eq("id", id).maybeSingle();
+    const paths: string[] = (data as any)?.proof_paths || [];
+    const urls: string[] = [];
+    for (const p of paths) {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(p, 300);
+      if (signed?.signedUrl) urls.push(signed.signedUrl);
+    }
+    return res.json({ urls });
+  });
+
 
   // Teacher: how every student is doing in their own school, and one student's full history.
   app.get("/api/admin/school-marks/overview", async (req, res) => {
@@ -8795,6 +8909,8 @@ function buildApp(): express.Express {
       return {
         email: st.email, name: st.name, studentClass: st.student_class, photoUrl: st.photo_url || null,
         entryCount: entries.length, examCount: exams.length,
+        verifiedCount: entries.filter((e: any) => e.verificationStatus === "verified").length,
+        needsReviewCount: entries.filter((e: any) => e.verificationStatus === "review" || e.verificationStatus === "mismatch").length,
         latestExam: latest?.label || null, latestPercentage: latest?.percentage ?? null,
         change: latest && previous && latest.percentage != null && previous.percentage != null ? Math.round((latest.percentage - previous.percentage) * 10) / 10 : null,
       };

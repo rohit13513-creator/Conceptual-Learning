@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Trash2, TrendingUp, TrendingDown, Minus, Plus, X } from 'lucide-react';
+import { Pencil, Trash2, TrendingUp, TrendingDown, Minus, Plus, X, ShieldCheck, AlertTriangle, FileText } from 'lucide-react';
+import { VerifyMarksModal, VerifyOutcome } from './VerifyMarksModal';
 import {
   MarksEntry, EXAM_PRESETS, SUBJECT_CHOICES, SERIES_COLORS, academicYearOptions, currentAcademicYear,
   groupExams, summariseSubjects, shortExamName,
@@ -17,6 +18,9 @@ interface Props {
   editable: boolean;
   onSave?: (payload: MarksPayload) => Promise<string | null>; // returns an error message, or null when saved
   onDelete?: (id: string) => Promise<string | null>;
+  verificationReady?: boolean; // the checking feature is switched on
+  onVerify?: (exam: { academicYear: string; examName: string }, files: File[]) => Promise<VerifyOutcome>;
+  onViewProof?: (id: string) => Promise<string[]>; // teacher: links to the uploaded page
 }
 
 const card = (light: boolean) => `border rounded-2xl p-4 sm:p-5 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`;
@@ -89,7 +93,7 @@ function ProgressChart({ entries, isLightMode }: { entries: MarksEntry[]; isLigh
   );
 }
 
-export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDelete }: Props) {
+export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDelete, verificationReady, onVerify, onViewProof }: Props) {
   const groups = useMemo(() => groupExams(entries), [entries]);
   const summary = useMemo(() => summariseSubjects(entries), [entries]);
 
@@ -106,6 +110,8 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [toDelete, setToDelete] = useState<MarksEntry | null>(null);
+  const [verifying, setVerifying] = useState<{ academicYear: string; examName: string } | null>(null);
+  const [proofLinks, setProofLinks] = useState<Record<string, string[]>>({});
 
   const examName = examChoice === 'Other' ? customExam.trim() : examChoice;
   const subject = subjectChoice === 'Other' ? customSubject.trim() : subjectChoice;
@@ -247,14 +253,27 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
               <div key={g.key} className={`${card(isLightMode)} !p-4`}>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{g.examName} <span className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{g.academicYear}</span></p>
-                  {g.overall !== null && g.entries.length > 1 && <span className="text-xs font-black text-cyan-400">Overall {g.overall}%</span>}
+                  <div className="flex items-center gap-2">
+                    {g.overall !== null && g.entries.length > 1 && <span className="text-xs font-black text-cyan-400">Overall {g.overall}%</span>}
+                    {editable && verificationReady && onVerify && (
+                      g.entries.every((e) => e.verificationStatus === 'verified')
+                        ? <span className="flex items-center gap-1 text-[11px] font-black text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> All verified</span>
+                        : <button onClick={() => setVerifying({ academicYear: g.academicYear, examName: g.examName })} className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wide cursor-pointer bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"><ShieldCheck className="w-3.5 h-3.5" /> Verify marks</button>
+                    )}
+                  </div>
                 </div>
                 <div className={`divide-y ${isLightMode ? 'divide-slate-200' : 'divide-slate-800'}`}>
                   {g.entries.map((e) => (
-                    <div key={e.id} className="flex items-center gap-3 py-1.5">
+                    <div key={e.id} className="py-1.5">
+                    <div className="flex items-center gap-3">
                       <span className={`flex-1 text-sm font-bold ${isLightMode ? 'text-slate-800' : 'text-slate-200'}`}>{e.subject}</span>
                       <span className={`text-sm font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{e.marksObtained} / {e.maxMarks}</span>
                       <span className={`w-14 text-right text-sm font-black ${e.percentage >= 75 ? 'text-emerald-400' : e.percentage >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>{e.percentage}%</span>
+                      {e.verificationStatus === 'verified' && <span title="Checked against the school's own page" className="text-emerald-400"><ShieldCheck className="w-4 h-4" /></span>}
+                      {(e.verificationStatus === 'mismatch' || e.verificationStatus === 'review') && <span title={e.verificationNote || ''} className={e.verificationStatus === 'review' ? 'text-amber-400' : 'text-rose-400'}><AlertTriangle className="w-4 h-4" /></span>}
+                      {!editable && e.hasProof && onViewProof && (
+                        <button title="View the uploaded page" onClick={async () => { const links = await onViewProof(e.id); setProofLinks((p) => ({ ...p, [e.id]: links })); }} className="p-1 rounded text-slate-500 hover:text-cyan-400 cursor-pointer"><FileText className="w-3.5 h-3.5" /></button>
+                      )}
                       {editable && (
                         <>
                           <button onClick={() => startEdit(e)} title="Edit" className="p-1 rounded text-slate-500 hover:text-cyan-400 cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
@@ -262,12 +281,23 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
                         </>
                       )}
                     </div>
+                    {(e.verificationStatus === 'mismatch' || e.verificationStatus === 'review') && e.verificationNote && (
+                      <p className={`mt-0.5 text-[11px] font-semibold ${e.verificationStatus === 'review' ? 'text-amber-400' : 'text-rose-400'}`}>{e.verificationNote}</p>
+                    )}
+                    {proofLinks[e.id] && (
+                      <p className="mt-0.5 text-[11px] font-semibold text-cyan-400">{proofLinks[e.id].length === 0 ? 'No page found.' : proofLinks[e.id].map((u, i) => <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="underline mr-3">Page {i + 1}</a>)}</p>
+                    )}
+                    </div>
                   ))}
                 </div>
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {verifying && onVerify && (
+        <VerifyMarksModal examLabel={`${verifying.examName} ${verifying.academicYear}`} isLightMode={isLightMode} onClose={() => setVerifying(null)} onSubmit={(files) => onVerify(verifying, files)} />
       )}
 
       {toDelete && (

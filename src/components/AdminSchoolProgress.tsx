@@ -5,7 +5,7 @@ import type { MarksEntry } from './schoolMarksUtil';
 
 // Teacher's view of how every student is doing in their own school: latest result, change since the exam before,
 // and each student's full history (read-only).
-interface Row { email: string; name: string; studentClass: string | null; entryCount: number; examCount: number; latestExam: string | null; latestPercentage: number | null; change: number | null }
+interface Row { email: string; name: string; studentClass: string | null; entryCount: number; examCount: number; latestExam: string | null; latestPercentage: number | null; change: number | null; verifiedCount?: number; needsReviewCount?: number }
 
 export default function AdminSchoolProgress({ token, isLightMode }: { token: string; isLightMode: boolean }) {
   const light = isLightMode;
@@ -30,6 +30,14 @@ export default function AdminSchoolProgress({ token, isLightMode }: { token: str
     setLoading(false);
   }, [token]);
   useEffect(() => { load(); }, [load]);
+
+  const viewProof = async (id: string): Promise<string[]> => {
+    try {
+      const r = await fetch(`/api/admin/school-marks/proof?id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      return d.urls || [];
+    } catch { return []; }
+  };
 
   const open = async (email: string) => {
     if (openEmail === email) { setOpenEmail(null); return; }
@@ -70,6 +78,8 @@ export default function AdminSchoolProgress({ token, isLightMode }: { token: str
                   <span className={`flex-1 min-w-0 text-sm font-bold truncate ${light ? 'text-slate-800' : 'text-slate-100'}`}>{r.name} <span className="text-[11px] font-semibold opacity-60">Class {r.studentClass || '--'}</span></span>
                   {r.entryCount === 0 ? <span className="text-[11px] font-semibold text-slate-500">no marks yet</span> : (
                     <>
+                      {(r.needsReviewCount || 0) > 0 && <span className="text-[10px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">{r.needsReviewCount} to review</span>}
+                      {(r.verifiedCount || 0) > 0 && <span title="Marks checked against the school's own page" className="text-[10px] font-black text-emerald-400">{r.verifiedCount}/{r.entryCount} verified</span>}
                       <span className="hidden sm:inline text-[11px] font-semibold text-slate-500 truncate max-w-[150px]">{r.latestExam}</span>
                       <span className={`text-sm font-black ${(r.latestPercentage ?? 0) >= 75 ? 'text-emerald-400' : (r.latestPercentage ?? 0) >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>{r.latestPercentage ?? '--'}%</span>
                       {r.change !== null && (r.change > 0 ? <span className="text-[11px] font-black text-emerald-400 inline-flex items-center"><TrendingUp className="w-3 h-3" />+{r.change}</span> : r.change < 0 ? <span className="text-[11px] font-black text-rose-400 inline-flex items-center"><TrendingDown className="w-3 h-3" />{r.change}</span> : <span className="text-[11px] font-black text-slate-400">same</span>)}
@@ -79,7 +89,7 @@ export default function AdminSchoolProgress({ token, isLightMode }: { token: str
                 </button>
                 {openEmail === r.email && (
                   <div className={`p-3 ${light ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
-                    {entriesLoading ? <p className="text-xs font-semibold text-slate-500">Loading...</p> : <SchoolMarksPanel entries={entries} isLightMode={light} editable={false} />}
+                    {entriesLoading ? <p className="text-xs font-semibold text-slate-500">Loading...</p> : <SchoolMarksPanel entries={entries} isLightMode={light} editable={false} onViewProof={viewProof} />}
                   </div>
                 )}
               </div>

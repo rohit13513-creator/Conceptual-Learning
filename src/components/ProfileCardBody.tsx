@@ -17,7 +17,7 @@ export interface PublicProfile {
   birthday?: string;
   isTeacher?: boolean;
   view?: 'self' | 'teacher' | 'student';
-  schoolProgress?: { subject: string; examName: string; academicYear: string; percentage: number }[];
+  schoolProgress?: { subject: string; examName: string; academicYear: string; percentage: number; verified?: boolean }[];
 }
 
 export const classLabel = (c?: string | null) => (!c ? '' : c === 'Canadian' ? 'Canadian Board' : `Class ${c}`);
@@ -80,7 +80,7 @@ export function ProfileCardBody({ profile, isLightMode }: { profile: PublicProfi
               {profile.schoolProgress.map((p) => (
                 <div key={p.subject}>
                   <div className="flex justify-between text-xs font-bold">
-                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-200'}>{p.subject} <span className="font-semibold opacity-60">({p.examName})</span></span>
+                    <span className={isLightMode ? 'text-slate-700' : 'text-slate-200'}>{p.subject} <span className="font-semibold opacity-60">({p.examName})</span>{p.verified && <span title="Checked against the school's own page" className="ml-1.5 text-[10px] font-black text-emerald-400">✓ verified</span>}</span>
                     <span className="text-cyan-400">{p.percentage}%</span>
                   </div>
                   <div className={`h-1.5 rounded-full mt-1 ${isLightMode ? 'bg-slate-200' : 'bg-slate-800'}`}><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400" style={{ width: `${Math.min(100, p.percentage)}%` }} /></div>
