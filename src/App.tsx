@@ -2326,6 +2326,15 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     }
   };
 
+  // An update is written as a short first paragraph, then (after a blank line) the details. The lists show only the
+  // short part; tapping an update opens the details.
+  const [openUpdateId, setOpenUpdateId] = useState<string | null>(null);
+  const updateParts = (message: string) => {
+    const i = message.search(/\n\s*\n/);
+    return i < 0 ? { summary: message.trim(), details: '' } : { summary: message.slice(0, i).trim(), details: message.slice(i).trim() };
+  };
+  const isNewUpdate = (createdAt: string) => Date.now() - new Date(createdAt).getTime() < 7 * 24 * 60 * 60 * 1000;
+
   const visibleAnnouncements = useMemo(() => {
     return announcements.filter(a => isCanadianStudent ? a.targetClass === 'canadian' : (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack));
   }, [announcements, isClassExempt, studentTrack]);
@@ -5079,10 +5088,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   <p className="text-[11px] font-semibold text-slate-500 py-3">No updates posted yet.</p>
                 ) : (
                   visibleAnnouncements.slice(0, 3).map((a) => (
-                    <div key={a.id} className="py-2.5">
-                      <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
-                      <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
-                    </div>
+                    <button key={a.id} onClick={() => { setOpenUpdateId(a.id); changeView('latestNews'); }} className="py-2.5 w-full text-left cursor-pointer block">
+                      <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}{isNewUpdate(a.createdAt) && <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">New</span>}</p>
+                      <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{updateParts(a.message).summary}</p>
+                    </button>
                   ))
                 )}
               </div>
@@ -5204,8 +5213,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             <div className={`grid grid-cols-1 gap-5 ${isCanadianStudent ? '' : 'lg:grid-cols-2'}`}>
 
-              {/* Latest Updates box -- Canadian-board students only get homework on their home page */}
-              {!isCanadianStudent && (<div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
+              {/* Latest Updates box -- every student, Canadian-board students included (they only receive updates posted for them) */}
+              {(<div className={`border rounded-2xl p-5 shadow-lg flex flex-col ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
                 <h2 className={`text-sm font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                   <Megaphone className="w-4 h-4 text-amber-400" /> Latest Updates
                 </h2>
@@ -5216,10 +5225,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     <p className="text-[11px] font-semibold text-slate-500 py-3">No updates posted yet.</p>
                   ) : (
                     visibleAnnouncements.slice(0, 3).map((a) => (
-                      <div key={a.id} className="py-2.5">
-                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
-                        <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
-                      </div>
+                      <button key={a.id} onClick={() => { setOpenUpdateId(a.id); changeView('latestNews'); }} className="py-2.5 w-full text-left cursor-pointer block">
+                        <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}{isNewUpdate(a.createdAt) && <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">New</span>}</p>
+                        <p className={`text-[11px] mt-0.5 line-clamp-2 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{updateParts(a.message).summary}</p>
+                      </button>
                     ))
                   )}
                 </div>
@@ -8151,12 +8160,26 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 {visibleAnnouncements.map((a) => (
                   <div key={a.id} className={`border rounded-2xl p-5 shadow-lg ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
                     <div className="flex items-start justify-between gap-2">
-                      <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
+                      <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}{isNewUpdate(a.createdAt) && <span className="ml-2 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">New</span>}</p>
                       {a.targetClass !== 'All' && (
                         <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">{a.targetClass === 'canadian' ? 'Canadian' : 'Class ' + a.targetClass.replace('th', '')}</span>
                       )}
                     </div>
-                    <p className={`text-xs mt-2 whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{a.message}</p>
+                    {(() => {
+                      const parts = updateParts(a.message);
+                      const open = openUpdateId === a.id;
+                      return (
+                        <>
+                          <p className={`text-xs mt-2 leading-relaxed ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{parts.summary}</p>
+                          {parts.details && (
+                            <>
+                              {open && <p className={`text-xs mt-3 pt-3 border-t whitespace-pre-wrap leading-relaxed ${isLightMode ? 'text-slate-600 border-slate-200' : 'text-slate-400 border-slate-800'}`}>{parts.details}</p>}
+                              <button onClick={() => setOpenUpdateId(open ? null : a.id)} className={`mt-2 text-[11px] font-black cursor-pointer ${isLightMode ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-400 hover:text-cyan-300'}`}>{open ? 'Hide details ▲' : 'Read details ▼'}</button>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                     <p className={`text-[10px] font-mono mt-3 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{formatDateIST(a.createdAt)}</p>
                   </div>
                 ))}
@@ -9012,7 +9035,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     <Megaphone className="w-4 h-4 text-amber-400" /> Post an Update / Announcement
                   </h3>
                   <p className={`text-[11px] leading-relaxed font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Shows up on every student's home page and Latest Updates page. Use this for the CBSE syllabus, exam dates, or any other notice.
+                    Shows up on every student's home page and Latest Updates page. Use this for the CBSE syllabus, exam dates, or any other notice. Tip: write one short line first, then a blank line, then the details -- students see the short line and tap to read the rest.
                   </p>
 
                   {announceError && (
