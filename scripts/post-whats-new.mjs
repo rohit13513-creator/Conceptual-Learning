@@ -20,7 +20,7 @@ const PROFILE = {
 
 How to use it:
 • Open My Profile (your picture at the top) and press Edit profile. Your class is filled in automatically.
-• Open the Privacy tab to switch each item on or off: photo, class, city, school, about me, interests, favourite subject, what you want to become, birthday (day and month only) and your latest school marks.
+• Open the Settings tab to switch each item on or off: photo, class, city, school, about me, interests, favourite subject, what you want to become, birthday (day and month only) and your latest school marks.
 • Your name is always shown. Your email, phone number and exact marks are never shown to other students.
 • Tap a student's name in the leaderboards or in Learners Adda to see the profile they have chosen to share.
 • Your teacher can see your full profile.`,
@@ -28,12 +28,12 @@ How to use it:
 const MARKS = {
   title: "New: School Marks - track your progress at school",
   needs: "marks",
-  message: `Add your PT1, PT2, Half Yearly, PT3, PT4 and Final Exam marks and watch your progress on a chart.
+  message: `Add your PT, Half Yearly, Pre-Board and Final Exam marks, Maths and Science separately, and watch your progress on a chart.
 
 How to use it:
 • Go to My Profile, open School marks and press Add marks.
-• Choose the school year, the subject and the exam (or type the name of any other exam), then enter the marks you got and the maximum marks.
-• Add the subjects of an exam one after another. You can correct or delete any entry later.
+• Choose the school year and the exam: PT1 to PT4, Half Yearly, Pre-Board 1 to 4, Final Exam, or type the name of any other exam.
+• Enter the marks you got and the maximum marks for Maths and Science on their own lines. You can add more subjects. You can correct or delete any entry later.
 • You will see your latest result in each subject, the change since the last exam, your best and your average, and a progress chart.
 • Your marks are private: only you and your teacher can see them, unless you choose to show your latest percentage on your profile.`,
 };

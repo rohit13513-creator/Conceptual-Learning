@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { User, Lock, GraduationCap, Eye, EyeOff, Pencil, Camera, Check } from 'lucide-react';
+import { User, Settings, GraduationCap, Eye, EyeOff, Pencil, Camera, Check } from 'lucide-react';
 import { ProfileCardBody, PublicProfile, classLabel } from './ProfileCardBody';
 import { SchoolMarksPanel, MarksPayload } from './SchoolMarksPanel';
 import type { MarksEntry } from './schoolMarksUtil';
@@ -202,12 +202,12 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     <div className="space-y-5">
       <div className="space-y-1">
         <h1 className={`text-2xl font-black flex items-center gap-2 ${light ? 'text-slate-900' : 'text-white'}`}><User className="w-6 h-6 text-cyan-400" /> My Profile</h1>
-        <p className={`text-xs font-semibold ${light ? 'text-slate-500' : 'text-slate-400'}`}>Tell other learners about yourself, choose what to show, and track your school marks.</p>
+        <p className={`text-xs font-semibold ${light ? 'text-slate-500' : 'text-slate-400'}`}>Tell other learners about yourself, choose what to show in Settings, and track your school marks.</p>
       </div>
 
       <div className={`flex gap-1 p-1 rounded-xl border ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
         {tabBtn('profile', 'Profile', User)}
-        {tabBtn('privacy', 'Privacy', Lock)}
+        {tabBtn('privacy', 'Settings', Settings)}
         {tabBtn('marks', 'School marks', GraduationCap)}
       </div>
 
@@ -220,7 +220,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
             <>
               <ProfileCardBody profile={myView} isLightMode={light} />
               <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-                <p className={`text-xs font-semibold ${light ? 'text-slate-600' : 'text-slate-400'}`}>This is your full profile. Other students see only what you switch on under <b>Privacy</b>.</p>
+                <p className={`text-xs font-semibold ${light ? 'text-slate-600' : 'text-slate-400'}`}>This is your full profile. Other students see only what you switch on under <b>Settings</b>.</p>
                 <button onClick={startEdit} className="shrink-0 flex items-center gap-1.5 px-4 py-2 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer"><Pencil className="w-3.5 h-3.5" /> Edit profile</button>
               </div>
             </>
@@ -265,7 +265,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
         <>
           {banner}
           <div className={`rounded-2xl border p-5 space-y-1 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-            <p className={`text-sm font-black ${light ? 'text-slate-900' : 'text-white'}`}>Choose what other students can see</p>
+            <p className={`text-sm font-black ${light ? 'text-slate-900' : 'text-white'}`}>Profile settings: choose what to show and what to hide</p>
             <p className={`text-xs font-semibold pb-2 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Your name is always shown. Your email, phone number and exact marks are never shown. Your teacher can see your whole profile. Changes are saved as soon as you switch them.</p>
             <div className={`divide-y ${light ? 'divide-slate-200' : 'divide-slate-800'}`}>
               {PRIVACY_ROWS.map((row) => (

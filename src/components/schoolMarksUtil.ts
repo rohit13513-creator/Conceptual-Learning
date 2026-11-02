@@ -17,7 +17,7 @@ export interface MarksEntry {
   hasProof?: boolean;
 }
 
-export const EXAM_PRESETS = ['PT1', 'PT2', 'Half Yearly', 'PT3', 'PT4', 'Final Exam'];
+export const EXAM_PRESETS = ['PT1', 'PT2', 'Half Yearly', 'PT3', 'PT4', 'Pre-Board 1', 'Pre-Board 2', 'Pre-Board 3', 'Pre-Board 4', 'Final Exam'];
 export const SUBJECT_CHOICES = ['Maths', 'Science', 'English', 'Hindi', 'Social Science', 'Sanskrit', 'Computer Science'];
 
 /** School years run April to March: in November 2026 the year is "2026-27", in February 2027 it is still "2026-27". */
@@ -101,6 +101,8 @@ export function summariseSubjects(entries: MarksEntry[]): SubjectSummary[] {
 export function shortExamName(name: string): string {
   if (name === 'Half Yearly') return 'HY';
   if (name === 'Final Exam') return 'Final';
+  const pb = /^Pre-Board (\d)$/.exec(name);
+  if (pb) return `PB${pb[1]}`;
   return name.length > 9 ? name.slice(0, 8) + '…' : name;
 }
 

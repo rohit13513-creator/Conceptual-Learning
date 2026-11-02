@@ -8695,7 +8695,7 @@ function buildApp(): express.Express {
   });
 
   // ── SCHOOL MARKS: the student's marks in their own school, to follow their progress ──
-  const EXAM_PRESETS = ["PT1", "PT2", "Half Yearly", "PT3", "PT4", "Final Exam"];
+  const EXAM_PRESETS = ["PT1", "PT2", "Half Yearly", "PT3", "PT4", "Pre-Board 1", "Pre-Board 2", "Pre-Board 3", "Pre-Board 4", "Final Exam"];
   const MAX_MARKS_ROWS_PER_STUDENT = 600;
   const examOrder = (name: string) => { const i = EXAM_PRESETS.findIndex((p) => p.toLowerCase() === name.toLowerCase()); return i >= 0 ? i + 1 : 100; };
   const mapMarksRow = (m: any) => ({
@@ -8746,7 +8746,9 @@ function buildApp(): express.Express {
 
     const rawExam = String(req.body.examName || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
     if (!rawExam) return res.status(400).json({ error: "Choose the exam (PT1, Half Yearly, ...) or type its name." });
-    const examName = EXAM_PRESETS.find((p) => p.toLowerCase() === rawExam.toLowerCase()) || rawExam;
+    // "preboard 1", "Pre board 2", "pre-boards 3" typed by hand are the same exams as the Pre-Board buttons
+    const pre = /^pre[\s-]*boards?[\s-]*([1-4])$/i.exec(rawExam);
+    const examName = pre ? `Pre-Board ${pre[1]}` : (EXAM_PRESETS.find((p) => p.toLowerCase() === rawExam.toLowerCase()) || rawExam);
     const subject = String(req.body.subject || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30);
     if (!subject) return res.status(400).json({ error: "Choose the subject." });
 

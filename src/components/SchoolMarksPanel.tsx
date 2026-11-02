@@ -103,10 +103,11 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
   const [year, setYear] = useState(currentAcademicYear());
   const [examChoice, setExamChoice] = useState<string>('PT1');
   const [customExam, setCustomExam] = useState('');
-  const [subjectChoice, setSubjectChoice] = useState<string>('Maths');
-  const [customSubject, setCustomSubject] = useState('');
-  const [obtained, setObtained] = useState('');
-  const [maximum, setMaximum] = useState('');
+  // One line per subject, so Maths and Science marks are entered (and kept) separately; more subjects can be added.
+  interface SubjectRow { subject: string; custom: string; obtained: string; maximum: string }
+  const blankRows = (): SubjectRow[] => [{ subject: 'Maths', custom: '', obtained: '', maximum: '' }, { subject: 'Science', custom: '', obtained: '', maximum: '' }];
+  const [rows, setRows] = useState<SubjectRow[]>(blankRows);
+  const patchRow = (i: number, patch: Partial<SubjectRow>) => setRows((cur) => cur.map((r, k) => (k === i ? { ...r, ...patch } : r)));
   const [examDate, setExamDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
@@ -115,14 +116,14 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
   const [proofLinks, setProofLinks] = useState<Record<string, string[]>>({});
 
   const examName = examChoice === 'Other' ? customExam.trim() : examChoice;
-  const subject = subjectChoice === 'Other' ? customSubject.trim() : subjectChoice;
-  const typedPct = obtained !== '' && Number(maximum) > 0 ? Math.round((Number(obtained) / Number(maximum)) * 1000) / 10 : null;
+  const rowSubject = (r: SubjectRow) => (r.subject === 'Other' ? r.custom.trim() : r.subject);
+  const rowPct = (r: SubjectRow) => (r.obtained !== '' && Number(r.maximum) > 0 && Number(r.obtained) <= Number(r.maximum) ? Math.round((Number(r.obtained) / Number(r.maximum)) * 1000) / 10 : null);
 
   const startEdit = (e: MarksEntry) => {
     setYear(e.academicYear);
     if (EXAM_PRESETS.includes(e.examName)) { setExamChoice(e.examName); setCustomExam(''); } else { setExamChoice('Other'); setCustomExam(e.examName); }
-    if (SUBJECT_CHOICES.includes(e.subject)) { setSubjectChoice(e.subject); setCustomSubject(''); } else { setSubjectChoice('Other'); setCustomSubject(e.subject); }
-    setObtained(String(e.marksObtained)); setMaximum(String(e.maxMarks)); setExamDate(e.examDate || '');
+    setRows([{ subject: SUBJECT_CHOICES.includes(e.subject) ? e.subject : 'Other', custom: SUBJECT_CHOICES.includes(e.subject) ? '' : e.subject, obtained: String(e.marksObtained), maximum: String(e.maxMarks) }]);
+    setExamDate(e.examDate || '');
     setShowForm(true); setMessage(null);
     window.scrollTo?.({ top: 0 });
   };
@@ -132,15 +133,25 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
     if (!onSave) return;
     setMessage(null);
     if (!examName) return setMessage({ type: 'error', text: 'Type the name of the exam.' });
-    if (!subject) return setMessage({ type: 'error', text: 'Type the subject.' });
-    if (obtained === '' || maximum === '') return setMessage({ type: 'error', text: 'Enter the marks you got and the maximum marks.' });
-    if (Number(obtained) > Number(maximum)) return setMessage({ type: 'error', text: 'Marks you got cannot be more than the maximum marks.' });
+    // lines left completely empty are simply skipped
+    const filled = rows.filter((r) => r.obtained !== '' || r.maximum !== '');
+    if (filled.length === 0) return setMessage({ type: 'error', text: 'Enter the marks for at least one subject.' });
+    for (const r of filled) {
+      if (!rowSubject(r)) return setMessage({ type: 'error', text: 'Type the name of the subject.' });
+      if (r.obtained === '' || r.maximum === '') return setMessage({ type: 'error', text: `${rowSubject(r)}: enter both the marks you got and the maximum marks.` });
+      if (Number(r.obtained) > Number(r.maximum)) return setMessage({ type: 'error', text: `${rowSubject(r)}: marks you got cannot be more than the maximum marks.` });
+    }
+    if (new Set(filled.map(rowSubject)).size !== filled.length) return setMessage({ type: 'error', text: 'The same subject is listed twice.' });
     setSaving(true);
-    const err = await onSave({ academicYear: year, examName, subject, marksObtained: Number(obtained), maxMarks: Number(maximum), examDate });
+    const saved: string[] = [];
+    for (const r of filled) {
+      const err = await onSave({ academicYear: year, examName, subject: rowSubject(r), marksObtained: Number(r.obtained), maxMarks: Number(r.maximum), examDate });
+      if (err) { setSaving(false); return setMessage({ type: 'error', text: `${saved.length ? 'Saved ' + saved.join(', ') + '. ' : ''}${rowSubject(r)}: ${err}` }); }
+      saved.push(rowSubject(r));
+    }
     setSaving(false);
-    if (err) return setMessage({ type: 'error', text: err });
-    setMessage({ type: 'ok', text: `Saved: ${subject}, ${examName} ${year} -- ${obtained}/${maximum}. Add the next subject of this exam, or close the form.` });
-    setObtained(''); // keep year, exam and maximum so the next subject is quick to enter
+    setMessage({ type: 'ok', text: `Saved ${examName} ${year}: ${filled.map((r) => `${rowSubject(r)} ${r.obtained}/${r.maximum}`).join(', ')}. You can now verify these marks from the list below.` });
+    setRows((cur) => cur.map((r) => ({ ...r, obtained: '' }))); // the maximum marks stay, ready for the next exam
   };
 
   const confirmDelete = async () => {
@@ -155,7 +166,7 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
       {editable && (
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className={`text-xs font-semibold max-w-xl ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
-            Add your marks from school -- PT1, PT2, Half Yearly, PT3, PT4, Final Exam or any other test -- to see your progress over the year. Only you and your teacher can see them, unless you choose to show them on your profile.
+            Add your marks from school -- PT1 to PT4, Half Yearly, Pre-Board 1 to 4, Final Exam or any other test -- to see your progress over the year. Only you and your teacher can see them, unless you choose to show them on your profile.
           </p>
           <button onClick={() => { setShowForm((v) => !v); setMessage(null); }} className="shrink-0 flex items-center gap-1.5 px-4 py-2 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer">
             {showForm ? <><X className="w-3.5 h-3.5" /> Close</> : <><Plus className="w-3.5 h-3.5" /> Add marks</>}
@@ -173,20 +184,8 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
               </select>
             </div>
             <div>
-              <label className={labelCls(isLightMode)}>Subject</label>
-              <select value={subjectChoice} onChange={(e) => setSubjectChoice(e.target.value)} className={inputCls(isLightMode)}>
-                {SUBJECT_CHOICES.map((s) => <option key={s} value={s}>{s}</option>)}
-                <option value="Other">Other...</option>
-              </select>
-              {subjectChoice === 'Other' && <input value={customSubject} onChange={(e) => setCustomSubject(e.target.value)} maxLength={30} placeholder="Subject name" className={`${inputCls(isLightMode)} mt-2`} />}
-            </div>
-            <div>
-              <label className={labelCls(isLightMode)}>Marks you got</label>
-              <input type="number" inputMode="decimal" min="0" step="0.5" value={obtained} onChange={(e) => setObtained(e.target.value)} placeholder="e.g. 17" className={inputCls(isLightMode)} />
-            </div>
-            <div>
-              <label className={labelCls(isLightMode)}>Out of (maximum)</label>
-              <input type="number" inputMode="decimal" min="1" step="0.5" value={maximum} onChange={(e) => setMaximum(e.target.value)} placeholder="e.g. 20" className={inputCls(isLightMode)} />
+              <label className={labelCls(isLightMode)}>Exam date (optional)</label>
+              <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className={inputCls(isLightMode)} />
             </div>
           </div>
           <div>
@@ -199,14 +198,37 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
                 </button>
               ))}
             </div>
-            {examChoice === 'Other' && <input value={customExam} onChange={(e) => setCustomExam(e.target.value)} maxLength={40} placeholder="Name of the exam, e.g. Pre-Board 1" className={`${inputCls(isLightMode)} mt-2 sm:max-w-xs`} />}
+            {examChoice === 'Other' && <input value={customExam} onChange={(e) => setCustomExam(e.target.value)} maxLength={40} placeholder="Name of the exam, e.g. Mock Test" className={`${inputCls(isLightMode)} mt-2 sm:max-w-xs`} />}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
-            <div>
-              <label className={labelCls(isLightMode)}>Exam date (optional)</label>
-              <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} className={inputCls(isLightMode)} />
-            </div>
-            <div className={`text-sm font-black ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>{typedPct !== null && Number(obtained) <= Number(maximum) ? `= ${typedPct}%` : ''}</div>
+          <div className="space-y-2">
+            <label className={labelCls(isLightMode)}>Marks in each subject (kept separately)</label>
+            {rows.map((r, i) => (
+              <div key={i} className={`rounded-xl border p-3 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-slate-800 bg-slate-950/50'}`}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+                  <div className="col-span-2 sm:col-span-1">
+                    <p className={`text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Subject</p>
+                    <select value={r.subject} onChange={(e) => patchRow(i, { subject: e.target.value })} className={inputCls(isLightMode)}>
+                      {SUBJECT_CHOICES.map((sc) => <option key={sc} value={sc}>{sc}</option>)}
+                      <option value="Other">Other...</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Marks you got</p>
+                    <input type="number" inputMode="decimal" min="0" step="0.5" value={r.obtained} onChange={(e) => patchRow(i, { obtained: e.target.value })} placeholder="e.g. 68" className={inputCls(isLightMode)} />
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-black uppercase tracking-wider font-mono mb-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Out of</p>
+                    <input type="number" inputMode="decimal" min="1" step="0.5" value={r.maximum} onChange={(e) => patchRow(i, { maximum: e.target.value })} placeholder="e.g. 80" className={inputCls(isLightMode)} />
+                  </div>
+                </div>
+                {r.subject === 'Other' && <input value={r.custom} onChange={(e) => patchRow(i, { custom: e.target.value })} maxLength={30} placeholder="Subject name" className={`${inputCls(isLightMode)} mt-2 sm:max-w-xs`} />}
+                <div className="flex items-center justify-between mt-1.5 min-h-[20px]">
+                  <span className={`text-sm font-black ${isLightMode ? 'text-slate-800' : 'text-slate-100'}`}>{rowPct(r) !== null ? `= ${rowPct(r)}%` : ''}</span>
+                  {rows.length > 1 && <button type="button" onClick={() => setRows((cur) => cur.filter((_, k) => k !== i))} className="text-[11px] font-black text-slate-500 hover:text-red-400 cursor-pointer">Remove this subject</button>}
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={() => setRows((cur) => [...cur, { subject: SUBJECT_CHOICES.find((sc) => !cur.some((r) => r.subject === sc)) || 'Other', custom: '', obtained: '', maximum: cur[cur.length - 1]?.maximum || '' }])} className={`px-3 py-1.5 rounded-lg text-xs font-black cursor-pointer border ${isLightMode ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50' : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'}`}>+ Add another subject</button>
           </div>
           {message && (
             <div className={`text-xs font-bold rounded-lg px-3 py-2.5 border ${message.type === 'ok' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>{message.text}</div>
@@ -214,7 +236,7 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
           <button type="submit" disabled={saving} className="w-full sm:w-auto px-6 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50">
             {saving ? 'Saving...' : 'Save marks'}
           </button>
-          <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Saving the same subject and exam again simply corrects the earlier entry.</p>
+          <p className={`text-[11px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Pre-Board 1, 2, 3 and 4 are here too. Saving the same subject and exam again simply corrects the earlier entry.</p>
         </form>
       )}
 
