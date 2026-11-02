@@ -35,6 +35,10 @@ interface User {
   bio: string | null;
   favoriteSubject: string | null;
   hobbies: string | null;
+  city: string | null;
+  school: string | null;
+  ambition: string | null;
+  profileVisibility: Record<string, boolean>;
 }
 
 interface InviteCode {
@@ -1863,6 +1867,38 @@ function mapForumReplyRow(row: any): ForumReply {
   };
 }
 
+// ── PROFILE PRIVACY ──
+// Every student chooses which parts of their profile other students may see. Name is always shown. These are the
+// starting choices: everyday things are on; anything that points to where the student lives or studies, their
+// birthday and their marks are OFF until the student switches them on.
+const PROFILE_VISIBILITY_DEFAULTS = {
+  photo: true, class: true, bio: true, interests: true, favoriteSubject: true,
+  city: false, school: false, ambition: false, birthday: false, schoolMarks: false,
+} as const;
+function effectiveVisibility(raw: any): Record<string, boolean> {
+  const out: Record<string, boolean> = { ...PROFILE_VISIBILITY_DEFAULTS };
+  if (raw && typeof raw === "object") {
+    for (const key of Object.keys(PROFILE_VISIBILITY_DEFAULTS)) if (typeof raw[key] === "boolean") out[key] = raw[key];
+  }
+  return out;
+}
+
+// The new profile columns and the school-marks table are created by a SQL script that is run once in Supabase.
+// Until then these report "not ready" and the related features stay quietly off instead of failing.
+const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false } };
+async function profileColumnsReady(): Promise<boolean> {
+  if (Date.now() - schemaState.profile.at < 30_000) return schemaState.profile.ok;
+  const { error } = await supabase.from("users").select("city, school, ambition, profile_visibility").limit(1);
+  schemaState.profile = { at: Date.now(), ok: !error };
+  return !error;
+}
+async function marksTableReady(): Promise<boolean> {
+  if (Date.now() - schemaState.marks.at < 30_000) return schemaState.marks.ok;
+  const { error } = await supabase.from("school_marks").select("id").limit(1);
+  schemaState.marks = { at: Date.now(), ok: !error };
+  return !error;
+}
+
 // Maps a raw Supabase `users` row (snake_case) to the camelCase shape the frontend expects.
 function mapUserRow(row: any): User {
   return {
@@ -1881,6 +1917,10 @@ function mapUserRow(row: any): User {
     bio: row.bio || null,
     favoriteSubject: row.favorite_subject || null,
     hobbies: row.hobbies || null,
+    city: row.city || null,
+    school: row.school || null,
+    ambition: row.ambition || null,
+    profileVisibility: effectiveVisibility(row.profile_visibility),
   };
 }
 
@@ -8524,18 +8564,38 @@ function buildApp(): express.Express {
   }, async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { name, dateOfBirth, bio, favoriteSubject, hobbies } = req.body;
+    const { name, dateOfBirth, bio, favoriteSubject, hobbies, city, school, ambition, profileVisibility } = req.body;
 
     const emailNormalized = auth.email;
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
     if (!existingUser) return res.status(404).json({ error: "Account not found." });
 
+    // One line of plain text: control characters removed, spaces collapsed, cut to a sensible length.
+    const oneLine = (v: any, max: number) => { const t = String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim(); return t ? t.slice(0, max) : null; };
     const updates: Record<string, any> = {
       date_of_birth: dateOfBirth || null,
-      bio: bio ? String(bio).trim() : null,
-      favorite_subject: favoriteSubject ? String(favoriteSubject).trim() : null,
-      hobbies: hobbies ? String(hobbies).trim() : null,
+      bio: bio ? String(bio).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ").trim().slice(0, 500) || null : null,
+      favorite_subject: oneLine(favoriteSubject, 60),
+      hobbies: oneLine(hobbies, 200),
     };
+    // City, school, ambition and the privacy choices need the new database columns (supabase_profiles_and_marks.sql).
+    // Until those exist they are skipped, and everything else still saves.
+    let profileUpgradePending = false;
+    const sentNewFields = city !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
+    if (sentNewFields) {
+      if (await profileColumnsReady()) {
+        if (city !== undefined) updates.city = oneLine(city, 60);
+        if (school !== undefined) updates.school = oneLine(school, 100);
+        if (ambition !== undefined) updates.ambition = oneLine(ambition, 100);
+        if (profileVisibility !== undefined) {
+          let parsed: any = null;
+          try { parsed = typeof profileVisibility === "string" ? JSON.parse(profileVisibility) : profileVisibility; } catch { parsed = null; }
+          updates.profile_visibility = effectiveVisibility(parsed);
+        }
+      } else {
+        profileUpgradePending = true;
+      }
+    }
 
     // Lets a student fix their own name (a common request: a name mistyped or misspelled at
     // registration, which only the student themself would reliably know the correct spelling of)
@@ -8572,8 +8632,186 @@ function buildApp(): express.Express {
       return res.status(500).json({ error: "Failed to save profile." });
     }
 
-    return res.json({ success: true, user: mapUserRow(updatedRow) });
+    return res.json({ success: true, user: mapUserRow(updatedRow), profileUpgradePending });
   });
+
+  // ── SOCIAL PROFILE: what other students may see ──
+  // Returns another student's profile, limited to what THEY chose to show. Name is always shown; the e-mail,
+  // phone number and anything the student switched off are never sent. The student themself and the teacher see
+  // everything (the teacher needs it to know the student), and the response says which view it is.
+  const PROFILE_VIEW_FIELDS = "name,email,role,status,student_class,photo_url,bio,favorite_subject,hobbies,date_of_birth,created_at";
+  app.get("/api/profile/view", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (rateLimited(req, res, "profile-view", 120, 10 * 60_000, auth.email, false)) return;
+    const target = String(req.query.email || "").toLowerCase().trim();
+    if (!target) return res.status(400).json({ error: "Which student?" });
+    const ready = await profileColumnsReady();
+    const { data: row } = await supabase.from("users").select(PROFILE_VIEW_FIELDS + (ready ? ",city,school,ambition,profile_visibility" : "")).eq("email", target).maybeSingle();
+    if (!row || (row as any).status !== "approved") return res.status(404).json({ error: "This profile is not available." });
+    const r: any = row;
+    const isSelf = auth.email === target;
+    const viewerIsTeacher = ADMIN_EMAILS.includes(auth.email);
+    const full = isSelf || viewerIsTeacher;
+    const vis = effectiveVisibility(r.profile_visibility);
+    const show = (key: string) => full || vis[key] === true;
+
+    const profile: Record<string, any> = {
+      name: r.name,
+      isTeacher: r.role === "admin",
+      view: isSelf ? "self" : viewerIsTeacher ? "teacher" : "student",
+      joined: r.created_at,
+    };
+    if (show("photo")) profile.photoUrl = r.photo_url || null;
+    if (show("class") && r.student_class) profile.studentClass = r.student_class;
+    if (show("city") && r.city) profile.city = r.city;
+    if (show("school") && r.school) profile.school = r.school;
+    if (show("bio") && r.bio) profile.bio = r.bio;
+    if (show("interests") && r.hobbies) profile.interests = r.hobbies;
+    if (show("favoriteSubject") && r.favorite_subject) profile.favoriteSubject = r.favorite_subject;
+    if (show("ambition") && r.ambition) profile.ambition = r.ambition;
+    if (show("birthday") && r.date_of_birth) {
+      // only the day and month, never the year
+      const d = new Date(String(r.date_of_birth) + "T00:00:00Z");
+      if (!isNaN(d.getTime())) profile.birthday = d.toLocaleDateString("en-IN", { day: "numeric", month: "long", timeZone: "UTC" });
+    }
+    if (show("schoolMarks") && (await marksTableReady())) {
+      const { data: marks } = await supabase.from("school_marks").select("academic_year,exam_name,subject,marks_obtained,max_marks,exam_date,created_at").eq("student_email", target);
+      profile.schoolProgress = latestPerSubject((marks || []).map(mapMarksRow));
+    }
+    if (isSelf || viewerIsTeacher) profile.visibility = vis;
+    return res.json({ profile });
+  });
+
+  // ── SCHOOL MARKS: the student's marks in their own school, to follow their progress ──
+  const EXAM_PRESETS = ["PT1", "PT2", "Half Yearly", "PT3", "PT4", "Final Exam"];
+  const MAX_MARKS_ROWS_PER_STUDENT = 600;
+  const examOrder = (name: string) => { const i = EXAM_PRESETS.findIndex((p) => p.toLowerCase() === name.toLowerCase()); return i >= 0 ? i + 1 : 100; };
+  const mapMarksRow = (m: any) => ({
+    id: m.id,
+    academicYear: m.academic_year,
+    examName: m.exam_name,
+    subject: m.subject,
+    marksObtained: Number(m.marks_obtained),
+    maxMarks: Number(m.max_marks),
+    percentage: Number(m.max_marks) > 0 ? Math.round((Number(m.marks_obtained) / Number(m.max_marks)) * 1000) / 10 : 0,
+    examDate: m.exam_date || null,
+    studentClass: m.student_class || null,
+    createdAt: m.created_at,
+  });
+  // chronological order: academic year, then the usual exam order (PT1, PT2, Half Yearly...), then date entered
+  const compareMarks = (a: any, b: any) =>
+    a.academicYear.localeCompare(b.academicYear) || examOrder(a.examName) - examOrder(b.examName) ||
+    String(a.examDate || a.createdAt).localeCompare(String(b.examDate || b.createdAt)) || a.subject.localeCompare(b.subject);
+  // the most recent exam's percentage for every subject (shown on a profile only if the student allows it)
+  function latestPerSubject(entries: any[]) {
+    const bySubject = new Map<string, any>();
+    for (const e of entries.slice().sort(compareMarks)) bySubject.set(e.subject, e);
+    return [...bySubject.values()].map((e) => ({ subject: e.subject, examName: e.examName, academicYear: e.academicYear, percentage: e.percentage }));
+  }
+
+  app.get("/api/school-marks", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (!(await marksTableReady())) return res.json({ entries: [], unavailable: true });
+    const { data, error } = await supabase.from("school_marks").select("*").eq("student_email", auth.email);
+    if (error) return res.status(500).json({ error: "Could not load your marks. Please try again." });
+    return res.json({ entries: (data || []).map(mapMarksRow).sort(compareMarks), presets: EXAM_PRESETS });
+  });
+
+  app.post("/api/school-marks", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    if (rateLimited(req, res, "marks-save", 120, 10 * 60_000, auth.email, false)) return;
+    if (!(await marksTableReady())) return res.status(503).json({ error: "School Marks is being set up. Please try again in a little while." });
+
+    const academicYear = String(req.body.academicYear || "").trim();
+    const yearMatch = /^(20\d\d)-(\d\d)$/.exec(academicYear);
+    if (!yearMatch || (Number(yearMatch[1]) + 1) % 100 !== Number(yearMatch[2])) return res.status(400).json({ error: "Choose the school year, like 2026-27." });
+
+    const rawExam = String(req.body.examName || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!rawExam) return res.status(400).json({ error: "Choose the exam (PT1, Half Yearly, ...) or type its name." });
+    const examName = EXAM_PRESETS.find((p) => p.toLowerCase() === rawExam.toLowerCase()) || rawExam;
+    const subject = String(req.body.subject || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 30);
+    if (!subject) return res.status(400).json({ error: "Choose the subject." });
+
+    const obtained = Number(req.body.marksObtained);
+    const max = Number(req.body.maxMarks);
+    if (!Number.isFinite(obtained) || !Number.isFinite(max)) return res.status(400).json({ error: "Enter the marks you got and the maximum marks as numbers." });
+    if (max <= 0 || max > 1000) return res.status(400).json({ error: "Maximum marks must be more than 0 and not more than 1000." });
+    if (obtained < 0 || obtained > max) return res.status(400).json({ error: "Marks obtained must be between 0 and the maximum marks." });
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    let examDate: string | null = null;
+    if (req.body.examDate) {
+      const d = new Date(String(req.body.examDate) + "T00:00:00Z");
+      if (isNaN(d.getTime())) return res.status(400).json({ error: "That exam date is not valid." });
+      examDate = String(req.body.examDate).slice(0, 10);
+    }
+
+    const { data: me } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
+    const { data: existing } = await supabase.from("school_marks").select("id").eq("student_email", auth.email).eq("academic_year", academicYear).eq("exam_name", examName).eq("subject", subject).maybeSingle();
+    if (!existing) {
+      const { count } = await supabase.from("school_marks").select("id", { count: "exact", head: true }).eq("student_email", auth.email);
+      if ((count || 0) >= MAX_MARKS_ROWS_PER_STUDENT) return res.status(400).json({ error: "You have reached the limit of saved marks." });
+    }
+    const { data: saved, error } = await supabase.from("school_marks").upsert({
+      student_email: auth.email, academic_year: academicYear, exam_name: examName, subject,
+      marks_obtained: round2(obtained), max_marks: round2(max), exam_date: examDate,
+      student_class: me?.student_class || null, updated_at: new Date().toISOString(),
+    }, { onConflict: "student_email,academic_year,exam_name,subject" }).select().single();
+    if (error || !saved) { console.error("school marks save:", error?.message); return res.status(500).json({ error: "Could not save these marks. Please try again." }); }
+    return res.json({ success: true, entry: mapMarksRow(saved), updated: !!existing });
+  });
+
+  app.post("/api/school-marks/delete", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = String(req.body.id || "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: "Which entry?" });
+    const { error } = await supabase.from("school_marks").delete().eq("id", id).eq("student_email", auth.email);
+    if (error) return res.status(500).json({ error: "Could not delete this entry." });
+    return res.json({ success: true });
+  });
+
+  // Teacher: how every student is doing in their own school, and one student's full history.
+  app.get("/api/admin/school-marks/overview", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const { data: students } = await supabase.from("users").select("email,name,student_class,photo_url").eq("role", "student").eq("status", "approved");
+    if (!(await marksTableReady())) return res.json({ students: [], unavailable: true });
+    const { data: marks } = await supabase.from("school_marks").select("*");
+    const byStudent = new Map<string, any[]>();
+    for (const m of marks || []) { const list = byStudent.get(m.student_email) || []; list.push(mapMarksRow(m)); byStudent.set(m.student_email, list); }
+    const overall = (rows: any[]) => { const o = rows.reduce((a, r) => a + r.marksObtained, 0), x = rows.reduce((a, r) => a + r.maxMarks, 0); return x > 0 ? Math.round((o / x) * 1000) / 10 : null; };
+    const out = (students || []).map((st: any) => {
+      const entries = (byStudent.get(st.email) || []).sort(compareMarks);
+      // group the entries into exams (a year + exam name), in order, and take each exam's overall percentage
+      const exams: { label: string; percentage: number | null }[] = [];
+      const seen = new Map<string, any[]>();
+      for (const e of entries) { const k = `${e.academicYear}|${e.examName}`; if (!seen.has(k)) { seen.set(k, []); } seen.get(k)!.push(e); }
+      for (const [k, rows] of seen) exams.push({ label: `${rows[0].examName} ${rows[0].academicYear}`, percentage: overall(rows) });
+      const latest = exams[exams.length - 1] || null;
+      const previous = exams.length > 1 ? exams[exams.length - 2] : null;
+      return {
+        email: st.email, name: st.name, studentClass: st.student_class, photoUrl: st.photo_url || null,
+        entryCount: entries.length, examCount: exams.length,
+        latestExam: latest?.label || null, latestPercentage: latest?.percentage ?? null,
+        change: latest && previous && latest.percentage != null && previous.percentage != null ? Math.round((latest.percentage - previous.percentage) * 10) / 10 : null,
+      };
+    }).sort((a: any, b: any) => String(a.studentClass).localeCompare(String(b.studentClass)) || a.name.localeCompare(b.name));
+    return res.json({ students: out });
+  });
+
+  app.get("/api/admin/school-marks/student", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const email = String(req.query.email || "").toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: "Which student?" });
+    if (!(await marksTableReady())) return res.json({ entries: [], unavailable: true });
+    const { data, error } = await supabase.from("school_marks").select("*").eq("student_email", email);
+    if (error) return res.status(500).json({ error: "Could not load the marks." });
+    return res.json({ entries: (data || []).map(mapMarksRow).sort(compareMarks) });
+  });
+
 
   // ── HOMEWORK UPLOAD & REVIEW ──
 

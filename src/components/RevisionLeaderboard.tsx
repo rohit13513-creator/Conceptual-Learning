@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ProfileLink } from './ProfileLink';
 import { Trophy, Flame, TrendingUp, Crown, ChevronDown, HelpCircle } from 'lucide-react';
 import { LeaderboardModal } from './LeaderboardModal';
 
@@ -184,7 +185,7 @@ function CategoryRows({ rows, format, isLightMode, currentUserEmail, accentText 
             <span className={`rounded-full ${rankStyle?.glow || ''}`}>
               <Avatar row={row} isLightMode={isLightMode} />
             </span>
-            <span className="truncate flex-1">{row.name}{isMe ? ' (You)' : ''}</span>
+            <span className="truncate flex-1"><ProfileLink email={row.email} name={row.name} />{isMe ? ' (You)' : ''}</span>
             <span className={`shrink-0 font-mono ${rank === 1 ? accentText : ''}`}>{format(row.value)}</span>
           </li>
         );

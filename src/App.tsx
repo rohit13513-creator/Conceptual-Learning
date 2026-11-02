@@ -1,6 +1,10 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { setDownloadAccess } from './utils/downloadAccess';
 import { lazyView } from './lazyView';
+import { ProfileLink } from './components/ProfileLink';
+const ProfileCenter = lazyView(() => import('./components/ProfileCenter'));
+const StudentProfileCard = lazyView(() => import('./components/StudentProfileCard'));
+const AdminSchoolProgress = lazyView(() => import('./components/AdminSchoolProgress'));
 import { peekBank, loadBank } from './data/banks';
 import type { Bank } from './data/bankTypes';
 import OpticsCanvas, {
@@ -1306,6 +1310,14 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [user?.token]);
+
+  // Tapping a student's name (leaderboards, forum) asks for their profile card; this shows it.
+  const [profileCardEmail, setProfileCardEmail] = useState<string | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => setProfileCardEmail((e as CustomEvent).detail?.email || null);
+    window.addEventListener('open-student-profile', open);
+    return () => window.removeEventListener('open-student-profile', open);
+  }, []);
 
   // Click outside listener for dropdown global menus
   useEffect(() => {
@@ -8154,129 +8166,25 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         </div>
       )}
 
-      {activeView === 'profile' && (
+      {activeView === 'profile' && user && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
-          <div className="max-w-2xl mx-auto space-y-6">
-            <div className="space-y-1">
-              <h1 className={`text-2xl font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                <User className="w-6 h-6 text-cyan-400" /> My Profile
-              </h1>
-              <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Your academic and personal details.</p>
-            </div>
-
-            {profileError && (
-              <div className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">{profileError}</div>
-            )}
-            {profileSuccess && (
-              <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2.5">{profileSuccess}</div>
-            )}
-
-            <div className={`border rounded-2xl p-6 shadow-lg space-y-5 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <div className="flex items-center gap-4">
-                {profilePhotoFile ? (
-                  <img src={URL.createObjectURL(profilePhotoFile)} alt="Preview" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" />
-                ) : user.photoUrl ? (
-                  <img src={user.photoUrl} alt="Profile" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" />
-                ) : (
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 ${isLightMode ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-slate-950 border-slate-700 text-slate-500'}`}>
-                    <User className="w-9 h-9" />
-                  </div>
-                )}
-                <div>
-                  <label className={`inline-block px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition ${isLightMode ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
-                    Change Photo
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => setProfilePhotoFile(e.target.files?.[0] || null)}
-                    />
-                  </label>
-                  {profilePhotoFile && <p className="text-[10px] text-slate-500 mt-1 truncate max-w-[160px]">{profilePhotoFile.name}</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Name</p>
-                  <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.name}</p>
-                </div>
-                <div>
-                  <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Email</p>
-                  <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.email}</p>
-                </div>
-                {user.studentClass && (
-                  <div>
-                    <p className={`text-[9px] font-black uppercase tracking-wider font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Class</p>
-                    <p className={`text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{user.studentClass}</p>
-                  </div>
-                )}
-              </div>
-
-              <form onSubmit={handleProfileUpdate} className="space-y-3 pt-2 border-t border-slate-800/50">
-                <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Full Name</label>
-                  <input
-                    type="text"
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    placeholder="Your full name"
-                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
-                  />
-                  <p className={`text-[10px] font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Fix a misspelled name here -- this is what's shown to your teacher and on leaderboards.</p>
-                </div>
-                <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date of Birth</label>
-                  <input
-                    type="date"
-                    value={profileDob}
-                    onChange={(e) => setProfileDob(e.target.value)}
-                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-slate-200'}`}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>About Me</label>
-                  <textarea
-                    value={profileBio}
-                    onChange={(e) => setProfileBio(e.target.value)}
-                    rows={3}
-                    placeholder="A little about yourself..."
-                    className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 resize-none ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Favorite Subject</label>
-                    <input
-                      type="text"
-                      value={profileFavSubject}
-                      onChange={(e) => setProfileFavSubject(e.target.value)}
-                      placeholder="e.g. Physics"
-                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className={`text-[9px] font-black uppercase tracking-wider block font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Hobbies & Interests</label>
-                    <input
-                      type="text"
-                      value={profileHobbies}
-                      onChange={(e) => setProfileHobbies(e.target.value)}
-                      placeholder="e.g. Cricket, drawing"
-                      className={`w-full border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-cyan-500 ${isLightMode ? 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={profileSaving}
-                  className="w-full py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50"
-                >
-                  {profileSaving ? 'Saving...' : 'Save Profile'}
-                </button>
-              </form>
-            </div>
+          <div className="max-w-2xl mx-auto">
+            <ProfileCenter
+              user={user as any}
+              isLightMode={isLightMode}
+              onUserUpdated={(updated: any) => {
+                const next = { ...updated, token: user.token };
+                setUser(next);
+                if (localStorage.getItem('optics_v1_user')) localStorage.setItem('optics_v1_user', JSON.stringify(next));
+                else sessionStorage.setItem('optics_v1_user', JSON.stringify(next));
+              }}
+            />
           </div>
         </div>
+      )}
+
+      {profileCardEmail && user && (
+        <StudentProfileCard email={profileCardEmail} token={user.token} isLightMode={isLightMode} onClose={() => setProfileCardEmail(null)} />
       )}
 
       {activeView === 'forum' && (() => {
@@ -8304,7 +8212,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         )}
                       </div>
                       <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                        {forumThreadDetail.authorName} • {formatDateTimeIST(forumThreadDetail.createdAt)}
+                        <ProfileLink email={forumThreadDetail.authorEmail} name={forumThreadDetail.authorName} /> • {formatDateTimeIST(forumThreadDetail.createdAt)}
                         {forumThreadDetail.status === 'pending' && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
                         )}
@@ -8322,7 +8230,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                       {forumReplies.map((r) => (
                         <div key={r.id} className={`border rounded-xl p-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
                           <div className="flex items-start justify-between gap-2">
-                            <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{r.authorName}</p>
+                            <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}><ProfileLink email={r.authorEmail} name={r.authorName} /></p>
                             {isAdmin && (
                               <button onClick={() => handleDeleteForumReply(r.id)} className="p-0.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 cursor-pointer shrink-0" title="Delete reply">
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -8474,7 +8382,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             )}
                           </div>
                           <p className={`text-[10px] font-mono mt-1 flex items-center gap-1.5 flex-wrap ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                            {t.authorName} • {formatDateIST(t.createdAt)} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
+                            <ProfileLink email={t.authorEmail} name={t.authorName} /> • {formatDateIST(t.createdAt)} • {t.replyCount} {t.replyCount === 1 ? 'reply' : 'replies'}
                             {t.status === 'pending' && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Pending Approval</span>
                             )}
@@ -8520,6 +8428,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 </button>
               </div>
             </div>
+
+            <AdminSchoolProgress token={user.token} isLightMode={isLightMode} />
 
             {adminActionMessage && (
               <div className={`text-xs font-bold rounded-lg px-3 py-2.5 border ${

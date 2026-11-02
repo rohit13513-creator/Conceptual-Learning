@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ProfileLink } from './ProfileLink';
 import { BookOpenCheck, ChevronDown } from 'lucide-react';
 import { Avatar, RankBadge, type LeaderboardRow as AvatarRow } from './RevisionLeaderboard';
 import { LeaderboardModal } from './LeaderboardModal';
@@ -82,7 +83,7 @@ function HomeworkRows({ rows, totalAssignments, isLightMode, currentUserEmail }:
                 <td className={`px-2 py-1.5 ${isMe ? (isLightMode ? 'text-cyan-700' : 'text-cyan-300') : isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <Avatar row={avatarRow} isLightMode={isLightMode} />
-                    <span className="truncate">{row.name}{isMe ? ' (You)' : ''}</span>
+                    <span className="truncate"><ProfileLink email={row.email} name={row.name} />{isMe ? ' (You)' : ''}</span>
                   </div>
                 </td>
                 <td className={`px-2 py-1.5 text-center font-mono ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
