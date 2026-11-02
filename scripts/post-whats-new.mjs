@@ -13,18 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const post = process.argv.includes("--post");
 
-const PROFILE = {
-  title: "New: your profile is now a social profile",
-  needs: "profile",
-  message: `Add your city, school and interests, and choose exactly what other students can see.
-
-How to use it:
-• Open My Profile (your picture at the top) and press Edit profile. Your class is filled in automatically.
-• Open the Settings tab to switch each item on or off: photo, class, city, school, about me, interests, favourite subject, what you want to become, birthday (day and month only) and your latest school marks.
-• Your name is always shown. Your email, phone number and exact marks are never shown to other students.
-• Tap a student's name in the leaderboards or in Learners Adda to see the profile they have chosen to share.
-• Your teacher can see your full profile.`,
-};
+// (The "your profile is now a social profile" update was withdrawn on request and must not be posted again.)
 const MARKS = {
   title: "New: School Marks - track your progress at school",
   needs: "marks",
@@ -91,7 +80,6 @@ What is there:
 • Open it from Notes > Canadian Maths, or the Canadian Maths button on your home page. You can download the notes as a PDF.` },
   { audience: "canadian", title: "Canadian-board homework deadline", message: `Homework is due at 7:30 PM Windsor time on the next day, and the deadline is shown in Windsor time.` },
   // ── for everyone ──
-  { audience: ["All", "canadian"], ...PROFILE },
   { audience: ["All", "canadian"], ...MARKS },
   { audience: ["All", "canadian"], ...VERIFY },
   { audience: ["All", "canadian"], ...FASTER },
