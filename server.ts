@@ -38,6 +38,7 @@ interface User {
   favoriteSubject: string | null;
   hobbies: string | null;
   city: string | null;
+  country: string | null;
   school: string | null;
   ambition: string | null;
   profileVisibility: Record<string, boolean>;
@@ -1878,7 +1879,7 @@ function mapForumReplyRow(row: any): ForumReply {
 // birthday and their marks are OFF until the student switches them on.
 const PROFILE_VISIBILITY_DEFAULTS = {
   photo: true, class: true, bio: true, interests: true, favoriteSubject: true,
-  city: false, school: false, ambition: false, birthday: false, schoolMarks: false,
+  city: false, country: false, school: false, ambition: false, birthday: false, schoolMarks: false,
 } as const;
 function effectiveVisibility(raw: any): Record<string, boolean> {
   const out: Record<string, boolean> = { ...PROFILE_VISIBILITY_DEFAULTS };
@@ -1890,7 +1891,13 @@ function effectiveVisibility(raw: any): Record<string, boolean> {
 
 // The new profile columns and the school-marks table are created by a SQL script that is run once in Supabase.
 // Until then these report "not ready" and the related features stay quietly off instead of failing.
-const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false }, verify: { at: 0, ok: false } };
+const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false }, verify: { at: 0, ok: false }, country: { at: 0, ok: false } };
+async function countryColumnReady(): Promise<boolean> {
+  if (Date.now() - schemaState.country.at < 30_000) return schemaState.country.ok;
+  const { error } = await supabase.from("users").select("country").limit(1);
+  schemaState.country = { at: Date.now(), ok: !error };
+  return !error;
+}
 async function profileColumnsReady(): Promise<boolean> {
   if (Date.now() - schemaState.profile.at < 30_000) return schemaState.profile.ok;
   const { error } = await supabase.from("users").select("city, school, ambition, profile_visibility").limit(1);
@@ -1929,6 +1936,7 @@ function mapUserRow(row: any): User {
     favoriteSubject: row.favorite_subject || null,
     hobbies: row.hobbies || null,
     city: row.city || null,
+    country: row.country || null,
     school: row.school || null,
     ambition: row.ambition || null,
     profileVisibility: effectiveVisibility(row.profile_visibility),
@@ -8575,7 +8583,7 @@ function buildApp(): express.Express {
   }, async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { name, dateOfBirth, bio, favoriteSubject, hobbies, city, school, ambition, profileVisibility } = req.body;
+    const { name, dateOfBirth, bio, favoriteSubject, hobbies, city, country, school, ambition, profileVisibility } = req.body;
 
     const emailNormalized = auth.email;
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
@@ -8592,10 +8600,11 @@ function buildApp(): express.Express {
     // City, school, ambition and the privacy choices need the new database columns (supabase_profiles_and_marks.sql).
     // Until those exist they are skipped, and everything else still saves.
     let profileUpgradePending = false;
-    const sentNewFields = city !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
+    const sentNewFields = city !== undefined || country !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
     if (sentNewFields) {
       if (await profileColumnsReady()) {
         if (city !== undefined) updates.city = oneLine(city, 60);
+        if (country !== undefined) { if (await countryColumnReady()) updates.country = oneLine(country, 60); else if (oneLine(country, 60)) profileUpgradePending = true; }
         if (school !== undefined) updates.school = oneLine(school, 100);
         if (ambition !== undefined) updates.ambition = oneLine(ambition, 100);
         if (profileVisibility !== undefined) {
@@ -8658,7 +8667,7 @@ function buildApp(): express.Express {
     const target = String(req.query.email || "").toLowerCase().trim();
     if (!target) return res.status(400).json({ error: "Which student?" });
     const ready = await profileColumnsReady();
-    const { data: row } = await supabase.from("users").select(PROFILE_VIEW_FIELDS + (ready ? ",city,school,ambition,profile_visibility" : "")).eq("email", target).maybeSingle();
+    const { data: row } = await supabase.from("users").select(PROFILE_VIEW_FIELDS + (ready ? ",city,school,ambition,profile_visibility" : "") + ((await countryColumnReady()) ? ",country" : "")).eq("email", target).maybeSingle();
     if (!row || (row as any).status !== "approved") return res.status(404).json({ error: "This profile is not available." });
     const r: any = row;
     const isSelf = auth.email === target;
@@ -8676,6 +8685,7 @@ function buildApp(): express.Express {
     if (show("photo")) profile.photoUrl = r.photo_url || null;
     if (show("class") && r.student_class) profile.studentClass = r.student_class;
     if (show("city") && r.city) profile.city = r.city;
+    if (show("country") && r.country) profile.country = r.country;
     if (show("school") && r.school) profile.school = r.school;
     if (show("bio") && r.bio) profile.bio = r.bio;
     if (show("interests") && r.hobbies) profile.interests = r.hobbies;

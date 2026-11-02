@@ -19,6 +19,7 @@ export interface ProfileUser {
   favoriteSubject: string | null;
   hobbies: string | null;
   city?: string | null;
+  country?: string | null;
   school?: string | null;
   ambition?: string | null;
   profileVisibility?: Record<string, boolean>;
@@ -26,13 +27,14 @@ export interface ProfileUser {
 
 const DEFAULT_VISIBILITY: Record<string, boolean> = {
   photo: true, class: true, bio: true, interests: true, favoriteSubject: true,
-  city: false, school: false, ambition: false, birthday: false, schoolMarks: false,
+  city: false, country: false, school: false, ambition: false, birthday: false, schoolMarks: false,
 };
 
 const PRIVACY_ROWS: { key: string; title: string; hint: string }[] = [
   { key: 'photo', title: 'Profile photo', hint: 'Your picture. If hidden, others see your initials.' },
   { key: 'class', title: 'My class', hint: 'Taken automatically from your account.' },
   { key: 'city', title: 'City', hint: 'The city you live in.' },
+  { key: 'country', title: 'Country', hint: 'The country you live in.' },
   { key: 'school', title: 'School', hint: 'The name of your school.' },
   { key: 'bio', title: 'About me', hint: 'The few lines you wrote about yourself.' },
   { key: 'interests', title: 'Interests & hobbies', hint: 'What you enjoy doing.' },
@@ -71,6 +73,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   const [favSubject, setFavSubject] = useState(user.favoriteSubject || '');
   const [interests, setInterests] = useState(user.hobbies || '');
   const [city, setCity] = useState(user.city || '');
+  const [country, setCountry] = useState(user.country || '');
   const [school, setSchool] = useState(user.school || '');
   const [ambition, setAmbition] = useState(user.ambition || '');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -80,12 +83,12 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
 
   const startEdit = () => {
     setName(user.name); setDob(user.dateOfBirth || ''); setBio(user.bio || ''); setFavSubject(user.favoriteSubject || '');
-    setInterests(user.hobbies || ''); setCity(user.city || ''); setSchool(user.school || ''); setAmbition(user.ambition || '');
+    setInterests(user.hobbies || ''); setCity(user.city || ''); setCountry(user.country || ''); setSchool(user.school || ''); setAmbition(user.ambition || '');
     setPhotoFile(null); setMessage(null); setEditing(true);
   };
 
   // Sends the WHOLE profile every time (the server replaces what is stored), with any changes applied on top.
-  const send = useCallback(async (fields: { name: string; dob: string; bio: string; favSubject: string; interests: string; city: string; school: string; ambition: string; visibility: Record<string, boolean>; photo?: File | null }) => {
+  const send = useCallback(async (fields: { name: string; dob: string; bio: string; favSubject: string; interests: string; city: string; country: string; school: string; ambition: string; visibility: Record<string, boolean>; photo?: File | null }) => {
     const fd = new FormData();
     fd.append('name', fields.name.trim());
     fd.append('dateOfBirth', fields.dob);
@@ -93,6 +96,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     fd.append('favoriteSubject', fields.favSubject);
     fd.append('hobbies', fields.interests);
     fd.append('city', fields.city);
+    fd.append('country', fields.country);
     fd.append('school', fields.school);
     fd.append('ambition', fields.ambition);
     fd.append('profileVisibility', JSON.stringify(fields.visibility));
@@ -104,14 +108,14 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     setUpgradeNote(!!data.profileUpgradePending);
   }, [user.token, onUserUpdated]);
 
-  const current = () => ({ name: user.name, dob: user.dateOfBirth || '', bio: user.bio || '', favSubject: user.favoriteSubject || '', interests: user.hobbies || '', city: user.city || '', school: user.school || '', ambition: user.ambition || '', visibility: vis });
+  const current = () => ({ name: user.name, dob: user.dateOfBirth || '', bio: user.bio || '', favSubject: user.favoriteSubject || '', interests: user.hobbies || '', city: user.city || '', country: user.country || '', school: user.school || '', ambition: user.ambition || '', visibility: vis });
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return setMessage({ type: 'error', text: 'Your name cannot be empty.' });
     setSaving(true); setMessage(null);
     try {
-      await send({ name, dob, bio, favSubject, interests, city, school, ambition, visibility: vis, photo: photoFile });
+      await send({ name, dob, bio, favSubject, interests, city, country, school, ambition, visibility: vis, photo: photoFile });
       setMessage({ type: 'ok', text: 'Profile saved.' }); setEditing(false); setPhotoFile(null);
     } catch (err: any) { setMessage({ type: 'error', text: err.message }); }
     setSaving(false);
@@ -129,6 +133,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     photoUrl: vis.photo ? user.photoUrl : null,
     studentClass: vis.class ? user.studentClass : undefined,
     city: vis.city && user.city ? user.city : undefined,
+    country: vis.country && user.country ? user.country : undefined,
     school: vis.school && user.school ? user.school : undefined,
     bio: vis.bio && user.bio ? user.bio : undefined,
     interests: vis.interests && user.hobbies ? user.hobbies : undefined,
@@ -137,7 +142,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     birthday: vis.birthday ? formatBirthday(user.dateOfBirth) : undefined,
     view: 'student',
   };
-  const myView: PublicProfile = { ...preview, photoUrl: user.photoUrl, studentClass: user.studentClass, city: user.city || undefined, school: user.school || undefined, bio: user.bio || undefined, interests: user.hobbies || undefined, favoriteSubject: user.favoriteSubject || undefined, ambition: user.ambition || undefined, birthday: formatBirthday(user.dateOfBirth), view: 'self' };
+  const myView: PublicProfile = { ...preview, photoUrl: user.photoUrl, studentClass: user.studentClass, city: user.city || undefined, country: user.country || undefined, school: user.school || undefined, bio: user.bio || undefined, interests: user.hobbies || undefined, favoriteSubject: user.favoriteSubject || undefined, ambition: user.ambition || undefined, birthday: formatBirthday(user.dateOfBirth), view: 'self' };
 
   // school marks
   const [entries, setEntries] = useState<MarksEntry[]>([]);
@@ -211,7 +216,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
         {tabBtn('marks', 'School marks', GraduationCap)}
       </div>
 
-      {upgradeNote && <div className="text-xs font-bold rounded-lg px-3 py-2.5 border text-amber-400 bg-amber-500/10 border-amber-500/20">City, school, ambition and privacy choices are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
+      {upgradeNote && <div className="text-xs font-bold rounded-lg px-3 py-2.5 border text-amber-400 bg-amber-500/10 border-amber-500/20">Some new profile details (city, country, school, ambition, privacy choices) are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
 
       {tab === 'profile' && (
         <>
@@ -237,6 +242,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
                 <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
                 <div><label className={labelCls}>Class (taken automatically)</label><input className={`${inputCls} opacity-70`} value={classLabel(user.studentClass) || '--'} disabled /></div>
                 <div><label className={labelCls}>City</label><input className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} maxLength={60} placeholder="e.g. Ghaziabad" /></div>
+                <div><label className={labelCls}>Country</label><input className={inputCls} list="country-ideas" value={country} onChange={(e) => setCountry(e.target.value)} maxLength={60} placeholder="e.g. India" /><datalist id="country-ideas">{['India', 'Canada', 'United Arab Emirates', 'United States', 'United Kingdom', 'Australia', 'Singapore', 'Qatar', 'Saudi Arabia', 'Nepal'].map((c) => <option key={c} value={c} />)}</datalist></div>
                 <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
                 <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
                 <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>
