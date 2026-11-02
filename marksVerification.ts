@@ -11,6 +11,8 @@ export interface DocumentRead {
   examNameOnDocument: string;
   looksEdited: boolean;
   editedReason: string;
+  authenticityDoubt?: boolean;
+  authenticityReason?: string;
   perEntry: { entryId: string; foundOnDocument: boolean; marksShown: number | null; maxShown: number | null; legible: boolean }[]; // -1 (or null) = not shown
 }
 export type Status = "verified" | "mismatch" | "review" | "unverified";
@@ -28,6 +30,8 @@ export const VERIFY_TOOL = {
       examNameOnDocument: { type: "string", description: "The exam named on the document (for example 'Half Yearly', 'PT-2'). Empty string if none." },
       looksEdited: { type: "boolean", description: "true ONLY if there are clear signs the marks were tampered with: digits overwritten or whitened out, a number pasted over another, fonts or ink that differ for one number, totals that do not add up. false for ordinary neat or messy writing." },
       editedReason: { type: "string", description: "If looksEdited is true, say what you saw. Otherwise an empty string." },
+      authenticityDoubt: { type: "boolean", description: "true if you have a real doubt that this is a genuine school document photographed by the student: for example it looks like a photo of another screen showing a typed mock-up, there is no school letterhead, stamp or any school identity beyond a typed name, the layout or fonts look home-made, or details contradict each other. false for an ordinary genuine-looking page, including a plain photocopy." },
+      authenticityReason: { type: "string", description: "If authenticityDoubt is true, say briefly what makes you doubt it. Otherwise an empty string." },
       perEntry: {
         type: "array",
         description: "One item for EVERY claimed entry given in the request, in the same order.",
@@ -44,7 +48,7 @@ export const VERIFY_TOOL = {
         },
       },
     },
-    required: ["documentKind", "schoolNameOnDocument", "studentNameOnDocument", "examNameOnDocument", "looksEdited", "editedReason", "perEntry"],
+    required: ["documentKind", "schoolNameOnDocument", "studentNameOnDocument", "examNameOnDocument", "looksEdited", "editedReason", "authenticityDoubt", "authenticityReason", "perEntry"],
   },
 };
 
@@ -55,7 +59,8 @@ Rules:
 - Do NOT calculate, convert or round: if the document shows 17/20 report marksShown 17 and maxShown 20; if it shows only "17", report marksShown 17 and maxShown -1. If it shows a percentage only, report marksShown -1.
 - Do NOT use the claimed numbers to help you read: read the document first and report what it says even if it differs from the claim. If a number is unclear, set legible false and marksShown -1.
 - A grand total, rank or percentage line is not a subject entry.
-- Only set looksEdited true for clear signs of tampering, not for untidy handwriting.`;
+- Only set looksEdited true for clear signs of tampering, not for untidy handwriting.
+- Set authenticityDoubt true only for a real doubt that the page is a genuine school document (see the field description). A teacher will look at anything you flag, so do not flag ordinary photos, shadows, creases or photocopies.`;
 
 export function buildClaimText(examName: string, academicYear: string, claimed: ClaimedEntry[]): string {
   return `The student says their marks for ${examName} (school year ${academicYear}) are:\n` +
@@ -93,6 +98,7 @@ export function decideVerification(args: { claimed: ClaimedEntry[]; read: Docume
   if (profileSchool && !schoolNamesAgree(String(read.schoolNameOnDocument), profileSchool)) concerns.push(`the school on the document ("${String(read.schoolNameOnDocument).slice(0, 60)}") is different from the school in your profile ("${profileSchool.slice(0, 60)}")`);
   if (String(read.studentNameOnDocument || "").trim() && !personNamesAgree(String(read.studentNameOnDocument), profileName)) concerns.push(`the name on the document ("${String(read.studentNameOnDocument).slice(0, 40)}") does not look like your name`);
   if (read.looksEdited === true) concerns.push("part of the document looks changed");
+  if (read.authenticityDoubt === true) concerns.push("the page may not be a genuine school document");
 
   const byId = new Map<string, DocumentRead["perEntry"][number]>((Array.isArray(read.perEntry) ? read.perEntry : []).map((e) => [String(e.entryId), e]));
   const near = (a: number, b: number) => Math.abs(a - b) < 0.01;

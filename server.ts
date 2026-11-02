@@ -13,6 +13,7 @@ import AdmZip from "adm-zip";
 import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url } from "./sessionToken.js";
 import { makeAccountGate } from "./accountGate.js";
 import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "./marksVerification.js";
+import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -8834,7 +8835,7 @@ function buildApp(): express.Express {
     }
 
     const ready = await profileColumnsReady();
-    const { data: me } = await supabase.from("users").select(ready ? "name,school" : "name").eq("email", auth.email).maybeSingle();
+    const { data: me } = await supabase.from("users").select(ready ? "name,school,student_class" : "name,student_class").eq("email", auth.email).maybeSingle();
     const profileName = String((me as any)?.name || "");
     const profileSchool = String((me as any)?.school || "");
 
@@ -8869,8 +8870,114 @@ function buildApp(): express.Express {
         proof_paths: proofPaths.length ? proofPaths : null, updated_at: now,
       }).eq("id", r.id).eq("student_email", auth.email);
     }
+    // Anything in doubt (a different school or name, signs of editing, a page that may not be genuine) is e-mailed to the
+    // teacher, who decides with one tap. The student has already been told it is "with your teacher".
+    if (results.some((r) => r.status === "review")) {
+      try {
+        const reasons = [...decided.concerns];
+        if (read.editedReason) reasons.push(`what the reader noticed about editing: ${String(read.editedReason).slice(0, 200)}`);
+        if (read.authenticityReason) reasons.push(`what the reader noticed about the page: ${String(read.authenticityReason).slice(0, 200)}`);
+        await emailTeacherForMarksReview({
+          req, studentName: profileName, studentEmail: auth.email, studentClass: String((me as any)?.student_class || ""), profileSchool,
+          schoolOnDocument: String(read.schoolNameOnDocument || ""), studentOnDocument: String(read.studentNameOnDocument || ""),
+          academicYear, examName, reasons,
+          lines: claimed.map((c) => { const seen = read.perEntry?.find((p: any) => String(p.entryId) === c.entryId); const shown = seen && Number(seen.marksShown) >= 0 ? `${Number(seen.marksShown)}${Number(seen.maxShown) >= 0 ? "/" + Number(seen.maxShown) : ""}` : "not found"; const r = results.find((x) => x.id === c.entryId); return { subject: c.subject, entered: `${c.marksObtained}/${c.maxMarks}`, onDocument: shown, decision: r?.status || "" }; }),
+        });
+      } catch (err: any) { console.error("marks review e-mail failed:", err?.message); }
+    }
     return res.json({ success: true, results, schoolOnDocument: String(read.schoolNameOnDocument).slice(0, 100), profileSchoolMissing: !profileSchool });
   });
+
+  // ── TEACHER APPROVAL OF MARKS THAT THE CHECK COULD NOT CONFIRM ──
+  const escHtml = (v: any) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+  const APPROVED_NOTE = "Approved by your teacher.";
+  const REJECTED_NOTE = "Your teacher could not confirm these marks from the page you uploaded. Please check your marks and upload a clearer page.";
+
+  async function emailTeacherForMarksReview(a: {
+    req: express.Request; studentName: string; studentEmail: string; studentClass: string; profileSchool: string; schoolOnDocument: string; studentOnDocument: string;
+    academicYear: string; examName: string; reasons: string[]; lines: { subject: string; entered: string; onDocument: string; decision: string }[];
+  }) {
+    const appUrl = (process.env.APP_URL || `${a.req.protocol}://${a.req.get("host")}`).replace(/\/$/, "");
+    const link = `${appUrl}/api/marks-review?token=${encodeURIComponent(signMarksReviewToken({ email: a.studentEmail, academicYear: a.academicYear, examName: a.examName }, SESSION_SECRET))}`;
+    const cls = a.studentClass === "Canadian" ? "Canadian Board" : a.studentClass ? `Class ${a.studentClass}` : "";
+    const text = `Hello Rohit,\n\nA student's school marks need your decision.\n\n- Student: ${a.studentName} (${cls})\n- Exam: ${a.examName} ${a.academicYear}\n- School in profile: ${a.profileSchool || "(not filled in)"}\n- School on the page: ${a.schoolOnDocument}\n- Name on the page: ${a.studentOnDocument || "(not visible)"}\n\nWhy it was sent to you:\n${a.reasons.map((r) => "- " + r).join("\n")}\n\nMarks:\n${a.lines.map((l) => `- ${l.subject}: entered ${l.entered}, page shows ${l.onDocument} (${l.decision})`).join("\n")}\n\nOpen the uploaded page and approve or reject:\n${link}\n\nConceptual Learning Online`;
+    const rows = a.lines.map((l) => `<tr><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.subject)}</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.entered)}</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.onDocument)}</td></tr>`).join("");
+    const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1e293b;background:#f8fafc">
+      <h2 style="margin-top:0;border-bottom:2px solid #f59e0b;padding-bottom:10px">School marks need your decision</h2>
+      <p style="font-size:15px"><b>${escHtml(a.studentName)}</b> (${escHtml(cls)}) uploaded a page for <b>${escHtml(a.examName)} ${escHtml(a.academicYear)}</b>.</p>
+      <p style="font-size:14px;margin:6px 0">School in profile: <b>${escHtml(a.profileSchool || "(not filled in)")}</b><br/>School on the page: <b>${escHtml(a.schoolOnDocument)}</b><br/>Name on the page: <b>${escHtml(a.studentOnDocument || "(not visible)")}</b></p>
+      <p style="font-size:14px;margin:14px 0 4px"><b>Why this came to you:</b></p>
+      <ul style="font-size:14px;margin:0 0 12px;padding-left:20px">${a.reasons.map((r) => `<li>${escHtml(r)}</li>`).join("")}</ul>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;font-size:14px"><tr style="background:#f1f5f9"><th align="left" style="padding:8px 12px">Subject</th><th align="left" style="padding:8px 12px">Student entered</th><th align="left" style="padding:8px 12px">Page shows</th></tr>${rows}</table>
+      <div style="text-align:center;margin:26px 0"><a href="${link}" style="background:#0891b2;color:#fff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold">Open the page and decide</a></div>
+      <p style="font-size:12px;color:#64748b">The link works for 14 days. You can also decide from the School Progress card on your admin screen.</p></div>`;
+    for (const to of ADMIN_NOTIFICATION_EMAILS) {
+      await sendSimulatedEmail(to, `Marks need your decision: ${a.studentName} - ${a.examName} ${a.academicYear}`, text, "incoming", html);
+    }
+  }
+
+  const reviewPage = (title: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escHtml(title)}</title>
+    <style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:16px}main{max-width:640px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px}
+    h1{font-size:20px;margin:0 0 6px}table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}td,th{padding:7px 10px;border-bottom:1px solid #e2e8f0;text-align:left}img{max-width:100%;border:1px solid #cbd5e1;border-radius:8px;margin:8px 0}
+    .why{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:14px}.row{display:flex;gap:12px;margin-top:18px}.row form{flex:1}button{width:100%;padding:14px;border:0;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;color:#fff}.ok{background:#059669}.no{background:#dc2626}.muted{color:#64748b;font-size:13px}</style></head><body><main>${body}</main></body></html>`;
+
+  // The link in the e-mail opens this page. Nothing is changed by opening it (so a mail scanner that "visits" the link
+  // cannot approve anything); the teacher must press a button, which sends the decision.
+  app.get("/api/marks-review", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Robots-Tag", "noindex");
+    if (rateLimited(req, res, "marks-review", 60, 60 * 60_000)) return;
+    const target = verifyMarksReviewToken(String(req.query.token || ""), SESSION_SECRET);
+    if (!target) return res.status(403).type("html").send(reviewPage("Link not valid", "<h1>This link is not valid or has expired</h1><p class=\"muted\">Open the School Progress card on your admin screen to decide.</p>"));
+    const { data: rows } = await supabase.from("school_marks").select("*").eq("student_email", target.email).eq("academic_year", target.academicYear).eq("exam_name", target.examName);
+    const { data: st } = await supabase.from("users").select("name,student_class").eq("email", target.email).maybeSingle();
+    if (!rows || rows.length === 0 || !st) return res.type("html").send(reviewPage("Not found", "<h1>These marks were not found</h1><p class=\"muted\">The student may have removed them.</p>"));
+    const waiting = rows.filter((r: any) => r.verification_status === "review");
+    const proofPaths: string[] = (rows.find((r: any) => Array.isArray(r.proof_paths) && r.proof_paths.length)?.proof_paths as string[]) || [];
+    const imgs: string[] = [];
+    for (const p of proofPaths) {
+      const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(p, 600);
+      if (signed?.signedUrl) imgs.push(p.endsWith(".pdf") ? `<p><a href="${escHtml(signed.signedUrl)}" target="_blank" rel="noopener">Open the uploaded PDF</a></p>` : `<img src="${escHtml(signed.signedUrl)}" alt="Uploaded page">`);
+    }
+    const cls = st.student_class === "Canadian" ? "Canadian Board" : st.student_class ? `Class ${st.student_class}` : "";
+    const table = `<table><tr><th>Subject</th><th>Student entered</th><th>Status</th></tr>${rows.map((r: any) => `<tr><td>${escHtml(r.subject)}</td><td>${escHtml(r.marks_obtained)}/${escHtml(r.max_marks)}</td><td>${escHtml(r.verification_status || "unverified")}</td></tr>`).join("")}</table>`;
+    const notes = waiting.length ? `<div class="why">${waiting.map((r: any) => escHtml(r.verification_note || "")).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i).join("<br><br>")}</div>` : "";
+    const buttons = waiting.length === 0
+      ? `<p class="muted"><b>Nothing is waiting for a decision here</b> -- it has already been decided.</p>`
+      : `<div class="row"><form method="POST" action="/api/marks-review"><input type="hidden" name="token" value="${escHtml(String(req.query.token))}"><input type="hidden" name="action" value="approve"><button class="ok">Approve the marks</button></form><form method="POST" action="/api/marks-review"><input type="hidden" name="token" value="${escHtml(String(req.query.token))}"><input type="hidden" name="action" value="reject"><button class="no">Do not approve</button></form></div>`;
+    return res.type("html").send(reviewPage("Marks need your decision", `<h1>${escHtml(st.name)} <span class="muted">${escHtml(cls)}</span></h1><p class="muted">${escHtml(target.examName)} ${escHtml(target.academicYear)}</p>${notes}${table}${imgs.join("") || "<p class=\"muted\">No page was stored.</p>"}${buttons}`));
+  });
+
+  app.post("/api/marks-review", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (rateLimited(req, res, "marks-review-post", 30, 60 * 60_000)) return;
+    const target = verifyMarksReviewToken(String(req.body.token || ""), SESSION_SECRET);
+    const action = String(req.body.action || "");
+    if (!target || (action !== "approve" && action !== "reject")) return res.status(403).type("html").send(reviewPage("Link not valid", "<h1>This link is not valid or has expired</h1>"));
+    const now = new Date().toISOString();
+    const update = action === "approve"
+      ? { verification_status: "verified", verification_note: APPROVED_NOTE, verified_at: now, updated_at: now }
+      : { verification_status: "mismatch", verification_note: REJECTED_NOTE, verified_at: null, updated_at: now };
+    const { data: changed, error } = await supabase.from("school_marks").update(update).eq("student_email", target.email).eq("academic_year", target.academicYear).eq("exam_name", target.examName).eq("verification_status", "review").select("id");
+    if (error) return res.status(500).type("html").send(reviewPage("Error", "<h1>Something went wrong</h1><p class=\"muted\">Please try again, or decide from your admin screen.</p>"));
+    const n = (changed || []).length;
+    return res.type("html").send(reviewPage("Done", n === 0 ? "<h1>Already decided</h1><p class=\"muted\">Nothing was waiting for a decision.</p>" : `<h1>${action === "approve" ? "Approved" : "Not approved"}</h1><p>${n} mark${n === 1 ? "" : "s"} ${action === "approve" ? "now show as verified" : "were not approved; the student will see a note asking them to check the marks or upload a clearer page"}.</p>`));
+  });
+
+  // The same decision from inside the app (School Progress on the admin screen).
+  app.post("/api/admin/school-marks/decide", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const id = String(req.body.id || ""), action = String(req.body.action || "");
+    if (!/^[0-9a-f-]{36}$/i.test(id) || (action !== "approve" && action !== "reject")) return res.status(400).json({ error: "Which entry, and approve or reject?" });
+    const now = new Date().toISOString();
+    const update = action === "approve"
+      ? { verification_status: "verified", verification_note: APPROVED_NOTE, verified_at: now, updated_at: now }
+      : { verification_status: "mismatch", verification_note: REJECTED_NOTE, verified_at: null, updated_at: now };
+    const { error } = await supabase.from("school_marks").update(update).eq("id", id);
+    if (error) return res.status(500).json({ error: "Could not save the decision." });
+    return res.json({ success: true });
+  });
+
 
   // Teacher: open the page a student uploaded as proof (links last 5 minutes).
   app.get("/api/admin/school-marks/proof", async (req, res) => {

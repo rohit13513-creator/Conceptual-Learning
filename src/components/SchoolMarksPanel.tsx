@@ -21,6 +21,7 @@ interface Props {
   verificationReady?: boolean; // the checking feature is switched on
   onVerify?: (exam: { academicYear: string; examName: string }, files: File[]) => Promise<VerifyOutcome>;
   onViewProof?: (id: string) => Promise<string[]>; // teacher: links to the uploaded page
+  onDecide?: (id: string, action: 'approve' | 'reject') => Promise<void>; // teacher: approve or reject marks that need a decision
 }
 
 const card = (light: boolean) => `border rounded-2xl p-4 sm:p-5 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`;
@@ -93,7 +94,7 @@ function ProgressChart({ entries, isLightMode }: { entries: MarksEntry[]; isLigh
   );
 }
 
-export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDelete, verificationReady, onVerify, onViewProof }: Props) {
+export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDelete, verificationReady, onVerify, onViewProof, onDecide }: Props) {
   const groups = useMemo(() => groupExams(entries), [entries]);
   const summary = useMemo(() => summariseSubjects(entries), [entries]);
 
@@ -283,6 +284,12 @@ export function SchoolMarksPanel({ entries, isLightMode, editable, onSave, onDel
                     </div>
                     {(e.verificationStatus === 'mismatch' || e.verificationStatus === 'review') && e.verificationNote && (
                       <p className={`mt-0.5 text-[11px] font-semibold ${e.verificationStatus === 'review' ? 'text-amber-400' : 'text-rose-400'}`}>{e.verificationNote}</p>
+                    )}
+                    {!editable && onDecide && (e.verificationStatus === 'review' || e.verificationStatus === 'mismatch') && (
+                      <div className="mt-1 flex gap-2">
+                        <button onClick={() => onDecide(e.id, 'approve')} className="px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wide cursor-pointer bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25">Approve</button>
+                        <button onClick={() => onDecide(e.id, 'reject')} className="px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wide cursor-pointer bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25">Do not approve</button>
+                      </div>
                     )}
                     {proofLinks[e.id] && (
                       <p className="mt-0.5 text-[11px] font-semibold text-cyan-400">{proofLinks[e.id].length === 0 ? 'No page found.' : proofLinks[e.id].map((u, i) => <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="underline mr-3">Page {i + 1}</a>)}</p>

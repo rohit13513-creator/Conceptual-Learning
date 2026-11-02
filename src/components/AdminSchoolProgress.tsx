@@ -39,6 +39,18 @@ export default function AdminSchoolProgress({ token, isLightMode }: { token: str
     } catch { return []; }
   };
 
+  const decide = async (id: string, action: 'approve' | 'reject') => {
+    try {
+      await fetch('/api/admin/school-marks/decide', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ id, action }) });
+      if (openEmail) {
+        const r = await fetch(`/api/admin/school-marks/student?email=${encodeURIComponent(openEmail)}`, { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json();
+        setEntries(d.entries || []);
+      }
+      load();
+    } catch { /* the list simply stays as it was */ }
+  };
+
   const open = async (email: string) => {
     if (openEmail === email) { setOpenEmail(null); return; }
     setOpenEmail(email); setEntries([]); setEntriesLoading(true);
@@ -89,7 +101,7 @@ export default function AdminSchoolProgress({ token, isLightMode }: { token: str
                 </button>
                 {openEmail === r.email && (
                   <div className={`p-3 ${light ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
-                    {entriesLoading ? <p className="text-xs font-semibold text-slate-500">Loading...</p> : <SchoolMarksPanel entries={entries} isLightMode={light} editable={false} onViewProof={viewProof} />}
+                    {entriesLoading ? <p className="text-xs font-semibold text-slate-500">Loading...</p> : <SchoolMarksPanel entries={entries} isLightMode={light} editable={false} onViewProof={viewProof} onDecide={decide} />}
                   </div>
                 )}
               </div>

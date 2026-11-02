@@ -13,7 +13,7 @@ export interface AccountGateDeps {
 // Endpoints that must work without being logged in (or that handle their own secret).
 const PUBLIC_PATHS = new Set([
   "/health", "/login", "/login/google", "/register", "/otp/send",
-  "/forgot-password/request", "/forgot-password/reset", "/session/clear", "/user/approve-external",
+  "/forgot-password/request", "/forgot-password/reset", "/session/clear", "/user/approve-external", "/marks-review",
 ]);
 
 export function makeAccountGate(deps: AccountGateDeps) {
