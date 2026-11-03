@@ -9,6 +9,7 @@ export interface PublicProfile {
   photoUrl?: string | null;
   studentClass?: string;
   city?: string;
+  state?: string;
   country?: string;
   school?: string;
   bio?: string;
@@ -45,7 +46,7 @@ function Row({ icon: Icon, label, children, light }: { icon: React.ElementType; 
 }
 
 export function ProfileCardBody({ profile, isLightMode }: { profile: PublicProfile; isLightMode: boolean }) {
-  const chips = [classLabel(profile.studentClass), profile.city, profile.country, profile.school].filter(Boolean) as string[];
+  const chips = [classLabel(profile.studentClass), [profile.city, profile.state].filter(Boolean).join(', '), profile.country, profile.school].filter(Boolean) as string[];
   const hasDetails = profile.bio || profile.interests || profile.favoriteSubject || profile.ambition || profile.birthday;
   return (
     <div className={`rounded-2xl border overflow-hidden ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/70 border-slate-800'}`}>

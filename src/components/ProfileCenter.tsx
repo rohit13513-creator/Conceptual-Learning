@@ -4,7 +4,7 @@ import { ProfileCardBody, PublicProfile, classLabel } from './ProfileCardBody';
 import { SchoolMarksPanel, MarksPayload } from './SchoolMarksPanel';
 import type { MarksEntry } from './schoolMarksUtil';
 import type { VerifyOutcome } from './VerifyMarksModal';
-import { COUNTRIES, citiesOf } from '../../places';
+import { COUNTRIES, statesOf, citiesOf, stateWord } from '../../places';
 
 // The student's own profile: a social-style page (photo, class, city, school, interests ...), the privacy choices
 // that decide what other students see, and the School Marks tracker. Class is taken automatically from the account.
@@ -20,6 +20,7 @@ export interface ProfileUser {
   favoriteSubject: string | null;
   hobbies: string | null;
   city?: string | null;
+  state?: string | null;
   country?: string | null;
   school?: string | null;
   ambition?: string | null;
@@ -34,7 +35,7 @@ const DEFAULT_VISIBILITY: Record<string, boolean> = {
 const PRIVACY_ROWS: { key: string; title: string; hint: string }[] = [
   { key: 'photo', title: 'Profile photo', hint: 'Your picture. If hidden, others see your initials.' },
   { key: 'class', title: 'My class', hint: 'Taken automatically from your account.' },
-  { key: 'city', title: 'City', hint: 'The city you live in.' },
+  { key: 'city', title: 'City and state', hint: 'The city you live in.' },
   { key: 'country', title: 'Country', hint: 'The country you live in.' },
   { key: 'school', title: 'School', hint: 'The name of your school.' },
   { key: 'bio', title: 'About me', hint: 'The few lines you wrote about yourself.' },
@@ -75,6 +76,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   const [interests, setInterests] = useState(user.hobbies || '');
   const [city, setCity] = useState(user.city || '');
   const [country, setCountry] = useState(user.country || '');
+  const [stateName, setStateName] = useState(user.state || '');
   const [school, setSchool] = useState(user.school || '');
   const [ambition, setAmbition] = useState(user.ambition || '');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -84,12 +86,12 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
 
   const startEdit = () => {
     setName(user.name); setDob(user.dateOfBirth || ''); setBio(user.bio || ''); setFavSubject(user.favoriteSubject || '');
-    setInterests(user.hobbies || ''); setCity(user.city || ''); setCountry(user.country || ''); setSchool(user.school || ''); setAmbition(user.ambition || '');
+    setInterests(user.hobbies || ''); setCity(user.city || ''); setCountry(user.country || ''); setStateName(user.state || ''); setSchool(user.school || ''); setAmbition(user.ambition || '');
     setPhotoFile(null); setMessage(null); setEditing(true);
   };
 
   // Sends the WHOLE profile every time (the server replaces what is stored), with any changes applied on top.
-  const send = useCallback(async (fields: { name: string; dob: string; bio: string; favSubject: string; interests: string; city: string; country: string; school: string; ambition: string; visibility: Record<string, boolean>; photo?: File | null }) => {
+  const send = useCallback(async (fields: { name: string; dob: string; bio: string; favSubject: string; interests: string; city: string; state: string; country: string; school: string; ambition: string; visibility: Record<string, boolean>; photo?: File | null }) => {
     const fd = new FormData();
     fd.append('name', fields.name.trim());
     fd.append('dateOfBirth', fields.dob);
@@ -98,6 +100,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     fd.append('hobbies', fields.interests);
     fd.append('city', fields.city);
     fd.append('country', fields.country);
+    fd.append('state', fields.state);
     fd.append('school', fields.school);
     fd.append('ambition', fields.ambition);
     fd.append('profileVisibility', JSON.stringify(fields.visibility));
@@ -109,14 +112,14 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     setUpgradeNote(!!data.profileUpgradePending);
   }, [user.token, onUserUpdated]);
 
-  const current = () => ({ name: user.name, dob: user.dateOfBirth || '', bio: user.bio || '', favSubject: user.favoriteSubject || '', interests: user.hobbies || '', city: user.city || '', country: user.country || '', school: user.school || '', ambition: user.ambition || '', visibility: vis });
+  const current = () => ({ name: user.name, dob: user.dateOfBirth || '', bio: user.bio || '', favSubject: user.favoriteSubject || '', interests: user.hobbies || '', city: user.city || '', state: user.state || '', country: user.country || '', school: user.school || '', ambition: user.ambition || '', visibility: vis });
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return setMessage({ type: 'error', text: 'Your name cannot be empty.' });
     setSaving(true); setMessage(null);
     try {
-      await send({ name, dob, bio, favSubject, interests, city, country, school, ambition, visibility: vis, photo: photoFile });
+      await send({ name, dob, bio, favSubject, interests, city, state: stateName, country, school, ambition, visibility: vis, photo: photoFile });
       setMessage({ type: 'ok', text: 'Profile saved.' }); setEditing(false); setPhotoFile(null);
     } catch (err: any) { setMessage({ type: 'error', text: err.message }); }
     setSaving(false);
@@ -134,6 +137,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     photoUrl: vis.photo ? user.photoUrl : null,
     studentClass: vis.class ? user.studentClass : undefined,
     city: vis.city && user.city ? user.city : undefined,
+    state: vis.city && user.state ? user.state : undefined,
     country: vis.country && user.country ? user.country : undefined,
     school: vis.school && user.school ? user.school : undefined,
     bio: vis.bio && user.bio ? user.bio : undefined,
@@ -143,7 +147,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
     birthday: vis.birthday ? formatBirthday(user.dateOfBirth) : undefined,
     view: 'student',
   };
-  const myView: PublicProfile = { ...preview, photoUrl: user.photoUrl, studentClass: user.studentClass, city: user.city || undefined, country: user.country || undefined, school: user.school || undefined, bio: user.bio || undefined, interests: user.hobbies || undefined, favoriteSubject: user.favoriteSubject || undefined, ambition: user.ambition || undefined, birthday: formatBirthday(user.dateOfBirth), view: 'self' };
+  const myView: PublicProfile = { ...preview, photoUrl: user.photoUrl, studentClass: user.studentClass, city: user.city || undefined, state: user.state || undefined, country: user.country || undefined, school: user.school || undefined, bio: user.bio || undefined, interests: user.hobbies || undefined, favoriteSubject: user.favoriteSubject || undefined, ambition: user.ambition || undefined, birthday: formatBirthday(user.dateOfBirth), view: 'self' };
 
   // school marks
   const [entries, setEntries] = useState<MarksEntry[]>([]);
@@ -217,7 +221,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
         {tabBtn('marks', 'School marks', GraduationCap)}
       </div>
 
-      {upgradeNote && <div className="text-xs font-bold rounded-lg px-3 py-2.5 border text-amber-400 bg-amber-500/10 border-amber-500/20">Some new profile details (city, country, school, ambition, privacy choices) are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
+      {upgradeNote && <div className="text-xs font-bold rounded-lg px-3 py-2.5 border text-amber-400 bg-amber-500/10 border-amber-500/20">Some new profile details (city, state, country, school, ambition, privacy choices) are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
 
       {tab === 'profile' && (
         <>
@@ -242,8 +246,9 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
               <div className="grid sm:grid-cols-2 gap-3">
                 <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
                 <div><label className={labelCls}>Class (taken automatically)</label><input className={`${inputCls} opacity-70`} value={classLabel(user.studentClass) || '--'} disabled /></div>
-                <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!citiesOf(e.target.value).includes(city)) setCity(''); }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!country}><option value="">{country ? 'Choose your city' : 'Choose your country first'}</option>{city && !citiesOf(country).includes(city) && <option value={city}>{city}</option>}{citiesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!statesOf(e.target.value).includes(stateName)) { setStateName(''); setCity(''); } }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label className={labelCls}>{country ? stateWord(country) : 'State'}</label><select className={inputCls} value={stateName} onChange={(e) => { setStateName(e.target.value); if (!citiesOf(country, e.target.value).includes(city)) setCity(''); }} disabled={!country}><option value="">{country ? `Choose your ${stateWord(country).toLowerCase()}` : 'Choose your country first'}</option>{statesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!stateName}><option value="">{stateName ? 'Choose your city' : (country ? `Choose your ${stateWord(country).toLowerCase()} first` : 'Choose your country first')}</option>{city && !citiesOf(country, stateName).includes(city) && <option value={city}>{city}</option>}{citiesOf(country, stateName).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
                 <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
                 <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
                 <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>

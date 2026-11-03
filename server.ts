@@ -14,7 +14,7 @@ import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url 
 import { makeAccountGate } from "./accountGate.js";
 import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "./marksVerification.js";
 import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken.js";
-import { COUNTRIES, citiesOf } from "./places.js";
+import { COUNTRIES, statesOf, citiesOf } from "./places.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -39,6 +39,7 @@ interface User {
   favoriteSubject: string | null;
   hobbies: string | null;
   city: string | null;
+  state: string | null;
   country: string | null;
   school: string | null;
   ambition: string | null;
@@ -1892,7 +1893,13 @@ function effectiveVisibility(raw: any): Record<string, boolean> {
 
 // The new profile columns and the school-marks table are created by a SQL script that is run once in Supabase.
 // Until then these report "not ready" and the related features stay quietly off instead of failing.
-const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false }, verify: { at: 0, ok: false }, country: { at: 0, ok: false } };
+const schemaState = { profile: { at: 0, ok: false }, marks: { at: 0, ok: false }, verify: { at: 0, ok: false }, country: { at: 0, ok: false }, state: { at: 0, ok: false } };
+async function stateColumnReady(): Promise<boolean> {
+  if (Date.now() - schemaState.state.at < 30_000) return schemaState.state.ok;
+  const { error } = await supabase.from("users").select("state").limit(1);
+  schemaState.state = { at: Date.now(), ok: !error };
+  return !error;
+}
 async function countryColumnReady(): Promise<boolean> {
   if (Date.now() - schemaState.country.at < 30_000) return schemaState.country.ok;
   const { error } = await supabase.from("users").select("country").limit(1);
@@ -1937,6 +1944,7 @@ function mapUserRow(row: any): User {
     favoriteSubject: row.favorite_subject || null,
     hobbies: row.hobbies || null,
     city: row.city || null,
+    state: row.state || null,
     country: row.country || null,
     school: row.school || null,
     ambition: row.ambition || null,
@@ -8584,7 +8592,7 @@ function buildApp(): express.Express {
   }, async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { name, dateOfBirth, bio, favoriteSubject, hobbies, city, country, school, ambition, profileVisibility } = req.body;
+    const { name, dateOfBirth, bio, favoriteSubject, hobbies, city, state, country, school, ambition, profileVisibility } = req.body;
 
     const emailNormalized = auth.email;
     const { data: existingUser } = await supabase.from("users").select("email").eq("email", emailNormalized).maybeSingle();
@@ -8601,17 +8609,21 @@ function buildApp(): express.Express {
     // City, school, ambition and the privacy choices need the new database columns (supabase_profiles_and_marks.sql).
     // Until those exist they are skipped, and everything else still saves.
     let profileUpgradePending = false;
-    const sentNewFields = city !== undefined || country !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
+    const sentNewFields = city !== undefined || state !== undefined || country !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
     if (sentNewFields) {
       if (await profileColumnsReady()) {
-        // Country and city come from our own lists (places.ts). A value that is not on the list is ignored, so what is stored stays as it was.
+        // Country, state and city come from our own lists (places.ts). A value that is not on the list (or does not belong
+        // to the country / state chosen with it) is ignored, so what is stored stays as it was.
         const pickedCountry = country !== undefined ? (oneLine(country, 60) || "") : undefined;
         const countryOk = pickedCountry !== undefined && (pickedCountry === "" || COUNTRIES.includes(pickedCountry));
+        const pickedState = state !== undefined ? (oneLine(state, 60) || "") : undefined;
+        const stateOk = pickedState !== undefined && countryOk && (pickedState === "" || statesOf(pickedCountry as string).includes(pickedState));
         if (city !== undefined) {
           const c = oneLine(city, 60);
-          if (!c || (countryOk && pickedCountry && citiesOf(pickedCountry).includes(c))) updates.city = c;
+          if (!c || (stateOk && pickedCountry && pickedState && citiesOf(pickedCountry, pickedState).includes(c))) updates.city = c;
         }
         if (countryOk) { if (await countryColumnReady()) updates.country = pickedCountry || null; else if (pickedCountry) profileUpgradePending = true; }
+        if (stateOk) { if (await stateColumnReady()) updates.state = pickedState || null; else if (pickedState) profileUpgradePending = true; }
         if (school !== undefined) updates.school = oneLine(school, 100);
         if (ambition !== undefined) updates.ambition = oneLine(ambition, 100);
         if (profileVisibility !== undefined) {
@@ -8674,7 +8686,7 @@ function buildApp(): express.Express {
     const target = String(req.query.email || "").toLowerCase().trim();
     if (!target) return res.status(400).json({ error: "Which student?" });
     const ready = await profileColumnsReady();
-    const { data: row } = await supabase.from("users").select(PROFILE_VIEW_FIELDS + (ready ? ",city,school,ambition,profile_visibility" : "") + ((await countryColumnReady()) ? ",country" : "")).eq("email", target).maybeSingle();
+    const { data: row } = await supabase.from("users").select(PROFILE_VIEW_FIELDS + (ready ? ",city,school,ambition,profile_visibility" : "") + ((await countryColumnReady()) ? ",country" : "") + ((await stateColumnReady()) ? ",state" : "")).eq("email", target).maybeSingle();
     if (!row || (row as any).status !== "approved") return res.status(404).json({ error: "This profile is not available." });
     const r: any = row;
     const isSelf = auth.email === target;
@@ -8693,6 +8705,7 @@ function buildApp(): express.Express {
     if (show("class") && r.student_class) profile.studentClass = r.student_class;
     if (show("city") && r.city) profile.city = r.city;
     if (show("country") && r.country) profile.country = r.country;
+    if (show("city") && r.state) profile.state = r.state;
     if (show("school") && r.school) profile.school = r.school;
     if (show("bio") && r.bio) profile.bio = r.bio;
     if (show("interests") && r.hobbies) profile.interests = r.hobbies;
