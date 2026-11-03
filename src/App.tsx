@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import { setDownloadAccess } from './utils/downloadAccess';
 import { lazyView } from './lazyView';
 import { ProfileLink } from './components/ProfileLink';
+import { MockTestSeries } from './components/MockTestSeries';
 const ProfileCenter = lazyView(() => import('./components/ProfileCenter'));
 const StudentProfileCard = lazyView(() => import('./components/StudentProfileCard'));
 const AdminSchoolProgress = lazyView(() => import('./components/AdminSchoolProgress'));
@@ -5100,6 +5101,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               </button>
             </div>
 
+            {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
+
             {/* Revision box -- available to every student regardless of online/offline */}
             <button
               onClick={() => changeView('revision')}
@@ -5210,6 +5213,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               </div>
               <ChevronRight className="w-6 h-6 shrink-0 opacity-80 group-hover:translate-x-1 transition-transform" />
             </button>)}
+
+            {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
 
             <div className={`grid grid-cols-1 gap-5 ${isCanadianStudent ? '' : 'lg:grid-cols-2'}`}>
 

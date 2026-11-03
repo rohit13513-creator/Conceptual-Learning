@@ -5,6 +5,7 @@ import { handleProtected, realDeps } from "../protectedFiles.js";
 //   /assets/<file>      -> ?k=a&p=<file>
 //   /diagrams/<path>    -> ?k=d&p=<path>
 //   /download/<bucket>/<file>.pdf -> ?k=f&p=<bucket>/<file>.pdf
+//   /mocktest/<test id>/<paper|key>[/download] -> ?k=m&p=<test id>/<paper|key>[/download]
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   const params = new URL(req.url || "/", "http://localhost").searchParams;
   try {

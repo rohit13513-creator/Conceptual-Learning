@@ -15,6 +15,7 @@ import { makeAccountGate } from "./accountGate.js";
 import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "./marksVerification.js";
 import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken.js";
 import { COUNTRIES, statesOf, citiesOf } from "./places.js";
+import { MOCK_SERIES, MOCK_TESTS } from "./mockTests.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -8815,6 +8816,25 @@ function buildApp(): express.Express {
     for (const e of entries.slice().sort(compareMarks)) bySubject.set(e.subject, e);
     return [...bySubject.values()].map((e) => ({ subject: e.subject, examName: e.examName, academicYear: e.academicYear, percentage: e.percentage, verified: e.verificationStatus === "verified" }));
   }
+
+  // The Class X Mock Test Series shown on the home page. Only students of that class (and the teacher) get the list;
+  // the PDFs themselves are opened through /mocktest/... (protectedFiles.ts, kind "m"), which checks the login again.
+  app.get("/api/mock-tests", async (req, res) => {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const { data: row } = await supabase.from("users").select("student_class, student_type, role").eq("email", auth.email).maybeSingle();
+    if (!row) return res.status(404).json({ error: "Account not found." });
+    const isAdmin = row.role === "admin";
+    if (!isAdmin && row.student_class !== MOCK_SERIES.classLabel) return res.json({ series: null, tests: [], canDownload: false });
+    return res.json({
+      series: { title: MOCK_SERIES.title, summary: MOCK_SERIES.summary, totalTests: MOCK_SERIES.totalTests },
+      canDownload: isAdmin || row.student_type !== "online",
+      tests: MOCK_TESTS.filter((t) => t.classLabel === MOCK_SERIES.classLabel).map((t) => ({
+        id: t.id, number: t.number, title: t.title, subject: t.subject, date: t.date, durationMinutes: t.durationMinutes,
+        maxMarks: t.maxMarks, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile,
+      })),
+    });
+  });
 
   app.get("/api/school-marks", async (req, res) => {
     const auth = requireAuth(req, res);

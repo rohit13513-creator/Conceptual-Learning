@@ -17,6 +17,10 @@
     {
       "source": "/download/:path*",
       "destination": "/api/protected?k=f&p=:path*"
+    },
+    {
+      "source": "/mocktest/:path*",
+      "destination": "/api/protected?k=m&p=:path*"
     }
   ],
   "crons": [

@@ -7,9 +7,10 @@ import { handleProtected, type ProtectedDeps } from "../protectedFiles.ts";
 import { signToken, base64url } from "../sessionToken.ts";
 
 const SECRET = "unit-test-secret-not-the-real-one";
-const users: Record<string, { status: string; studentType: string | null; role: string }> = {
-  "offline@x.com": { status: "approved", studentType: "offline", role: "student" },
-  "online@x.com": { status: "approved", studentType: "online", role: "student" },
+const users: Record<string, { status: string; studentType: string | null; role: string; studentClass?: string }> = {
+  "offline@x.com": { status: "approved", studentType: "offline", role: "student", studentClass: "X" },
+  "online@x.com": { status: "approved", studentType: "online", role: "student", studentClass: "X" },
+  "ix@x.com": { status: "approved", studentType: "offline", role: "student", studentClass: "IX" },
   "pending@x.com": { status: "pending", studentType: "offline", role: "student" },
   "admin@x.com": { status: "approved", studentType: "offline", role: "admin" },
 };
@@ -95,6 +96,19 @@ await check("POST not allowed", "a", chunk, { cookie: tok("offline@x.com"), meth
   const afterPdf = await fetch(`http://127.0.0.1:${port}/?k=f&p=downloads%2Fx.pdf`, { headers: { cookie } });
   ok1("rejected student: PDF refused", afterPdf.status === 403, String(afterPdf.status));
 }
+// ── Mock Test Series PDFs ──
+await check("mock test PDF, no login", "m", "x-bio-1/paper", {}, 401);
+await check("mock test paper, offline Class X student: opens", "m", "x-bio-1/paper", { cookie: tok("offline@x.com") }, 302, (r) => { const l = r.headers.get("location") || ""; return l.includes("/object/sign/downloads/mock-x-bio-1-paper.pdf") && !l.includes("download=") ? null : "bad location " + l; });
+await check("mock test answer key, ONLINE Class X student: opens", "m", "x-bio-1/key", { cookie: tok("online@x.com") }, 302, (r) => ((r.headers.get("location") || "").includes("mock-x-bio-1-key.pdf") && !(r.headers.get("location") || "").includes("download=") ? null : "bad location"));
+await check("mock test saved copy, offline student", "m", "x-bio-1/paper/download", { cookie: tok("offline@x.com") }, 302, (r) => ((r.headers.get("location") || "").includes("download=Class-X-Mock-Test-1-Question-Paper.pdf") ? null : "no download name: " + r.headers.get("location")));
+await check("mock test saved copy, ONLINE student is refused", "m", "x-bio-1/paper/download", { cookie: tok("online@x.com") }, 403);
+await check("mock test, student of another class is refused", "m", "x-bio-1/paper", { cookie: tok("ix@x.com") }, 403);
+await check("mock test, admin", "m", "x-bio-1/key/download", { cookie: tok("admin@x.com", "admin") }, 302);
+await check("mock test, pending account", "m", "x-bio-1/paper", { cookie: tok("pending@x.com") }, 403);
+await check("mock test, unknown test", "m", "x-zzz-9/paper", { cookie: tok("offline@x.com") }, 400);
+await check("mock test, wrong file kind", "m", "x-bio-1/secret", { cookie: tok("offline@x.com") }, 400);
+await check("mock test, path traversal", "m", "../x-bio-1/paper", { cookie: tok("offline@x.com") }, 400);
+await check("mock test, extra path part", "m", "x-bio-1/paper/download/more", { cookie: tok("offline@x.com") }, 400);
 await check("unknown kind", "z", chunk, { cookie: tok("offline@x.com") }, 400);
 // ── the account check that runs on every API request ──
 {

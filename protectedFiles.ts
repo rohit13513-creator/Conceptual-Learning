@@ -3,18 +3,21 @@ import path from "node:path";
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { verifyToken, readCookie, SESSION_COOKIE } from "./sessionToken.js";
+import { findMockTest } from "./mockTests.js";
 
 // Serves the study material that must only be visible after login:
 //   kind "a"  the website's notes / question-bank code files   (any approved, logged-in account)
 //   kind "d"  diagram images                                    (any approved, logged-in account)
 //   kind "f"  downloadable PDF notes                            (approved offline students and the teacher only)
+//   kind "m"  Mock Test Series PDFs (question paper, answer key) (approved students of that test's class and the teacher;
+//                                                                 saving a copy: offline students and the teacher only)
 // Nothing here is ever cached by shared caches: every response is "private", and every request is checked
 // against the login cookie (or an Authorization header) and the account's current status.
 
 export interface ProtectedDeps {
   secret: string;
   baseDir: string; // folder holding the protected files produced by the build
-  lookupUser: (email: string) => Promise<{ status: string; studentType: string | null; role: string } | null>;
+  lookupUser: (email: string) => Promise<{ status: string; studentType: string | null; role: string; studentClass?: string | null } | null>;
   readStorage: (bucket: string, objectPath: string) => Promise<Buffer | null>;
   signStorage: (bucket: string, objectPath: string, seconds: number) => Promise<string | null>; // full signed URL
 }
@@ -116,6 +119,27 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     return void res.end();
   }
 
+  if (kind === "m") {
+    // Mock Test Series: p = "<test id>/<paper|key>" to open, or "<test id>/<paper|key>/download" to save a copy.
+    const [testId, which, action, ...rest] = rel.split("/");
+    const test = findMockTest(testId || "");
+    if (rest.length || !test || (which !== "paper" && which !== "key") || (action !== undefined && action !== "download")) return send(res, 400, "Bad request");
+    if (user.role !== "admin" && user.studentClass !== test.classLabel) return send(res, 403, "This test is not part of your class.");
+    const fileName = which === "paper" ? test.paperFile : test.keyFile;
+    if (!fileName || !SAFE_PDF.test(fileName)) return send(res, 404, "Not available yet.");
+    // Opening is for every student of the class (they need the paper to take the test); a saved copy follows the
+    // same rule as every other PDF: classroom (offline) students and the teacher only.
+    const wantsDownload = action === "download";
+    if (wantsDownload && !(user.role === "admin" || user.studentType !== "online")) return send(res, 403, "PDF downloads are available to offline (classroom) students only.");
+    const signed = await deps.signStorage("downloads", fileName, 120);
+    if (!signed) return send(res, 404, "Not found");
+    const niceName = `Class-${test.classLabel}-Mock-Test-${test.number}-${which === "paper" ? "Question-Paper" : "Answer-Key"}.pdf`;
+    res.statusCode = 302;
+    res.setHeader("Location", signed + (wantsDownload ? (signed.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(niceName) : ""));
+    res.setHeader("Cache-Control", "no-store");
+    return void res.end();
+  }
+
   return send(res, 400, "Bad request");
 }
 
@@ -132,10 +156,10 @@ export function realDeps(): ProtectedDeps {
     // Read from the database on EVERY request, never cached: a student who is rejected or suspended loses
     // access to study files on their very next request.
     lookupUser: async (email) => {
-      const r = await fetch(`${url}/rest/v1/users?select=status,student_type,role&email=eq.${encodeURIComponent(email)}`, { headers });
+      const r = await fetch(`${url}/rest/v1/users?select=status,student_type,role,student_class&email=eq.${encodeURIComponent(email)}`, { headers });
       if (!r.ok) return null;
       const rows = (await r.json()) as any[];
-      return rows[0] ? { status: String(rows[0].status), studentType: rows[0].student_type ?? null, role: String(rows[0].role || "student") } : null;
+      return rows[0] ? { status: String(rows[0].status), studentType: rows[0].student_type ?? null, role: String(rows[0].role || "student"), studentClass: rows[0].student_class ?? null } : null;
     },
     readStorage: async (bucket, objectPath) => {
       const r = await fetch(`${url}/storage/v1/object/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, { headers });
