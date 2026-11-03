@@ -4987,6 +4987,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                   ) : (
                                     <span>
                                       <span className="font-black">{pa.score}/10</span>
+                                      {pa.score <= 3 && <span className="ml-1 px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[9px] uppercase tracking-wide font-black">Not done properly</span>}
                                       {pa.isLate && <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] uppercase tracking-wide font-black">Late</span>}
                                     </span>
                                   )}
@@ -5044,7 +5045,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                 <td style={{ border: '1px solid #e2e8f0', padding: '4px 6px' }}>{s.name}</td>
                                 {s.perAssignment.map((pa: any, i: number) => (
                                   <td key={i} style={{ border: '1px solid #e2e8f0', padding: '4px 6px', whiteSpace: 'nowrap' }}>
-                                    {pa.state === 'missing' ? 'Not submitted' : pa.state === 'pending' ? 'Pending' : `${pa.score}/10${pa.isLate ? ' (Late)' : ''}`}
+                                    {pa.state === 'missing' ? 'Not submitted' : pa.state === 'pending' ? 'Pending' : `${pa.score}/10${pa.score <= 3 ? ' (Not done properly)' : ''}${pa.isLate ? ' (Late)' : ''}`}
                                   </td>
                                 ))}
                                 <td style={{ border: '1px solid #e2e8f0', padding: '4px 6px', fontWeight: 700 }}>{s.total}/{s.maxPossible}</td>
@@ -9617,7 +9618,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   <h3 className="text-sm font-black tracking-tight flex items-center gap-1.5 uppercase font-mono tracking-widest text-red-400">
                     <AlertTriangle className="w-4 h-4 text-red-400" /> Missing Homework
                   </h3>
-                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date-wise list of students who haven't submitted, or submitted late, for each assignment.</p>
+                  <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Date-wise list of students who haven't uploaded, uploaded but did not do it properly (scored 3 or less out of 10), or submitted late, for each assignment.</p>
                 </div>
                 <button
                   type="button"
@@ -9643,7 +9644,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         </span>
                       </div>
                       <p className={`text-[10px] font-mono mt-0.5 flex items-center gap-1.5 ${r.missing.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        <span>{r.submittedCount}/{r.rosterCount} submitted</span>
+                        <span>{r.submittedCount}/{r.rosterCount} uploaded{r.notDoneProperly && r.notDoneProperly.length > 0 ? ` • ${r.notDoneProperly.length} not done properly` : ''}</span>
                         {r.deadline && (
                           <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-black bg-red-500/10 text-red-400 border border-red-500/20`}>
                             Deadline was {formatDeadline(r.deadline, r.targetClass === 'Canadian' ? 'canadian' : undefined)}
@@ -9652,11 +9653,23 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                       </p>
                       {r.missing.length > 0 && (
                         <div className="mt-1.5">
-                          <p className={`text-[9px] font-black uppercase tracking-wider mb-1 ${isLightMode ? 'text-red-600' : 'text-red-400'}`}>Not Submitted</p>
+                          <p className={`text-[9px] font-black uppercase tracking-wider mb-1 ${isLightMode ? 'text-red-600' : 'text-red-400'}`}>Not Uploaded</p>
                           <div className="flex flex-wrap gap-1">
                             {r.missing.map((m: any) => (
                               <span key={m.email} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLightMode ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-red-500/10 text-red-300 border border-red-500/20'}`}>
                                 {m.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {r.notDoneProperly && r.notDoneProperly.length > 0 && (
+                        <div className="mt-1.5">
+                          <p className={`text-[9px] font-black uppercase tracking-wider mb-1 ${isLightMode ? 'text-orange-600' : 'text-orange-400'}`}>Not Done Properly <span className="normal-case font-semibold opacity-80">(uploaded, but scored 3 or less out of 10)</span></p>
+                          <div className="flex flex-wrap gap-1">
+                            {r.notDoneProperly.map((m: any) => (
+                              <span key={m.email} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLightMode ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-orange-500/10 text-orange-300 border border-orange-500/20'}`}>
+                                {m.name} ({m.score}/10)
                               </span>
                             ))}
                           </div>

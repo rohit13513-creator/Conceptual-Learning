@@ -10322,6 +10322,10 @@ function buildApp(): express.Express {
     return res.json({ success: true });
   });
 
+  // A homework scored this many marks or fewer (out of 10) counts as not done properly -- students were uploading any
+  // page just to be marked as having submitted. Shown in its own section, apart from "not uploaded".
+  const HOMEWORK_NOT_DONE_MAX_SCORE = 3;
+
   // Admin report: for each recent assignment, which target-class students have not submitted yet.
   app.get("/api/admin/homework/missing", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
@@ -10329,7 +10333,7 @@ function buildApp(): express.Express {
     const [{ data: assignmentRows }, { data: userRows }, { data: submissionRows }] = await Promise.all([
       supabase.from("homework_assignments").select("*").order("assigned_date", { ascending: false }).limit(60),
       supabase.from("users").select("email, name, student_class, role, status, student_type"),
-      selectAllRows(() => supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at, admin_notes").order("id")),
+      selectAllRows(() => supabase.from("homework_submissions").select("student_email, assignment_id, submitted_at, admin_notes, status, ai_score").order("id")),
     ]);
 
     // Online (self-study) students are never assigned homework, so they're excluded from the roster.
@@ -10338,11 +10342,11 @@ function buildApp(): express.Express {
     // upsert-per-assignment model means there's only ever one row per (student, assignment) pair,
     // so this is always their latest (i.e. current) submission -- exactly what "late" should be
     // judged against.
-    const submittedByAssignment = new Map<string, Map<string, { submittedAt: string; adminNotes: string | null }>>();
+    const submittedByAssignment = new Map<string, Map<string, { submittedAt: string; adminNotes: string | null; status: string | null; score: number | null }>>();
     (submissionRows || []).forEach((s: any) => {
       if (!s.assignment_id) return;
       if (!submittedByAssignment.has(s.assignment_id)) submittedByAssignment.set(s.assignment_id, new Map());
-      submittedByAssignment.get(s.assignment_id)!.set(s.student_email, { submittedAt: s.submitted_at, adminNotes: s.admin_notes });
+      submittedByAssignment.get(s.assignment_id)!.set(s.student_email, { submittedAt: s.submitted_at, adminNotes: s.admin_notes, status: s.status ?? null, score: typeof s.ai_score === "number" ? s.ai_score : null });
     });
 
     // An assignment posted to "All" classes doesn't have one shared deadline in practice -- each
@@ -10361,8 +10365,12 @@ function buildApp(): express.Express {
         if (!deadlinePassed) continue; // only report once a class's own deadline has actually passed
 
         const roster = students.filter((u: any) => isCanadianKey ? u.student_class === CANADIAN_CLASS : CLASS_TO_TARGET[u.student_class] === key);
-        const submitted = submittedByAssignment.get(a.id) || new Map<string, { submittedAt: string; adminNotes: string | null }>();
+        const submitted = submittedByAssignment.get(a.id) || new Map<string, { submittedAt: string; adminNotes: string | null; status: string | null; score: number | null }>();
         const missing = roster.filter((u: any) => !submitted.has(u.email)).map((u: any) => ({ email: u.email, name: u.name }));
+        // Uploaded, checked, and scored 3 or less out of 10: handed in "something" but did not do the homework.
+        const notDoneProperly = roster
+          .filter((u: any) => { const e = submitted.get(u.email); return !!e && e.status === "checked" && e.score !== null && e.score <= HOMEWORK_NOT_DONE_MAX_SCORE; })
+          .map((u: any) => ({ email: u.email, name: u.name, score: submitted.get(u.email)!.score }));
         const late = roster
           .filter((u: any) => {
             if (isLateExempt(a.title)) return false;
@@ -10383,6 +10391,7 @@ function buildApp(): express.Express {
           rosterCount: roster.length,
           submittedCount: roster.filter((u: any) => submitted.has(u.email)).length,
           missing,
+          notDoneProperly,
           late,
         });
       }
