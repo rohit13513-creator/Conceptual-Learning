@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { User, Settings, GraduationCap, Eye, EyeOff, Pencil, Camera, Check } from 'lucide-react';
-import { ProfileCardBody, PublicProfile, classLabel } from './ProfileCardBody';
+import { User, Settings, GraduationCap, Eye, EyeOff, Pencil, Camera, Check, MapPin, School, Globe, Cake, Heart, Target, BookOpen, Lock, ShieldCheck, Plus, Info } from 'lucide-react';
+import { ProfileCardBody, PublicProfile, Avatar, classLabel } from './ProfileCardBody';
 import { SchoolMarksPanel, MarksPayload } from './SchoolMarksPanel';
 import type { MarksEntry } from './schoolMarksUtil';
 import type { VerifyOutcome } from './VerifyMarksModal';
@@ -196,119 +196,269 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   };
 
   const light = isLightMode;
-  const labelCls = `text-[10px] font-black uppercase tracking-wider block font-mono mb-1 ${light ? 'text-slate-500' : 'text-slate-400'}`;
-  const inputCls = `w-full border rounded-xl py-2 px-3 text-sm focus:outline-none focus:border-cyan-500 ${light ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`;
+  const labelCls = `text-[11px] font-bold uppercase tracking-wider block mb-1.5 ${light ? 'text-slate-500' : 'text-slate-400'}`;
+  const inputCls = `w-full border rounded-xl py-2.5 px-3.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 disabled:opacity-60 ${light ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`;
+  const cardCls = `rounded-2xl border ${light ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/60 border-slate-800'}`;
+  const heading = light ? 'text-slate-900' : 'text-white';
+  const muted = light ? 'text-slate-500' : 'text-slate-400';
+  const body = light ? 'text-slate-700' : 'text-slate-200';
+  const photoPreview = useMemo(() => (photoFile ? URL.createObjectURL(photoFile) : null), [photoFile]);
+  useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
+
+  const place = [user.city, user.state].filter(Boolean).join(', ');
+  const placeFull = [place, user.country].filter(Boolean).join(', ');
+  const interestList = (user.hobbies || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+  // how complete the profile is
+  const strength = [
+    { done: !!user.photoUrl, label: 'Add a profile photo' },
+    { done: !!(user.country && user.state && user.city), label: 'Choose your country, state and city' },
+    { done: !!user.school, label: 'Add your school' },
+    { done: !!user.bio, label: 'Write a few lines about yourself' },
+    { done: !!user.hobbies, label: 'Add your interests' },
+    { done: !!user.favoriteSubject, label: 'Add your favourite subject' },
+    { done: !!user.ambition, label: 'Tell us what you want to become' },
+    { done: !!user.dateOfBirth, label: 'Add your date of birth' },
+  ];
+  const pct = Math.round((strength.filter((s) => s.done).length / strength.length) * 100);
+  const todo = strength.filter((s) => !s.done);
+
   const tabBtn = (key: typeof tab, label: string, Icon: React.ElementType) => (
     <button key={key} onClick={() => { setTab(key); setMessage(null); }}
-      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-black uppercase tracking-wide cursor-pointer transition ${tab === key ? 'bg-cyan-500 text-slate-950' : (light ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-800')}`}>
-      <Icon className="w-3.5 h-3.5" /> {label}
+      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-3.5 text-[13px] sm:text-sm font-bold border-b-2 -mb-px cursor-pointer transition whitespace-nowrap ${tab === key ? 'border-cyan-400 text-cyan-400' : `border-transparent ${light ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-slate-100'}`}`}>
+      <Icon className="w-4 h-4" /> {key === 'marks' ? <><span className="sm:hidden">Marks</span><span className="hidden sm:inline">{label}</span></> : label}
     </button>
   );
   const banner = message && (
-    <div className={`text-xs font-bold rounded-lg px-3 py-2.5 border ${message.type === 'ok' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>{message.text}</div>
+    <div className={`text-sm font-semibold rounded-xl px-4 py-3 border flex items-center gap-2 ${message.type === 'ok' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' : 'text-red-400 bg-red-500/10 border-red-500/25'}`}>{message.type === 'ok' && <Check className="w-4 h-4 shrink-0" />}{message.text}</div>
   );
+  const sectionTitle = (Icon: React.ElementType, title: string, sub?: string) => (
+    <div className={`flex ${sub ? "items-start" : "items-center"} gap-3 mb-4`}>
+      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${light ? 'bg-cyan-50 text-cyan-600' : 'bg-cyan-500/10 text-cyan-400'}`}><Icon className="w-[18px] h-[18px]" /></span>
+      <div><h3 className={`text-sm font-black ${heading}`}>{title}</h3>{sub && <p className={`text-xs font-medium mt-0.5 ${muted}`}>{sub}</p>}</div>
+    </div>
+  );
+  // one line of the "Details" card; the small eye shows whether other students can see it
+  const fact = (Icon: React.ElementType, label: string, value: string | undefined | null, visKey?: string) => (
+    <div className="flex items-center gap-3 py-3">
+      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${light ? 'bg-slate-100 text-slate-500' : 'bg-slate-800 text-cyan-400'}`}><Icon className="w-4 h-4" /></span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>{label}</p>
+        {value ? <p className={`text-sm font-bold break-words ${heading}`}>{value}</p> : <button type="button" onClick={startEdit} className="text-sm font-semibold text-cyan-400 hover:underline cursor-pointer">+ Add</button>}
+      </div>
+      {visKey && value && <span title={vis[visKey] ? 'Other students can see this' : 'Hidden from other students'} className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${vis[visKey] ? 'text-emerald-400' : muted}`}>{vis[visKey] ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}<span className="hidden sm:inline">{vis[visKey] ? 'Shown' : 'Hidden'}</span></span>}
+    </div>
+  );
+  const divider = light ? 'divide-slate-100' : 'divide-slate-800';
+
+  const GROUPS: { title: string; sub: string; icon: React.ElementType; keys: string[] }[] = [
+    { title: 'Basics', sub: 'How you appear at the top of your profile.', icon: User, keys: ['photo', 'class'] },
+    { title: 'Where you live and study', sub: 'Your location and school.', icon: MapPin, keys: ['city', 'country', 'school'] },
+    { title: 'About you', sub: 'What you would like others to know.', icon: Heart, keys: ['bio', 'interests', 'favoriteSubject', 'ambition'] },
+    { title: 'Personal', sub: 'Shown only if you choose.', icon: Lock, keys: ['birthday', 'schoolMarks'] },
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-1">
-        <h1 className={`text-2xl font-black flex items-center gap-2 ${light ? 'text-slate-900' : 'text-white'}`}><User className="w-6 h-6 text-cyan-400" /> My Profile</h1>
-        <p className={`text-xs font-semibold ${light ? 'text-slate-500' : 'text-slate-400'}`}>Tell other learners about yourself, choose what to show in Settings, and track your school marks.</p>
+    <div className="space-y-6">
+      {/* header: cover, photo, name, tabs */}
+      <div className={`${cardCls} overflow-hidden`}>
+        <div className="relative h-36 sm:h-48"
+          style={{ backgroundImage: 'radial-gradient(circle at 18% 25%, rgba(255,255,255,.22), transparent 42%), radial-gradient(circle at 85% 0%, rgba(255,255,255,.14), transparent 38%), linear-gradient(135deg, rgb(8,145,178), rgb(79,70,229))' }}>
+          <div className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        </div>
+        <div className="px-5 sm:px-8 pb-0">
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6 -mt-14 sm:-mt-16">
+            <div className="shrink-0">
+              <Avatar name={user.name} photoUrl={user.photoUrl} size={128} />
+            </div>
+            <div className="flex-1 min-w-0 sm:pt-[76px] sm:pb-2">
+              <h1 className={`text-2xl sm:text-3xl font-black leading-tight ${heading}`}>{user.name}</h1>
+              <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 text-sm font-semibold ${muted}`}>
+                {user.studentClass && <span className="inline-flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-cyan-400" />{classLabel(user.studentClass)}</span>}
+                {placeFull && <span className="inline-flex items-center gap-1.5"><MapPin className="w-4 h-4 text-cyan-400" />{placeFull}</span>}
+                {user.school && <span className="inline-flex items-center gap-1.5"><School className="w-4 h-4 text-cyan-400" />{user.school}</span>}
+              </div>
+            </div>
+            {tab === 'profile' && !editing && (
+              <button onClick={startEdit} className="sm:mt-[76px] shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-300 cursor-pointer shadow-lg shadow-cyan-500/20 transition"><Pencil className="w-4 h-4" /> Edit profile</button>
+            )}
+          </div>
+          <div className={`flex mt-5 border-b overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${light ? 'border-slate-200' : 'border-slate-800'}`}>
+            {tabBtn('profile', 'Profile', User)}
+            {tabBtn('privacy', 'Settings', Settings)}
+            {tabBtn('marks', 'School marks', GraduationCap)}
+          </div>
+        </div>
       </div>
 
-      <div className={`flex gap-1 p-1 rounded-xl border ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-        {tabBtn('profile', 'Profile', User)}
-        {tabBtn('privacy', 'Settings', Settings)}
-        {tabBtn('marks', 'School marks', GraduationCap)}
-      </div>
+      {upgradeNote && <div className="text-sm font-semibold rounded-xl px-4 py-3 border text-amber-400 bg-amber-500/10 border-amber-500/25">Some new profile details (city, state, country, school, ambition, privacy choices) are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
 
-      {upgradeNote && <div className="text-xs font-bold rounded-lg px-3 py-2.5 border text-amber-400 bg-amber-500/10 border-amber-500/20">Some new profile details (city, state, country, school, ambition, privacy choices) are being switched on and could not be saved yet. Your other details were saved. Please try again in a little while.</div>}
-
+      {/* Profile tab */}
       {tab === 'profile' && (
         <>
           {banner}
           {!editing ? (
-            <>
-              <ProfileCardBody profile={myView} isLightMode={light} />
-              <div className={`rounded-2xl border p-4 flex items-center justify-between gap-3 flex-wrap ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-                <p className={`text-xs font-semibold ${light ? 'text-slate-600' : 'text-slate-400'}`}>This is your full profile. Other students see only what you switch on under <b>Settings</b>.</p>
-                <button onClick={startEdit} className="shrink-0 flex items-center gap-1.5 px-4 py-2 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer"><Pencil className="w-3.5 h-3.5" /> Edit profile</button>
-              </div>
-            </>
-          ) : (
-            <form onSubmit={saveProfile} className={`rounded-2xl border p-5 space-y-4 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-              <div className="flex items-center gap-4">
-                {photoFile ? <img src={URL.createObjectURL(photoFile)} alt="New" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" /> : user.photoUrl ? <img src={user.photoUrl} alt="You" className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/40" /> : <div className={`w-20 h-20 rounded-full flex items-center justify-center border-2 ${light ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><User className="w-9 h-9" /></div>}
-                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-                  <Camera className="w-3.5 h-3.5" /> Change photo
-                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
-                </label>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
-                <div><label className={labelCls}>Class (taken automatically)</label><input className={`${inputCls} opacity-70`} value={classLabel(user.studentClass) || '--'} disabled /></div>
-                <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!statesOf(e.target.value).includes(stateName)) { setStateName(''); setCity(''); } }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div><label className={labelCls}>{country ? stateWord(country) : 'State'}</label><select className={inputCls} value={stateName} onChange={(e) => { setStateName(e.target.value); if (!citiesOf(country, e.target.value).includes(city)) setCity(''); }} disabled={!country}><option value="">{country ? `Choose your ${stateWord(country).toLowerCase()}` : 'Choose your country first'}</option>{statesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!stateName}><option value="">{stateName ? 'Choose your city' : (country ? `Choose your ${stateWord(country).toLowerCase()} first` : 'Choose your country first')}</option>{city && !citiesOf(country, stateName).includes(city) && <option value={city}>{city}</option>}{citiesOf(country, stateName).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
-                <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-                <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>
-              </div>
-              <div><label className={labelCls}>About me</label><textarea className={`${inputCls} resize-none`} rows={3} maxLength={500} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="A little about yourself..." /><p className="text-[10px] text-slate-500 mt-0.5">{bio.length}/500</p></div>
-              <div>
-                <label className={labelCls}>Interests & hobbies</label>
-                <input className={inputCls} value={interests} onChange={(e) => setInterests(e.target.value)} maxLength={200} placeholder="e.g. Cricket, drawing, coding" />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {INTEREST_IDEAS.filter((i) => !interests.toLowerCase().includes(i.toLowerCase())).map((i) => (
-                    <button type="button" key={i} onClick={() => setInterests((cur) => (cur.trim() ? cur.replace(/[,\s]+$/, '') + ', ' : '') + i)} className={`px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>+ {i}</button>
-                  ))}
+            <div className="grid lg:grid-cols-3 gap-6 items-start">
+              <div className="space-y-6 lg:col-span-1">
+                <div className={`${cardCls} p-5`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className={`text-sm font-black ${heading}`}>Profile strength</h3>
+                    <span className={`text-sm font-black ${pct === 100 ? 'text-emerald-400' : 'text-cyan-400'}`}>{pct}%</span>
+                  </div>
+                  <div className={`h-2.5 rounded-full overflow-hidden ${light ? 'bg-slate-100' : 'bg-slate-800'}`}><div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-400' : 'bg-gradient-to-r from-cyan-400 to-teal-400'}`} style={{ width: `${pct}%` }} /></div>
+                  {todo.length === 0 ? (
+                    <p className="text-xs font-semibold text-emerald-400 mt-3 flex items-center gap-1.5"><Check className="w-4 h-4" /> Your profile is complete.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-1.5">
+                      {todo.slice(0, 4).map((t) => <li key={t.label}><button type="button" onClick={startEdit} className={`w-full text-left text-xs font-semibold flex items-center gap-2 cursor-pointer hover:text-cyan-400 ${muted}`}><Plus className="w-3.5 h-3.5 shrink-0 text-cyan-400" />{t.label}</button></li>)}
+                    </ul>
+                  )}
+                </div>
+
+                <div className={`${cardCls} p-5`}>
+                  {sectionTitle(Info, 'Details', 'The eye shows what other students can see.')}
+                  <div className={`divide-y ${divider}`}>
+                    {fact(GraduationCap, 'Class', classLabel(user.studentClass), 'class')}
+                    {fact(MapPin, 'City and state', place, 'city')}
+                    {fact(Globe, 'Country', user.country, 'country')}
+                    {fact(School, 'School', user.school, 'school')}
+                    {fact(Cake, 'Birthday', formatBirthday(user.dateOfBirth), 'birthday')}
+                  </div>
                 </div>
               </div>
-              <div><label className={labelCls}>What I want to become</label><input className={inputCls} value={ambition} onChange={(e) => setAmbition(e.target.value)} maxLength={100} placeholder="e.g. Doctor, engineer, scientist" /></div>
-              <div className="flex gap-2">
-                <button type="submit" disabled={saving} className="px-6 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-400 cursor-pointer transition disabled:opacity-50">{saving ? 'Saving...' : 'Save profile'}</button>
-                <button type="button" onClick={() => { setEditing(false); setMessage(null); }} className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer ${light ? 'bg-slate-100 text-slate-700' : 'bg-slate-800 text-slate-300'}`}>Cancel</button>
+
+              <div className="space-y-6 lg:col-span-2">
+                <div className={`${cardCls} p-6`}>
+                  {sectionTitle(User, 'About me')}
+                  {user.bio ? <p className={`text-[15px] leading-relaxed whitespace-pre-wrap break-words ${body}`}>{user.bio}</p> : <button type="button" onClick={startEdit} className="text-sm font-semibold text-cyan-400 hover:underline cursor-pointer">+ Write a few lines about yourself</button>}
+                </div>
+                <div className={`${cardCls} p-6`}>
+                  {sectionTitle(Heart, 'Interests and hobbies')}
+                  {interestList.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">{interestList.map((i) => <span key={i} className={`px-3.5 py-1.5 rounded-full text-sm font-bold border ${light ? 'bg-cyan-50 text-cyan-700 border-cyan-100' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20'}`}>{i}</span>)}</div>
+                  ) : <button type="button" onClick={startEdit} className="text-sm font-semibold text-cyan-400 hover:underline cursor-pointer">+ Add your interests</button>}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  <div className={`${cardCls} p-6`}>
+                    {sectionTitle(BookOpen, 'Favourite subject')}
+                    {user.favoriteSubject ? <p className={`text-lg font-black ${heading}`}>{user.favoriteSubject}</p> : <button type="button" onClick={startEdit} className="text-sm font-semibold text-cyan-400 hover:underline cursor-pointer">+ Add</button>}
+                  </div>
+                  <div className={`${cardCls} p-6`}>
+                    {sectionTitle(Target, 'I want to become')}
+                    {user.ambition ? <p className={`text-lg font-black ${heading}`}>{user.ambition}</p> : <button type="button" onClick={startEdit} className="text-sm font-semibold text-cyan-400 hover:underline cursor-pointer">+ Add</button>}
+                  </div>
+                </div>
+                <p className={`text-xs font-semibold flex items-start gap-2 ${muted}`}><Lock className="w-4 h-4 shrink-0 mt-px" /> This is your full profile. Other students see only what you switch on under Settings. Your email, phone number and exact marks are never shown.</p>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={saveProfile} className="space-y-6">
+              <div className="grid lg:grid-cols-3 gap-6 items-start">
+                <div className={`${cardCls} p-6 lg:col-span-1 text-center`}>
+                  <div className="flex justify-center"><Avatar name={name || user.name} photoUrl={photoPreview || user.photoUrl} size={140} /></div>
+                  <label className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
+                    <Camera className="w-4 h-4" /> {photoFile ? 'Choose another' : 'Change photo'}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+                  </label>
+                  <p className={`text-xs font-medium mt-3 ${muted}`}>{photoFile ? `${photoFile.name} will be saved when you press Save.` : 'A clear face photo works best. JPG, PNG or WebP.'}</p>
+                </div>
+
+                <div className="space-y-6 lg:col-span-2">
+                  <div className={`${cardCls} p-6`}>
+                    {sectionTitle(User, 'Personal details')}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
+                      <div><label className={labelCls}>Class (taken automatically)</label><input className={inputCls} value={classLabel(user.studentClass) || '--'} disabled /></div>
+                      <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
+                      <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>
+                    </div>
+                  </div>
+
+                  <div className={`${cardCls} p-6`}>
+                    {sectionTitle(MapPin, 'Where you live and study', 'Choose from the lists: first the country, then the state, then the city.')}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!statesOf(e.target.value).includes(stateName)) { setStateName(''); setCity(''); } }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label className={labelCls}>{country ? stateWord(country) : 'State'}</label><select className={inputCls} value={stateName} onChange={(e) => { setStateName(e.target.value); if (!citiesOf(country, e.target.value).includes(city)) setCity(''); }} disabled={!country}><option value="">{country ? `Choose your ${stateWord(country).toLowerCase()}` : 'Choose your country first'}</option>{statesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!stateName}><option value="">{stateName ? 'Choose your city' : (country ? `Choose your ${stateWord(country).toLowerCase()} first` : 'Choose your country first')}</option>{city && !citiesOf(country, stateName).includes(city) && <option value={city}>{city}</option>}{citiesOf(country, stateName).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                      <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
+                    </div>
+                  </div>
+
+                  <div className={`${cardCls} p-6`}>
+                    {sectionTitle(Heart, 'About you')}
+                    <div className="space-y-4">
+                      <div><label className={labelCls}>About me</label><textarea className={`${inputCls} resize-none`} rows={4} maxLength={500} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="A little about yourself..." /><p className={`text-[11px] font-medium mt-1 text-right ${muted}`}>{bio.length}/500</p></div>
+                      <div>
+                        <label className={labelCls}>Interests and hobbies</label>
+                        <input className={inputCls} value={interests} onChange={(e) => setInterests(e.target.value)} maxLength={200} placeholder="e.g. Cricket, drawing, coding" />
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          {INTEREST_IDEAS.filter((i) => !interests.toLowerCase().includes(i.toLowerCase())).map((i) => (
+                            <button type="button" key={i} onClick={() => setInterests((cur) => (cur.trim() ? cur.replace(/[,\s]+$/, '') + ', ' : '') + i)} className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-cyan-50 hover:text-cyan-700' : 'bg-slate-800 text-slate-300 hover:bg-cyan-500/15 hover:text-cyan-300'}`}>+ {i}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div><label className={labelCls}>What I want to become</label><input className={inputCls} value={ambition} onChange={(e) => setAmbition(e.target.value)} maxLength={100} placeholder="e.g. Doctor, engineer, scientist" /></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`sticky bottom-3 z-10 rounded-2xl border p-3 sm:p-4 flex items-center justify-end gap-3 backdrop-blur ${light ? 'bg-white/90 border-slate-200 shadow-lg' : 'bg-slate-900/90 border-slate-700 shadow-2xl shadow-black/40'}`}>
+                <button type="button" onClick={() => { setEditing(false); setMessage(null); }} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Cancel</button>
+                <button type="submit" disabled={saving} className="px-7 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-300 cursor-pointer transition disabled:opacity-50">{saving ? 'Saving...' : 'Save profile'}</button>
               </div>
             </form>
           )}
         </>
       )}
 
+      {/* Settings tab */}
       {tab === 'privacy' && (
         <>
           {banner}
-          <div className={`rounded-2xl border p-5 space-y-1 ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-            <p className={`text-sm font-black ${light ? 'text-slate-900' : 'text-white'}`}>Profile settings: choose what to show and what to hide</p>
-            <p className={`text-xs font-semibold pb-2 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Your name is always shown. Your email, phone number and exact marks are never shown. Your teacher can see your whole profile. Changes are saved as soon as you switch them.</p>
-            <div className={`divide-y ${light ? 'divide-slate-200' : 'divide-slate-800'}`}>
-              {PRIVACY_ROWS.map((row) => (
-                <div key={row.key} className="flex items-center gap-3 py-2.5">
-                  <span className={`shrink-0 ${vis[row.key] ? 'text-emerald-400' : 'text-slate-500'}`}>{vis[row.key] ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold ${light ? 'text-slate-800' : 'text-slate-100'}`}>{row.title}</p>
-                    {row.hint && <p className={`text-[11px] font-semibold ${light ? 'text-slate-500' : 'text-slate-400'}`}>{row.hint}</p>}
+          <div className="grid lg:grid-cols-5 gap-6 items-start">
+            <div className="lg:col-span-3 space-y-6">
+              <div className={`${cardCls} p-5 flex items-start gap-3`}>
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <p className={`text-sm font-medium ${body}`}><b className={heading}>You decide what others see.</b> Your name is always shown. Your email, phone number and exact marks are never shown. Your teacher can see your whole profile. Each switch is saved as soon as you press it.</p>
+              </div>
+              {GROUPS.map((g) => (
+                <div key={g.title} className={`${cardCls} p-6`}>
+                  {sectionTitle(g.icon, g.title, g.sub)}
+                  <div className={`divide-y ${divider}`}>
+                    {g.keys.map((k) => PRIVACY_ROWS.find((r) => r.key === k)!).map((row) => (
+                      <div key={row.key} className="flex items-center gap-3 py-3.5">
+                        <span className={`shrink-0 ${vis[row.key] ? 'text-emerald-400' : muted}`}>{vis[row.key] ? <Eye className="w-[18px] h-[18px]" /> : <EyeOff className="w-[18px] h-[18px]" />}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold ${heading}`}>{row.title}</p>
+                          {row.hint && <p className={`text-xs font-medium ${muted}`}>{row.hint}</p>}
+                        </div>
+                        <span className={`text-[10px] font-black uppercase tracking-wider w-14 text-right ${vis[row.key] ? 'text-emerald-400' : muted}`}>{vis[row.key] ? 'Shown' : 'Hidden'}</span>
+                        <Toggle on={!!vis[row.key]} onChange={(v) => setVisibility(row.key, v)} label={`Show ${row.title}`} />
+                      </div>
+                    ))}
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-wider w-14 text-right ${vis[row.key] ? 'text-emerald-400' : 'text-slate-500'}`}>{vis[row.key] ? 'Shown' : 'Hidden'}</span>
-                  <Toggle on={!!vis[row.key]} onChange={(v) => setVisibility(row.key, v)} label={`Show ${row.title}`} />
                 </div>
               ))}
             </div>
-          </div>
-          <div>
-            <p className={`text-[10px] font-black uppercase tracking-wider font-mono mb-2 flex items-center gap-1.5 ${light ? 'text-slate-500' : 'text-slate-400'}`}><Check className="w-3.5 h-3.5" /> This is how other students see you</p>
-            <ProfileCardBody profile={preview} isLightMode={light} />
-            {vis.schoolMarks && <p className={`text-[11px] font-semibold mt-2 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Your latest percentage in each subject will also appear here once you have added marks.</p>}
+            <div className="lg:col-span-2 lg:sticky lg:top-4 space-y-3">
+              <p className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${muted}`}><Eye className="w-4 h-4" /> This is how other students see you</p>
+              <ProfileCardBody profile={preview} isLightMode={light} />
+              {vis.schoolMarks && <p className={`text-xs font-medium ${muted}`}>Your latest percentage in each subject will also appear here once you have added marks.</p>}
+            </div>
           </div>
         </>
       )}
 
+      {/* School marks tab */}
       {tab === 'marks' && (
         marksUnavailable ? (
-          <div className={`rounded-2xl border p-8 text-center ${light ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
-            <p className={`text-sm font-black ${light ? 'text-slate-800' : 'text-slate-200'}`}>School Marks is being switched on</p>
-            <p className={`text-xs font-semibold mt-1 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Please come back in a little while.</p>
+          <div className={`${cardCls} p-10 text-center`}>
+            <p className={`text-base font-black ${heading}`}>School Marks is being switched on</p>
+            <p className={`text-sm font-medium mt-1 ${muted}`}>Please come back in a little while.</p>
           </div>
         ) : !marksLoaded ? (
-          <p className={`text-sm font-semibold text-center py-10 ${light ? 'text-slate-500' : 'text-slate-400'}`}>Loading your marks...</p>
+          <p className={`text-sm font-semibold text-center py-12 ${muted}`}>Loading your marks...</p>
         ) : (
           <SchoolMarksPanel entries={entries} isLightMode={light} editable onSave={saveMarks} onDelete={deleteMarks} verificationReady={verificationReady} onVerify={verifyMarks} />
         )

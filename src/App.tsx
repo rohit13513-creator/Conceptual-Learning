@@ -8191,7 +8191,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
       {activeView === 'profile' && user && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-6xl mx-auto">
             <ProfileCenter
               user={user as any}
               isLightMode={isLightMode}
