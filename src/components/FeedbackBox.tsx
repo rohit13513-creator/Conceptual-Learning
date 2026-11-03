@@ -73,9 +73,9 @@ export function FeedbackBox({ token, isLightMode }: { token: string; isLightMode
                 {done.googleUrl && (
                   <div className={`rounded-xl border p-4 space-y-3 ${light ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
                     <p className={`text-sm font-bold ${heading}`}>Would you also like to share your words on Google?</p>
-                    <p className={`text-xs font-medium ${muted}`}>It is completely your choice. It helps other students and parents find us. Your words are copied for you, so you only have to paste them on Google.</p>
+                    <p className={`text-xs font-medium ${muted}`}>It is completely your choice. It helps other students and parents find us. Your words are copied for you, so you only have to tap "Write a review" on Google and paste them.</p>
                     <button onClick={shareOnGoogle} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#22d3ee] text-slate-950 font-black text-sm cursor-pointer hover:bg-cyan-300"><ExternalLink className="w-4 h-4" /> Copy my words and open Google</button>
-                    {copied && <p className="text-xs font-bold text-emerald-400">Copied. Paste it in the Google review box.</p>}
+                    {copied && <p className="text-xs font-bold text-emerald-400">Copied. On Google, tap "Write a review" and paste your words.</p>}
                   </div>
                 )}
                 <button onClick={close} className={`w-full py-3 rounded-xl text-sm font-black cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>Close</button>
