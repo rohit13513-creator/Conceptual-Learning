@@ -1236,6 +1236,21 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         // feedback logic below, whereas truncating score is not recoverable.
         score: { type: "integer", minimum: 0, maximum: 10, description: "Your best estimate, 0-10, based ONLY on completeness (every assigned question attempted) and correctness (solved right, via proper CBSE method), treating doubt-marked questions as excluded from the assignment entirely. The actual score shown to the student is computed deterministically afterward as 10 minus 1 mark per question in missingQuestions/incorrectQuestions (see those fields) plus separate fixed penalties for doubt-volume and lateness -- so this field is not the final word, but it must still be a genuine, careful estimate (not a placeholder), since an implausible value here (e.g. 10 alongside several incorrectQuestions) is a signal something else was filled in wrong." },
         feedback: { type: "string", description: "Exception-based feedback: problems only, by question number, drawn from questionByQuestionCheck." },
+        // Listed AFTER feedback and not required: score and feedback must never be at risk of truncation, and a
+        // missing report simply means the student sees the usual feedback only.
+        studentQuestionReport: {
+          type: "array",
+          description: "One entry for EVERY assigned question (each lettered sub-part on its own, labelled exactly as in questionByQuestionCheck), in order, written for the student to read. Built from your settled questionByQuestionCheck conclusions -- never a new, different judgement.",
+          items: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "The question label exactly as used in questionByQuestionCheck, e.g. \"Q3\", \"Exercise Q1(iv)\" or \"Example 4\"." },
+              verdict: { type: "string", enum: ["correct", "incorrect", "missing", "doubt"], description: "Must match your settled conclusion for this question in questionByQuestionCheck and the lists above." },
+              note: { type: "string", description: "One or two short plain sentences, second person ('you'), like a friendly tutor. For correct: say what the student did right (e.g. 'You applied the formula correctly and got 12 cm') -- do NOT start with the word 'correct', the line already says so. For incorrect: say exactly what is wrong or missing in their working AND state the right value or step outright. For missing: say the question was not found. For doubt: leave empty. Use real subscript/superscript characters for formulas and exponents." },
+            },
+            required: ["question", "verdict", "note"],
+          },
+        },
       },
       required: ["pageByPageNotes", "otherHomeworkPages", ...(questionSheetBlock ? ["sheetFirstQuestionNumber", "sheetLastQuestionNumber", "sheetMatchEvidence", "matchedSheetQuestionCount"] : []), "questionByQuestionCheck", "assignedQuestionCount", "integrityFlag", "missingQuestions", "incorrectQuestions", "doubtQuestions", "score", "feedback"],
     },
@@ -1280,8 +1295,9 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
           // Raised to 12000 to give thinking real room on top of the existing structured-output
           // budget (pageByPageNotes + questionByQuestionCheck for a dense ~26-question
           // assignment) -- a tight budget here risks the same truncation failure mode described
-          // below, now with thinking tokens competing for the same ceiling.
-          max_tokens: 12000,
+          // below, now with thinking tokens competing for the same ceiling. Raised again to 16000 for the
+          // per-question studentQuestionReport (one short line per assigned question, listed last).
+          max_tokens: 16000,
           tools: [gradeTool],
           tool_choice: { type: "tool", name: "submit_grade" },
           messages: [{
@@ -1733,10 +1749,55 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
     ]));
 
+    // Question-by-question report: every assigned question gets its own line -- "your answer is correct", or what
+    // is wrong or missing -- so a student can always see exactly why marks were or were not lost (the usual
+    // feedback above lists problems only). The verdict of each line comes from the FINAL lists, after the
+    // verification passes, so a question cleared there is never shown as wrong; the model's own wording is used
+    // only where it agrees with that final verdict. It never changes the score.
+    let feedbackForStudent: string | null = typeof parsed.feedback === "string" ? parsed.feedback : null;
+    if (!parsed.__wrongHomework && Array.isArray(parsed.studentQuestionReport) && parsed.studentQuestionReport.length > 0) {
+      const norm = (x: any) => String(x ?? "").toLowerCase().replace(/\s+/g, "");
+      const related = (a: string, b: string) => a === b || (!!a && !!b && ((a.startsWith(b) && !/\d/.test(a.charAt(b.length) || "")) || (b.startsWith(a) && !/\d/.test(b.charAt(a.length) || ""))));
+      const inList = (label: string, list: any) => Array.isArray(list) && list.some((l: any) => related(norm(l), norm(label)));
+      const first = parsed.sheetFirstQuestionNumber;
+      const last = parsed.sheetLastQuestionNumber;
+      const entries: any[] = parsed.studentQuestionReport.filter((e: any) => e && String(e.question ?? "").trim());
+      let allowedNums: Set<number> | null = null;
+      if (isScopedResubmission && effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0) {
+        allowedNums = new Set<number>();
+        for (const q of effectivePriorMissingQuestions) { const n = topLevelQuestionNumber(q); if (n !== null) allowedNums.add(n); }
+        if (allowedNums.size === 0) allowedNums = null;
+      }
+      const rangeTrusted = typeof first === "number" && typeof last === "number" && first > 0 && last >= first;
+      const numbered = entries.filter((e) => topLevelQuestionNumber(e.question) !== null);
+      const outside = numbered.filter((e) => { const n = topLevelQuestionNumber(e.question) as number; return rangeTrusted && (n < first || n > last); });
+      const dropOutside = rangeTrusted && outside.length * 2 < numbered.length;
+      const seen = new Set<string>();
+      const lines: string[] = [];
+      for (const e of entries) {
+        const q = String(e.question).replace(/\s+/g, " ").trim();
+        const n = topLevelQuestionNumber(q);
+        if (seen.has(norm(q))) continue;
+        if (allowedNums && (n === null || !allowedNums.has(n))) continue;
+        if (dropOutside && n !== null && (n < first || n > last)) continue;
+        seen.add(norm(q));
+        const note = String(e.note ?? "").replace(/\s+/g, " ").trim();
+        const sameVerdict = (v: string) => e.verdict === v && note;
+        if (inList(q, parsed.doubtQuestions)) lines.push(`${q}: You marked this as a doubt, so it is not marked.`);
+        else if (inList(q, parsed.missingQuestions)) lines.push(`${q}: Not found. ${sameVerdict("missing") ? note : "No answer to this question was found in the pages you uploaded."}`);
+        else if (inList(q, parsed.incorrectQuestions)) lines.push(`${q}: Needs correction. ${sameVerdict("incorrect") ? note : "Please check this answer again and correct it."}`);
+        else lines.push(`${q}: Your answer is correct.${sameVerdict("correct") ? " " + note : ""}`);
+      }
+      if (lines.length > 0) {
+        const head = isScopedResubmission ? "Question by question (the questions you improved this time):" : "Question by question:";
+        feedbackForStudent = `${feedbackForStudent && feedbackForStudent.trim() ? feedbackForStudent.trim() + "\n\n" : ""}${head}\n${lines.join("\n")}`;
+      }
+    }
+
     const { error: updateError } = await supabase.from("homework_submissions").update({
       status: "checked",
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
-      ai_feedback: typeof parsed.feedback === "string" ? parsed.feedback : null,
+      ai_feedback: feedbackForStudent,
       integrity_flag: sanitizePlaceholderText(parsed.integrityFlag),
       admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount, followUp: notesFromRow.followUp, latePenalty: typeof parsed.__latePenalty === "number" ? parsed.__latePenalty : notesFromRow.latePenalty }),
     }).eq("id", submissionId);
@@ -11747,6 +11808,10 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         const metSteps = steps.filter((s) => resolveStepMet(s)).length;
         const marksAwarded = totalSteps > 0 ? Math.round((metSteps / totalSteps) * max) : 0;
         const missedNotes = steps.filter((s) => !resolveStepMet(s) && s.note && s.note.trim()).map((s) => s.note.trim());
+        // What the student got right, in the grader's own plain sentences -- shown for every question so a
+        // student always sees WHY a question earned its marks, not only why one lost them.
+        const doneNotes = steps.filter((s) => resolveStepMet(s) && s.note && s.note.trim()).map((s) => s.note.trim());
+        const oneSentenceLine = (parts: string[]) => parts.map((p) => p.replace(/\s+/g, " ").replace(/[.;\s]+$/, "")).filter(Boolean).map((p) => (/[?!]$/.test(p) ? p : p + ".")).join(" ");
         // A deduction must never reach the student with literally no stated reason -- that happens
         // either when a not-met step came back with an empty note (the model didn't comply with
         // the tool schema's "note is required" instruction) or, more subtly, when the paper's own
@@ -11755,11 +11820,17 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
         // only 4 markingPoints, capping marksAwarded below max with every existing step satisfied
         // and nothing to blame it on). Either way, a student reasonably reads a silent deduction as
         // their own mistake, so this always names at least a generic reason instead.
-        const newLine = missedNotes.length > 0
-          ? `${questionId}: ${marksAwarded}/${max} -- ${missedNotes.join("; ")}`
-          : marksAwarded < max
-            ? `${questionId}: ${marksAwarded}/${max} -- Marks were deducted here but no specific reason was recorded; please ask your teacher to double-check this question if you believe your answer was fully correct.`
-            : `${questionId}: ${marksAwarded}/${max}`;
+        // Every question says plainly where it stands: "Your answer is correct", or what was right and what was
+        // wrong or missing (a student asked for exactly this after a deduction he could not explain).
+        const newLine = marksAwarded >= max && max > 0
+          ? `${questionId}: ${marksAwarded}/${max} -- Your answer is correct.${doneNotes.length ? " " + oneSentenceLine(doneNotes) : ""}`
+          : missedNotes.length > 0
+            ? doneNotes.length > 0 && marksAwarded > 0
+              ? `${questionId}: ${marksAwarded}/${max} -- Partly correct. What you did right: ${oneSentenceLine(doneNotes)} What is wrong or missing: ${oneSentenceLine(missedNotes)}`
+              : `${questionId}: ${marksAwarded}/${max} -- Not correct. What is wrong or missing: ${oneSentenceLine(missedNotes)}`
+            : marksAwarded < max
+              ? `${questionId}: ${marksAwarded}/${max} -- Marks were deducted here but no specific reason was recorded; please ask your teacher to double-check this question if you believe your answer was fully correct.`
+              : `${questionId}: ${marksAwarded}/${max} -- Your answer is correct.`;
         // Never let this specific question's mark regress from what the first attempt already
         // earned -- keep the earlier line (marks and reason) if it scored higher than this fresh
         // regrade, since the student never resubmitted a worse answer for it, the fresh grading

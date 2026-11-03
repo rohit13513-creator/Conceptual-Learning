@@ -5428,7 +5428,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         </a>
                       )}
                       {existingSub.aiFeedback && (
-                        <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
+                        <p className={`text-xs font-semibold whitespace-pre-line ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
                       )}
                     </div>
                   )}
@@ -5497,7 +5497,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{sub.subject || 'Homework Submission'}</p>
                         <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{formatDateTimeIST(sub.submittedAt)}</p>
                         {sub.aiFeedback && (
-                          <p className={`text-[10px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
+                          <p className={`text-[10px] mt-1 whitespace-pre-line ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -7891,7 +7891,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         </a>
                       )}
                       {existingSub.aiFeedback && (
-                        <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
+                        <p className={`text-xs font-semibold whitespace-pre-line ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>{existingSub.aiFeedback}</p>
                       )}
                     </div>
                   )}
@@ -7977,7 +7977,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                         <p className={`text-xs font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{sub.subject || 'Homework Submission'}</p>
                         <p className={`text-[10px] font-mono ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{formatDateTimeIST(sub.submittedAt)}</p>
                         {sub.aiFeedback && (
-                          <p className={`text-[10px] mt-1 ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
+                          <p className={`text-[10px] mt-1 whitespace-pre-line ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -9480,7 +9480,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                             {sub.aiFeedback ? (
                                               expandedFeedbackIds.has(sub.id) ? (
                                                 <>
-                                                  <span className={isLightMode ? 'text-slate-600' : 'text-slate-400'}>{sub.aiFeedback}</span>
+                                                  <span className={`whitespace-pre-line ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>{sub.aiFeedback}</span>
                                                   <button
                                                     type="button"
                                                     onClick={() => setExpandedFeedbackIds(prev => { const next = new Set(prev); next.delete(sub.id); return next; })}
