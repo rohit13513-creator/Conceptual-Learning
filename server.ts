@@ -8837,27 +8837,34 @@ function buildApp(): express.Express {
     });
   });
 
-  // ── FEEDBACK & TESTIMONIALS ──
-  // Every feedback is e-mailed to the teacher and (once supabase_feedback.sql has been run) kept for the admin screen.
-  // Nothing is filtered by rating: all feedback arrives, and the Google invitation after sending is the same for everyone.
+  // ── COMPLAINTS, FEEDBACK & TESTIMONIALS ──
+  // Three kinds, chosen by the student: a complaint and a feedback (no stars), and a testimonial (with a star rating).
+  // Every one is e-mailed to the teacher and (once supabase_feedback.sql has been run) kept for the admin screen.
+  // Only a testimonial is followed by the invitation to share on Google, and it is the same for every star rating.
+  const FEEDBACK_KINDS = ["complaint", "feedback", "testimonial"] as const;
+  type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
   let feedbackReadyAt = 0, feedbackReady = false;
   async function feedbackTableReady(): Promise<boolean> {
     if (Date.now() - feedbackReadyAt < 30_000) return feedbackReady;
-    const { error } = await supabase.from("student_feedback").select("id").limit(1);
+    const { error } = await supabase.from("student_feedback").select("id, kind").limit(1);
     feedbackReadyAt = Date.now(); feedbackReady = !error;
     return feedbackReady;
   }
   const feedbackStars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
+  const FEEDBACK_KIND_LABEL: Record<FeedbackKind, string> = { complaint: "complaint", feedback: "feedback", testimonial: "testimonial" };
 
   app.post("/api/feedback", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     if (rateLimited(req, res, "feedback", 10, 60 * 60_000)) return;
-    const rating = Number(req.body?.rating);
+    const kind = String(req.body?.kind ?? "feedback") as FeedbackKind;
+    if (!FEEDBACK_KINDS.includes(kind)) return res.status(400).json({ error: "Please choose what you would like to send." });
+    const isTestimonial = kind === "testimonial";
+    const rating: number | null = isTestimonial ? Number(req.body?.rating) : null;
     const message = String(req.body?.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").trim().slice(0, 1500);
-    const allowPublic = req.body?.allowPublic === true || req.body?.allowPublic === "true";
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "Please choose a star rating from 1 to 5." });
-    if (message.length < 10) return res.status(400).json({ error: "Please write a few words (at least 10 letters) about your experience." });
+    const allowPublic = isTestimonial && (req.body?.allowPublic === true || req.body?.allowPublic === "true");
+    if (isTestimonial && (!Number.isInteger(rating) || (rating as number) < 1 || (rating as number) > 5)) return res.status(400).json({ error: "Please choose a star rating from 1 to 5." });
+    if (message.length < 10) return res.status(400).json({ error: "Please write a few words (at least 10 letters)." });
 
     const { data: me } = await supabase.from("users").select("name, student_class").eq("email", auth.email).maybeSingle();
     if (!me) return res.status(404).json({ error: "Account not found." });
@@ -8870,36 +8877,39 @@ function buildApp(): express.Express {
 
     let saved = false;
     if (ready) {
-      const { error } = await supabase.from("student_feedback").insert({ student_email: auth.email, student_name: me.name, student_class: me.student_class, rating, message, allow_public: allowPublic });
+      const { error } = await supabase.from("student_feedback").insert({ student_email: auth.email, student_name: me.name, student_class: me.student_class, kind, rating, message, allow_public: allowPublic });
       if (error) console.error("feedback insert failed:", error.message); else saved = true;
     }
 
     const cls = me.student_class === "Canadian" ? "Canadian Board" : me.student_class ? `Class ${me.student_class}` : "";
-    const stars = feedbackStars(rating);
-    const subject = `New feedback ${stars} (${rating}/5) from ${me.name}${cls ? ` - ${cls}` : ""}`;
-    const text = `Hello Rohit,\n\n${me.name}${cls ? ` (${cls})` : ""} sent feedback.\n\nRating: ${stars} (${rating} out of 5)\n\n"${message}"\n\n${allowPublic ? "The student agreed that these words may be shown as a testimonial." : "The student did not give permission to show these words publicly."}\nStudent e-mail: ${auth.email}\n\nYou can also see it on your admin screen under Feedback & Testimonials.\n\nConceptual Learning Online`;
+    const label = FEEDBACK_KIND_LABEL[kind];
+    const stars = isTestimonial ? feedbackStars(rating as number) : "";
+    const colour = kind === "complaint" ? "#dc2626" : kind === "testimonial" ? "#f59e0b" : "#0891b2";
+    const subject = `New ${label}${isTestimonial ? ` ${stars} (${rating}/5)` : ""} from ${me.name}${cls ? ` - ${cls}` : ""}`;
+    const publicLine = isTestimonial ? (allowPublic ? "The student agreed that these words may be shown as a testimonial." : "The student did not give permission to show these words publicly.") : "";
+    const text = `Hello Rohit,\n\n${me.name}${cls ? ` (${cls})` : ""} sent a ${label}.\n\n${isTestimonial ? `Rating: ${stars} (${rating} out of 5)\n\n` : ""}"${message}"\n\n${publicLine ? publicLine + "\n" : ""}Student e-mail: ${auth.email}\n\nYou can also see it on your admin screen under Complaints, Feedback & Testimonials.\n\nConceptual Learning Online`;
     const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1e293b;background:#f8fafc">
-      <h2 style="margin-top:0;border-bottom:2px solid #f59e0b;padding-bottom:10px">New feedback</h2>
+      <h2 style="margin-top:0;border-bottom:2px solid ${colour};padding-bottom:10px">New ${escHtml(label)}</h2>
       <p style="font-size:15px;margin:6px 0"><b>${escHtml(me.name)}</b>${cls ? ` (${escHtml(cls)})` : ""}</p>
-      <p style="font-size:26px;letter-spacing:3px;margin:6px 0;color:#f59e0b">${stars} <span style="font-size:14px;letter-spacing:0;color:#475569">${rating} out of 5</span></p>
-      <blockquote style="margin:12px 0;padding:12px 16px;background:#fff;border-left:4px solid #0891b2;font-size:15px;white-space:pre-wrap">${escHtml(message)}</blockquote>
-      <p style="font-size:13px;color:#475569">${allowPublic ? "The student agreed that these words may be shown as a testimonial." : "The student did not give permission to show these words publicly."}<br/>Student e-mail: ${escHtml(auth.email)}</p>
-      <p style="font-size:12px;color:#64748b">You can also see it on your admin screen under Feedback &amp; Testimonials.</p></div>`;
+      ${isTestimonial ? `<p style="font-size:26px;letter-spacing:3px;margin:6px 0;color:#f59e0b">${stars} <span style="font-size:14px;letter-spacing:0;color:#475569">${rating} out of 5</span></p>` : ""}
+      <blockquote style="margin:12px 0;padding:12px 16px;background:#fff;border-left:4px solid ${colour};font-size:15px;white-space:pre-wrap">${escHtml(message)}</blockquote>
+      <p style="font-size:13px;color:#475569">${publicLine ? escHtml(publicLine) + "<br/>" : ""}Student e-mail: ${escHtml(auth.email)}</p>
+      <p style="font-size:12px;color:#64748b">You can also see it on your admin screen under Complaints, Feedback &amp; Testimonials.</p></div>`;
     let emailed = false;
     for (const to of ADMIN_NOTIFICATION_EMAILS) {
       try { if (await sendSimulatedEmail(to, subject, text, "incoming", html)) emailed = true; } catch (err: any) { console.error("feedback e-mail failed:", err?.message); }
     }
-    if (!saved && !emailed) return res.status(500).json({ error: "Could not send your feedback right now. Please try again in a little while." });
-    return res.json({ success: true, googleReviewUrl: GOOGLE_REVIEW_URL || null });
+    if (!saved && !emailed) return res.status(500).json({ error: "Could not send this right now. Please try again in a little while." });
+    return res.json({ success: true, kind, googleReviewUrl: isTestimonial ? (GOOGLE_REVIEW_URL || null) : null });
   });
 
   app.get("/api/admin/feedback", async (req, res) => {
     if (!checkAdminAuth(req, res)) return;
     if (!(await feedbackTableReady())) return res.json({ unavailable: true, items: [] });
     const { data, error } = await supabase.from("student_feedback").select("*").order("created_at", { ascending: false }).limit(500);
-    if (error) return res.status(500).json({ error: "Could not load the feedback." });
+    if (error) return res.status(500).json({ error: "Could not load the list." });
     return res.json({
-      items: (data || []).map((r: any) => ({ id: r.id, name: r.student_name || r.student_email, email: r.student_email, studentClass: r.student_class, rating: r.rating, message: r.message || "", allowPublic: !!r.allow_public, isRead: !!r.is_read, createdAt: r.created_at })),
+      items: (data || []).map((r: any) => ({ id: r.id, name: r.student_name || r.student_email, email: r.student_email, studentClass: r.student_class, kind: FEEDBACK_KINDS.includes(r.kind) ? r.kind : "feedback", rating: typeof r.rating === "number" ? r.rating : null, message: r.message || "", allowPublic: !!r.allow_public, isRead: !!r.is_read, createdAt: r.created_at })),
     });
   });
 
