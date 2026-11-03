@@ -3,9 +3,11 @@ import { setDownloadAccess } from './utils/downloadAccess';
 import { lazyView } from './lazyView';
 import { ProfileLink } from './components/ProfileLink';
 import { MockTestSeries } from './components/MockTestSeries';
+import { FeedbackBox } from './components/FeedbackBox';
 const ProfileCenter = lazyView(() => import('./components/ProfileCenter'));
 const StudentProfileCard = lazyView(() => import('./components/StudentProfileCard'));
 const AdminSchoolProgress = lazyView(() => import('./components/AdminSchoolProgress'));
+const AdminFeedback = lazyView(() => import('./components/AdminFeedback'));
 import { peekBank, loadBank } from './data/banks';
 import type { Bank } from './data/bankTypes';
 import OpticsCanvas, {
@@ -5104,6 +5106,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
 
+            {user && <FeedbackBox token={user.token} isLightMode={isLightMode} />}
+
             {/* Revision box -- available to every student regardless of online/offline */}
             <button
               onClick={() => changeView('revision')}
@@ -5286,6 +5290,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             {/* Class X Mock Test Series -- below Latest Updates and Homework Assigned */}
             {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
+
+            {user && <FeedbackBox token={user.token} isLightMode={isLightMode} />}
 
             {user && !ADMIN_EMAILS.includes(user.email) && !isCanadianStudent && (
               <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />
@@ -8461,6 +8467,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             </div>
 
             <AdminSchoolProgress token={user.token} isLightMode={isLightMode} />
+
+            <AdminFeedback token={user.token} isLightMode={isLightMode} />
 
             {adminActionMessage && (
               <div className={`text-xs font-bold rounded-lg px-3 py-2.5 border ${
