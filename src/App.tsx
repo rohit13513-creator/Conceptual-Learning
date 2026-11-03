@@ -3,7 +3,7 @@ import { setDownloadAccess } from './utils/downloadAccess';
 import { lazyView } from './lazyView';
 import { ProfileLink } from './components/ProfileLink';
 import { MockTestSeries } from './components/MockTestSeries';
-import { FeedbackBox } from './components/FeedbackBox';
+import { FeedbackPage } from './components/FeedbackBox';
 const ProfileCenter = lazyView(() => import('./components/ProfileCenter'));
 const StudentProfileCard = lazyView(() => import('./components/StudentProfileCard'));
 const AdminSchoolProgress = lazyView(() => import('./components/AdminSchoolProgress'));
@@ -113,7 +113,8 @@ import {
   X,
   Trophy,
   BookOpenCheck,
-  Microscope
+  Microscope,
+  MessageSquareHeart
 } from 'lucide-react';
 
 // Mirrors Revision.tsx's own section constants -- used only for the admin's Question Paper /
@@ -470,10 +471,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     }
   }, [isLightMode]);
 
-  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum'>('hub');
-  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum')[]>(['hub']);
+  const [activeView, setActiveView] = useState<'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum' | 'feedback'>('hub');
+  const [viewHistory, setViewHistory] = useState<('hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum' | 'feedback')[]>(['hub']);
 
-  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum') => {
+  const changeView = (newView: 'hub' | 'simulator' | 'chemSim' | 'kyc' | 'learn' | 'chemNotes' | 'bioNotes' | 'bioNotes10' | 'physicsNotes9' | 'foundationsNotes9' | 'mathsNotes9' | 'mathsNotes8' | 'scienceNotes8' | 'canadianNotes' | 'ncert' | 'qbank' | 'competitive' | 'admin' | 'assessment' | 'portal' | 'about' | 'classUnavailable' | 'homework' | 'homeworkGuidelines' | 'revision' | 'ncertDownloads' | 'startStudying' | 'latestNews' | 'profile' | 'forum' | 'feedback') => {
     setViewHistory(prev => {
       if (prev[prev.length - 1] === newView) return prev;
       return [...prev, newView];
@@ -3801,6 +3802,19 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             <span>Home</span>
           </button>
 
+          {/* Tab: My Profile -- right after Home */}
+          <button
+            onClick={() => { changeView('profile'); setOpenMenu(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeView === 'profile'
+                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>My Profile</span>
+          </button>
+
           {/* Tab 2: Notes (class-locked: registered students only ever see their own class's items) */}
           {(() => {
             const notesItems = filterNavItemsByClass([
@@ -4139,6 +4153,19 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
           >
             <MessageSquare className="w-3.5 h-3.5" />
             <span>Learners Adda</span>
+          </button>
+
+          {/* Tab: Feedback & Testimonial -- just before About Us */}
+          <button
+            onClick={() => { changeView('feedback'); setOpenMenu(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              activeView === 'feedback'
+                ? 'bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black'
+                : (isLightMode ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-400 hover:text-slate-200')
+            }`}
+          >
+            <MessageSquareHeart className="w-3.5 h-3.5" />
+            <span>Feedback</span>
           </button>
 
           {/* Tab 7: About Us */}
@@ -5106,8 +5133,6 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
 
-            {user && <FeedbackBox token={user.token} isLightMode={isLightMode} />}
-
             {/* Revision box -- available to every student regardless of online/offline */}
             <button
               onClick={() => changeView('revision')}
@@ -5290,8 +5315,6 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
             {/* Class X Mock Test Series -- below Latest Updates and Homework Assigned */}
             {user && <MockTestSeries token={user.token} isLightMode={isLightMode} />}
-
-            {user && <FeedbackBox token={user.token} isLightMode={isLightMode} />}
 
             {user && !ADMIN_EMAILS.includes(user.email) && !isCanadianStudent && (
               <HomeworkLeaderboard isLightMode={isLightMode} token={user.token} currentUserEmail={user.email} />
@@ -10126,6 +10149,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       {activeView === 'kyc' && (
         <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin animate-in fade-in duration-305 transition-colors duration-300 ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
           <KnowYourChemicals isLightMode={isLightMode} />
+        </div>
+      )}
+
+      {activeView === 'feedback' && user && (
+        <div className={`flex-1 overflow-y-auto px-4 py-8 scrollbar-thin animate-in fade-in duration-300 ${isLightMode ? 'bg-slate-50' : 'bg-[#060b14]'}`}>
+          <FeedbackPage token={user.token} isLightMode={isLightMode} />
         </div>
       )}
 
