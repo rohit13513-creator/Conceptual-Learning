@@ -80,6 +80,7 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   const [school, setSchool] = useState(user.school || '');
   const [ambition, setAmbition] = useState(user.ambition || '');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [customInterest, setCustomInterest] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [upgradeNote, setUpgradeNote] = useState(false);
@@ -202,6 +203,20 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
   const heading = light ? 'text-slate-900' : 'text-white';
   const muted = light ? 'text-slate-500' : 'text-slate-400';
   const body = light ? 'text-slate-700' : 'text-slate-200';
+  const friendlyInput = `w-full border rounded-xl py-3 px-4 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 disabled:opacity-60 ${light ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400' : 'bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500'}`;
+  // interests are stored as one comma-separated line; the chips above the form add and remove items from it
+  const interestItems = interests.split(',').map((x) => x.trim()).filter(Boolean);
+  const setInterestItems = (items: string[]) => { const line = items.join(', '); if (line.length <= 200) setInterests(line); };
+  const toggleInterest = (item: string) => {
+    const has = interestItems.some((x) => x.toLowerCase() === item.toLowerCase());
+    setInterestItems(has ? interestItems.filter((x) => x.toLowerCase() !== item.toLowerCase()) : [...interestItems, item]);
+  };
+  const addCustomInterest = () => {
+    const t = customInterest.replace(/[,\s]+/g, ' ').trim();
+    if (!t) return;
+    if (!interestItems.some((x) => x.toLowerCase() === t.toLowerCase())) setInterestItems([...interestItems, t]);
+    setCustomInterest('');
+  };
   const photoPreview = useMemo(() => (photoFile ? URL.createObjectURL(photoFile) : null), [photoFile]);
   useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
 
@@ -352,61 +367,96 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
               </div>
             </div>
           ) : (
-            <form onSubmit={saveProfile} className="space-y-6">
-              <div className="grid lg:grid-cols-3 gap-6 items-start">
-                <div className={`${cardCls} p-6 lg:col-span-1 text-center`}>
-                  <div className="flex justify-center"><Avatar name={name || user.name} photoUrl={photoPreview || user.photoUrl} size={140} /></div>
-                  <label className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
-                    <Camera className="w-4 h-4" /> {photoFile ? 'Choose another' : 'Change photo'}
-                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
-                  </label>
-                  <p className={`text-xs font-medium mt-3 ${muted}`}>{photoFile ? `${photoFile.name} will be saved when you press Save.` : 'A clear face photo works best. JPG, PNG or WebP.'}</p>
+            <form onSubmit={saveProfile} className="max-w-xl mx-auto">
+              {/* top bar: Cancel / title / Save, like a phone app */}
+              <div className="flex items-center justify-between mb-5">
+                <button type="button" onClick={() => { setEditing(false); setMessage(null); }} className={`text-sm font-bold px-2 py-1.5 -ml-2 rounded-lg cursor-pointer ${light ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-slate-800'}`}>Cancel</button>
+                <h2 className={`text-base font-black ${heading}`}>Edit profile</h2>
+                <button type="submit" disabled={saving} className="text-sm font-black px-2 py-1.5 -mr-2 rounded-lg cursor-pointer text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
+              </div>
+
+              {/* photo */}
+              <div className="flex flex-col items-center text-center mb-7">
+                <label className="relative cursor-pointer group">
+                  <Avatar name={name || user.name} photoUrl={photoPreview || user.photoUrl} size={112} />
+                  <span className="absolute bottom-1 right-1 w-9 h-9 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center border-2 border-slate-900 shadow group-hover:bg-cyan-300"><Camera className="w-4 h-4" /></span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+                </label>
+                <label className="mt-3 text-sm font-black text-cyan-400 hover:text-cyan-300 cursor-pointer">
+                  {photoFile ? 'Choose a different photo' : 'Change profile photo'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
+                </label>
+                {photoFile && <p className={`text-xs font-medium mt-1 ${muted}`}>New photo chosen. Press Save to keep it.</p>}
+              </div>
+
+              <div className={`${cardCls} p-5 sm:p-6 space-y-6`}>
+                <div className="space-y-4">
+                  <div><label className={labelCls}>Name</label><input className={friendlyInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Your full name" /></div>
+                  <div>
+                    <label className={labelCls}>About me</label>
+                    <textarea className={`${friendlyInput} resize-none`} rows={3} maxLength={500} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Write a few lines about yourself" />
+                    <p className={`text-[11px] font-medium mt-1 text-right ${muted}`}>{bio.length}/500</p>
+                  </div>
                 </div>
 
-                <div className="space-y-6 lg:col-span-2">
-                  <div className={`${cardCls} p-6`}>
-                    {sectionTitle(User, 'Personal details')}
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
-                      <div><label className={labelCls}>Class (taken automatically)</label><input className={inputCls} value={classLabel(user.studentClass) || '--'} disabled /></div>
-                      <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-                      <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>
-                    </div>
+                <div className={`pt-5 border-t space-y-4 ${light ? 'border-slate-100' : 'border-slate-800'}`}>
+                  <p className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${muted}`}><MapPin className="w-3.5 h-3.5" /> Where you live</p>
+                  <div>
+                    <label className={labelCls}>Country</label>
+                    <select className={friendlyInput} value={country} onChange={(e) => { setCountry(e.target.value); if (!statesOf(e.target.value).includes(stateName)) { setStateName(''); setCity(''); } }}><option value="">Select country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
                   </div>
+                  {country && (
+                    <div>
+                      <label className={labelCls}>{stateWord(country)}</label>
+                      <select className={friendlyInput} value={stateName} onChange={(e) => { setStateName(e.target.value); if (!citiesOf(country, e.target.value).includes(city)) setCity(''); }}><option value="">{`Select ${stateWord(country).toLowerCase()}`}</option>{statesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                    </div>
+                  )}
+                  {country && stateName && (
+                    <div>
+                      <label className={labelCls}>City</label>
+                      <select className={friendlyInput} value={city} onChange={(e) => setCity(e.target.value)}><option value="">Select city</option>{city && !citiesOf(country, stateName).includes(city) && <option value={city}>{city}</option>}{citiesOf(country, stateName).map((c) => <option key={c} value={c}>{c}</option>)}</select>
+                    </div>
+                  )}
+                  {!country && <p className={`text-xs font-medium ${muted}`}>Choose your country first. Then your {`state`} and city will appear.</p>}
+                </div>
 
-                  <div className={`${cardCls} p-6`}>
-                    {sectionTitle(MapPin, 'Where you live and study', 'Choose from the lists: first the country, then the state, then the city.')}
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!statesOf(e.target.value).includes(stateName)) { setStateName(''); setCity(''); } }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                      <div><label className={labelCls}>{country ? stateWord(country) : 'State'}</label><select className={inputCls} value={stateName} onChange={(e) => { setStateName(e.target.value); if (!citiesOf(country, e.target.value).includes(city)) setCity(''); }} disabled={!country}><option value="">{country ? `Choose your ${stateWord(country).toLowerCase()}` : 'Choose your country first'}</option>{statesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                      <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!stateName}><option value="">{stateName ? 'Choose your city' : (country ? `Choose your ${stateWord(country).toLowerCase()} first` : 'Choose your country first')}</option>{city && !citiesOf(country, stateName).includes(city) && <option value={city}>{city}</option>}{citiesOf(country, stateName).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-                      <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
-                    </div>
+                <div className={`pt-5 border-t space-y-4 ${light ? 'border-slate-100' : 'border-slate-800'}`}>
+                  <p className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${muted}`}><School className="w-3.5 h-3.5" /> School</p>
+                  <div><label className={labelCls}>School name</label><input className={friendlyInput} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className={labelCls}>Class</label><input className={`${friendlyInput} opacity-60`} value={classLabel(user.studentClass) || '--'} disabled /></div>
+                    <div><label className={labelCls}>Favourite subject</label><input className={friendlyInput} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>
                   </div>
+                </div>
 
-                  <div className={`${cardCls} p-6`}>
-                    {sectionTitle(Heart, 'About you')}
-                    <div className="space-y-4">
-                      <div><label className={labelCls}>About me</label><textarea className={`${inputCls} resize-none`} rows={4} maxLength={500} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="A little about yourself..." /><p className={`text-[11px] font-medium mt-1 text-right ${muted}`}>{bio.length}/500</p></div>
-                      <div>
-                        <label className={labelCls}>Interests and hobbies</label>
-                        <input className={inputCls} value={interests} onChange={(e) => setInterests(e.target.value)} maxLength={200} placeholder="e.g. Cricket, drawing, coding" />
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {INTEREST_IDEAS.filter((i) => !interests.toLowerCase().includes(i.toLowerCase())).map((i) => (
-                            <button type="button" key={i} onClick={() => setInterests((cur) => (cur.trim() ? cur.replace(/[,\s]+$/, '') + ', ' : '') + i)} className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-cyan-50 hover:text-cyan-700' : 'bg-slate-800 text-slate-300 hover:bg-cyan-500/15 hover:text-cyan-300'}`}>+ {i}</button>
-                          ))}
-                        </div>
-                      </div>
-                      <div><label className={labelCls}>What I want to become</label><input className={inputCls} value={ambition} onChange={(e) => setAmbition(e.target.value)} maxLength={100} placeholder="e.g. Doctor, engineer, scientist" /></div>
+                <div className={`pt-5 border-t space-y-4 ${light ? 'border-slate-100' : 'border-slate-800'}`}>
+                  <p className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${muted}`}><Heart className="w-3.5 h-3.5" /> Interests</p>
+                  <div>
+                    <label className={labelCls}>Tap to choose your interests</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[...INTEREST_IDEAS, ...interestItems.filter((i) => !INTEREST_IDEAS.some((x) => x.toLowerCase() === i.toLowerCase()))].map((i) => {
+                        const on = interestItems.some((x) => x.toLowerCase() === i.toLowerCase());
+                        return (
+                          <button type="button" key={i} onClick={() => toggleInterest(i)} className={`px-3.5 py-2 rounded-full text-sm font-bold cursor-pointer transition border ${on ? 'bg-cyan-400 text-slate-950 border-cyan-400' : (light ? 'bg-white text-slate-700 border-slate-300 hover:border-cyan-400' : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-cyan-500')}`}>{on && <Check className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />}{i}</button>
+                        );
+                      })}
                     </div>
                   </div>
+                  <div className="flex gap-2">
+                    <input className={friendlyInput} value={customInterest} onChange={(e) => setCustomInterest(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomInterest(); } }} maxLength={30} placeholder="Something else? Type it here" />
+                    <button type="button" onClick={addCustomInterest} className={`shrink-0 px-4 rounded-xl text-sm font-black cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>Add</button>
+                  </div>
+                </div>
+
+                <div className={`pt-5 border-t space-y-4 ${light ? 'border-slate-100' : 'border-slate-800'}`}>
+                  <p className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${muted}`}><Target className="w-3.5 h-3.5" /> More about you</p>
+                  <div><label className={labelCls}>What I want to become</label><input className={friendlyInput} value={ambition} onChange={(e) => setAmbition(e.target.value)} maxLength={100} placeholder="e.g. Doctor, engineer, scientist" /></div>
+                  <div><label className={labelCls}>Birthday</label><input type="date" className={friendlyInput} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
                 </div>
               </div>
 
-              <div className={`sticky bottom-3 z-10 rounded-2xl border p-3 sm:p-4 flex items-center justify-end gap-3 backdrop-blur ${light ? 'bg-white/90 border-slate-200 shadow-lg' : 'bg-slate-900/90 border-slate-700 shadow-2xl shadow-black/40'}`}>
-                <button type="button" onClick={() => { setEditing(false); setMessage(null); }} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Cancel</button>
-                <button type="submit" disabled={saving} className="px-7 py-2.5 bg-[#22d3ee] text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-cyan-300 cursor-pointer transition disabled:opacity-50">{saving ? 'Saving...' : 'Save profile'}</button>
-              </div>
+              <button type="submit" disabled={saving} className="mt-6 w-full py-3.5 bg-[#22d3ee] text-slate-950 font-black text-sm uppercase tracking-wider rounded-2xl hover:bg-cyan-300 cursor-pointer transition disabled:opacity-50 shadow-lg shadow-cyan-500/20">{saving ? 'Saving...' : 'Save profile'}</button>
+              <p className={`text-xs font-medium text-center mt-3 ${muted}`}>You choose who sees what under Settings.</p>
             </form>
           )}
         </>
