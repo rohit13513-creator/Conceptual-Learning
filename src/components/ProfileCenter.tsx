@@ -4,6 +4,7 @@ import { ProfileCardBody, PublicProfile, classLabel } from './ProfileCardBody';
 import { SchoolMarksPanel, MarksPayload } from './SchoolMarksPanel';
 import type { MarksEntry } from './schoolMarksUtil';
 import type { VerifyOutcome } from './VerifyMarksModal';
+import { COUNTRIES, citiesOf } from '../../places';
 
 // The student's own profile: a social-style page (photo, class, city, school, interests ...), the privacy choices
 // that decide what other students see, and the School Marks tracker. Class is taken automatically from the account.
@@ -241,8 +242,8 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
               <div className="grid sm:grid-cols-2 gap-3">
                 <div><label className={labelCls}>Full name</label><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></div>
                 <div><label className={labelCls}>Class (taken automatically)</label><input className={`${inputCls} opacity-70`} value={classLabel(user.studentClass) || '--'} disabled /></div>
-                <div><label className={labelCls}>City</label><input className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} maxLength={60} placeholder="e.g. Ghaziabad" /></div>
-                <div><label className={labelCls}>Country</label><input className={inputCls} list="country-ideas" value={country} onChange={(e) => setCountry(e.target.value)} maxLength={60} placeholder="e.g. India" /><datalist id="country-ideas">{['India', 'Canada', 'United Arab Emirates', 'United States', 'United Kingdom', 'Australia', 'Singapore', 'Qatar', 'Saudi Arabia', 'Nepal'].map((c) => <option key={c} value={c} />)}</datalist></div>
+                <div><label className={labelCls}>Country</label><select className={inputCls} value={country} onChange={(e) => { setCountry(e.target.value); if (!citiesOf(e.target.value).includes(city)) setCity(''); }}><option value="">Choose your country</option>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label className={labelCls}>City</label><select className={inputCls} value={city} onChange={(e) => setCity(e.target.value)} disabled={!country}><option value="">{country ? 'Choose your city' : 'Choose your country first'}</option>{city && !citiesOf(country).includes(city) && <option value={city}>{city}</option>}{citiesOf(country).map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
                 <div><label className={labelCls}>School</label><input className={inputCls} value={school} onChange={(e) => setSchool(e.target.value)} maxLength={100} placeholder="Name of your school" /></div>
                 <div><label className={labelCls}>Date of birth</label><input type="date" className={inputCls} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
                 <div><label className={labelCls}>Favourite subject</label><input className={inputCls} value={favSubject} onChange={(e) => setFavSubject(e.target.value)} maxLength={60} placeholder="e.g. Physics" /></div>

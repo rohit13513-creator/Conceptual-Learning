@@ -14,6 +14,7 @@ import { signToken, verifyToken, sessionCookie, clearedSessionCookie, base64url 
 import { makeAccountGate } from "./accountGate.js";
 import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "./marksVerification.js";
 import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken.js";
+import { COUNTRIES, citiesOf } from "./places.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -8603,8 +8604,14 @@ function buildApp(): express.Express {
     const sentNewFields = city !== undefined || country !== undefined || school !== undefined || ambition !== undefined || profileVisibility !== undefined;
     if (sentNewFields) {
       if (await profileColumnsReady()) {
-        if (city !== undefined) updates.city = oneLine(city, 60);
-        if (country !== undefined) { if (await countryColumnReady()) updates.country = oneLine(country, 60); else if (oneLine(country, 60)) profileUpgradePending = true; }
+        // Country and city come from our own lists (places.ts). A value that is not on the list is ignored, so what is stored stays as it was.
+        const pickedCountry = country !== undefined ? (oneLine(country, 60) || "") : undefined;
+        const countryOk = pickedCountry !== undefined && (pickedCountry === "" || COUNTRIES.includes(pickedCountry));
+        if (city !== undefined) {
+          const c = oneLine(city, 60);
+          if (!c || (countryOk && pickedCountry && citiesOf(pickedCountry).includes(c))) updates.city = c;
+        }
+        if (countryOk) { if (await countryColumnReady()) updates.country = pickedCountry || null; else if (pickedCountry) profileUpgradePending = true; }
         if (school !== undefined) updates.school = oneLine(school, 100);
         if (ambition !== undefined) updates.ambition = oneLine(ambition, 100);
         if (profileVisibility !== undefined) {
