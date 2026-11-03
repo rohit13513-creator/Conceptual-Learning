@@ -285,8 +285,8 @@ export default function ProfileCenter({ user, isLightMode, onUserUpdated }: { us
           </div>
           <div className={`flex mt-5 border-b overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${light ? 'border-slate-200' : 'border-slate-800'}`}>
             {tabBtn('profile', 'Profile', User)}
-            {tabBtn('privacy', 'Settings', Settings)}
             {tabBtn('marks', 'School marks', GraduationCap)}
+            {tabBtn('privacy', 'Settings', Settings)}
           </div>
         </div>
       </div>
