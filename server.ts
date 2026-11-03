@@ -8840,7 +8840,7 @@ function buildApp(): express.Express {
   // ── COMPLAINTS, FEEDBACK & TESTIMONIALS ──
   // Three kinds, chosen by the student: a complaint and a feedback (no stars), and a testimonial (with a star rating).
   // Every one is e-mailed to the teacher and (once supabase_feedback.sql has been run) kept for the admin screen.
-  // Only a testimonial is followed by the invitation to share on Google, and it is the same for every star rating.
+  // Only a 5-star testimonial is followed by the invitation to share on Google (the admin's decision).
   const FEEDBACK_KINDS = ["complaint", "feedback", "testimonial"] as const;
   type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
   let feedbackReadyAt = 0, feedbackReady = false;
@@ -8905,7 +8905,8 @@ function buildApp(): express.Express {
       try { if (await sendSimulatedEmail(to, subject, text, "incoming", html)) emailed = true; } catch (err: any) { console.error("feedback e-mail failed:", err?.message); }
     }
     if (!saved && !emailed) return res.status(500).json({ error: "Could not send this right now. Please try again in a little while." });
-    return res.json({ success: true, kind, googleReviewUrl: isTestimonial ? (GOOGLE_REVIEW_URL || null) : null });
+    // The Google invitation is shown only after a 5-star testimonial (the admin's decision).
+    return res.json({ success: true, kind, googleReviewUrl: isTestimonial && rating === 5 ? (GOOGLE_REVIEW_URL || null) : null });
   });
 
   app.get("/api/admin/feedback", async (req, res) => {

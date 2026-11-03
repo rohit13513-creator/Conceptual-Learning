@@ -3,7 +3,8 @@ import { Star, MessageSquareHeart, Check, ExternalLink } from 'lucide-react';
 
 // The "Feedback" page (its own tab in the top bar). The student first chooses what to send: a complaint, a feedback or a
 // testimonial. Only a testimonial has the star rating. Everything reaches the teacher by e-mail and on the admin screen.
-// After a testimonial -- whatever the stars -- the student is invited to share the words on Google as well, if a link is set.
+// After a 5-star testimonial the student is invited to share the words on Google as well, if a link is set (the server
+// sends the link only in that case).
 
 type Kind = 'complaint' | 'feedback' | 'testimonial';
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
