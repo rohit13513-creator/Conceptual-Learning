@@ -108,7 +108,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
 
   // Only reviews that tell a real story of learning (or praise the teaching at length) are shown: at least
   // 450 characters, and none that name a place, because we are no longer tied to one location.
-  const reviewsForBar = GOOGLE_REVIEWS.filter((r) => r.text.length >= 450 && !/gaur|exotica|dreamville|noida|locality|coaching/i.test(r.text));
+  // 5-star testimonials the admin approved for this first page (sent by students from the Feedback tab): first name only.
+  const [studentTestimonials, setStudentTestimonials] = useState<GoogleReview[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/public/testimonials')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d && Array.isArray(d.items)) setStudentTestimonials(d.items.map((x: any) => ({ name: String(x.name || 'A student'), when: '', text: String(x.text || '') })).filter((x: GoogleReview) => x.text)); })
+      .catch(() => { /* the bar simply shows the Google reviews */ });
+    return () => { cancelled = true; };
+  }, []);
+  const reviewsForBar = [...studentTestimonials, ...GOOGLE_REVIEWS.filter((r) => r.text.length >= 450 && !/gaur|exotica|dreamville|noida|locality|coaching/i.test(r.text))];
   const loop = [...reviewsForBar, ...reviewsForBar];
   const [activeReview, setActiveReview] = useState<GoogleReview | null>(null);
   const [showAbout, setShowAbout] = useState(false);

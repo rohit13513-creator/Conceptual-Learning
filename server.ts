@@ -8136,7 +8136,7 @@ function buildApp(): express.Express {
     const appUrl = (process.env.APP_URL || requestHost || "").replace(/\/$/, "");
     const approveUrl = `${appUrl}/api/user/approve-external?email=${encodeURIComponent(newUser.email)}&token=${encodeURIComponent(signApprovalToken(newUser.email))}`;
 
-    const textBody = `Hello Rohit,\n\nA new student has successfully completed verification and submitted their registration request:\n\n` +
+    const textBody = `Hello Admin,\n\nA new student has successfully completed verification and submitted their registration request:\n\n` +
       `- Name: ${newUser.name}\n` +
       `- Email Address: ${newUser.email}\n` +
       `- Phone Number: ${newUser.phone}\n` +
@@ -8154,7 +8154,7 @@ function buildApp(): express.Express {
           📚 New Conceptual Learning Online Student Enrollment
         </h2>
         <p style="font-size: 15px; line-height: 1.5; color: #334155; margin-bottom: 20px;">
-          Hello Rohit, a new student has successfully completed verification/OTP validation and submitted an enrollment request:
+          Hello Admin, a new student has successfully completed verification/OTP validation and submitted an enrollment request:
         </p>
         
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden;">
@@ -8850,6 +8850,9 @@ function buildApp(): express.Express {
     feedbackReadyAt = Date.now(); feedbackReady = !error;
     return feedbackReady;
   }
+  // A testimonial can be put on the first page (the moving bar of testimonials) only if it has 5 stars, a proper text, and the
+  // student agreed -- and only after the admin presses "Show on home page". Needs the show_on_home column of supabase_feedback.sql.
+  const FEEDBACK_HOME_MIN_CHARS = 30;
   const feedbackStars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
   const FEEDBACK_KIND_LABEL: Record<FeedbackKind, string> = { complaint: "complaint", feedback: "feedback", testimonial: "testimonial" };
 
@@ -8887,13 +8890,15 @@ function buildApp(): express.Express {
     const colour = kind === "complaint" ? "#dc2626" : kind === "testimonial" ? "#f59e0b" : "#0891b2";
     const subject = `New ${label}${isTestimonial ? ` ${stars} (${rating}/5)` : ""} from ${me.name}${cls ? ` - ${cls}` : ""}`;
     const publicLine = isTestimonial ? (allowPublic ? "The student agreed that these words may be shown as a testimonial." : "The student did not give permission to show these words publicly.") : "";
-    const text = `Hello Rohit,\n\n${me.name}${cls ? ` (${cls})` : ""} sent a ${label}.\n\n${isTestimonial ? `Rating: ${stars} (${rating} out of 5)\n\n` : ""}"${message}"\n\n${publicLine ? publicLine + "\n" : ""}Student e-mail: ${auth.email}\n\nYou can also see it on your admin screen under Complaints, Feedback & Testimonials.\n\nConceptual Learning Online`;
+    const homeEligible = isTestimonial && rating === 5 && allowPublic && message.length >= FEEDBACK_HOME_MIN_CHARS;
+    const homeLine = homeEligible ? "This 5-star testimonial can be shown on the first page of the app. To approve it, open your admin screen, go to Complaints, Feedback & Testimonials and press 'Show on home page'." : "";
+    const text = `Hello Admin,\n\n${me.name}${cls ? ` (${cls})` : ""} sent a ${label}.\n\n${isTestimonial ? `Rating: ${stars} (${rating} out of 5)\n\n` : ""}"${message}"\n\n${publicLine ? publicLine + "\n" : ""}${homeLine ? homeLine + "\n" : ""}Student e-mail: ${auth.email}\n\nYou can also see it on your admin screen under Complaints, Feedback & Testimonials.\n\nConceptual Learning Online`;
     const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1e293b;background:#f8fafc">
       <h2 style="margin-top:0;border-bottom:2px solid ${colour};padding-bottom:10px">New ${escHtml(label)}</h2>
       <p style="font-size:15px;margin:6px 0"><b>${escHtml(me.name)}</b>${cls ? ` (${escHtml(cls)})` : ""}</p>
       ${isTestimonial ? `<p style="font-size:26px;letter-spacing:3px;margin:6px 0;color:#f59e0b">${stars} <span style="font-size:14px;letter-spacing:0;color:#475569">${rating} out of 5</span></p>` : ""}
       <blockquote style="margin:12px 0;padding:12px 16px;background:#fff;border-left:4px solid ${colour};font-size:15px;white-space:pre-wrap">${escHtml(message)}</blockquote>
-      <p style="font-size:13px;color:#475569">${publicLine ? escHtml(publicLine) + "<br/>" : ""}Student e-mail: ${escHtml(auth.email)}</p>
+      <p style="font-size:13px;color:#475569">${publicLine ? escHtml(publicLine) + "<br/>" : ""}${homeLine ? "<b>" + escHtml(homeLine) + "</b><br/>" : ""}Student e-mail: ${escHtml(auth.email)}</p>
       <p style="font-size:12px;color:#64748b">You can also see it on your admin screen under Complaints, Feedback &amp; Testimonials.</p></div>`;
     let emailed = false;
     for (const to of ADMIN_NOTIFICATION_EMAILS) {
@@ -8909,8 +8914,40 @@ function buildApp(): express.Express {
     const { data, error } = await supabase.from("student_feedback").select("*").order("created_at", { ascending: false }).limit(500);
     if (error) return res.status(500).json({ error: "Could not load the list." });
     return res.json({
-      items: (data || []).map((r: any) => ({ id: r.id, name: r.student_name || r.student_email, email: r.student_email, studentClass: r.student_class, kind: FEEDBACK_KINDS.includes(r.kind) ? r.kind : "feedback", rating: typeof r.rating === "number" ? r.rating : null, message: r.message || "", allowPublic: !!r.allow_public, isRead: !!r.is_read, createdAt: r.created_at })),
+      items: (data || []).map((r: any) => {
+        const kind = FEEDBACK_KINDS.includes(r.kind) ? r.kind : "feedback";
+        const rating = typeof r.rating === "number" ? r.rating : null;
+        const message = r.message || "";
+        return { id: r.id, name: r.student_name || r.student_email, email: r.student_email, studentClass: r.student_class, kind, rating, message, allowPublic: !!r.allow_public, isRead: !!r.is_read, createdAt: r.created_at,
+          homeEligible: kind === "testimonial" && rating === 5 && !!r.allow_public && message.length >= FEEDBACK_HOME_MIN_CHARS, showOnHome: !!r.show_on_home };
+      }),
     });
+  });
+
+  // Admin: put an eligible 5-star testimonial on the first page, or take it off again.
+  app.post("/api/admin/feedback/home", async (req, res) => {
+    if (!checkAdminAuth(req, res)) return;
+    const id = String(req.body?.id ?? "");
+    const show = req.body?.show === true;
+    if (!id) return res.status(400).json({ error: "Missing id." });
+    const { data: row } = await supabase.from("student_feedback").select("kind, rating, allow_public, message").eq("id", id).maybeSingle();
+    if (!row) return res.status(404).json({ error: "Not found." });
+    if (show && !(row.kind === "testimonial" && row.rating === 5 && row.allow_public && String(row.message || "").length >= FEEDBACK_HOME_MIN_CHARS)) {
+      return res.status(400).json({ error: "Only a 5-star testimonial with proper words and the student's permission can be shown on the first page." });
+    }
+    const { error } = await supabase.from("student_feedback").update({ show_on_home: show }).eq("id", id);
+    if (error) return res.status(500).json({ error: "Could not update. Please run the latest supabase_feedback.sql first." });
+    return res.json({ success: true });
+  });
+
+  // Public (before login): the testimonials the admin approved for the first page. First name only, nothing else.
+  app.get("/api/public/testimonials", async (req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
+    if (rateLimited(req, res, "public-testimonials", 120, 60 * 60_000)) return;
+    if (!(await feedbackTableReady())) return res.json({ items: [] });
+    const { data, error } = await supabase.from("student_feedback").select("student_name, message").eq("kind", "testimonial").eq("rating", 5).eq("allow_public", true).eq("show_on_home", true).order("created_at", { ascending: false }).limit(30);
+    if (error) return res.json({ items: [] });
+    return res.json({ items: (data || []).map((r: any) => ({ name: String(r.student_name || "").trim().split(/\s+/)[0] || "A student", text: String(r.message || "") })).filter((x: any) => x.text.length >= FEEDBACK_HOME_MIN_CHARS) });
   });
 
   app.post("/api/admin/feedback/read", async (req, res) => {
@@ -9100,7 +9137,7 @@ function buildApp(): express.Express {
     const appUrl = (process.env.APP_URL || `${a.req.protocol}://${a.req.get("host")}`).replace(/\/$/, "");
     const link = `${appUrl}/api/marks-review?token=${encodeURIComponent(signMarksReviewToken({ email: a.studentEmail, academicYear: a.academicYear, examName: a.examName }, SESSION_SECRET))}`;
     const cls = a.studentClass === "Canadian" ? "Canadian Board" : a.studentClass ? `Class ${a.studentClass}` : "";
-    const text = `Hello Rohit,\n\nA student's school marks need your decision.\n\n- Student: ${a.studentName} (${cls})\n- Exam: ${a.examName} ${a.academicYear}\n- School in profile: ${a.profileSchool || "(not filled in)"}\n- School on the page: ${a.schoolOnDocument}\n- Name on the page: ${a.studentOnDocument || "(not visible)"}\n\nWhy it was sent to you:\n${a.reasons.map((r) => "- " + r).join("\n")}\n\nMarks:\n${a.lines.map((l) => `- ${l.subject}: entered ${l.entered}, page shows ${l.onDocument} (${l.decision})`).join("\n")}\n\nOpen the uploaded page and approve or reject:\n${link}\n\nConceptual Learning Online`;
+    const text = `Hello Admin,\n\nA student's school marks need your decision.\n\n- Student: ${a.studentName} (${cls})\n- Exam: ${a.examName} ${a.academicYear}\n- School in profile: ${a.profileSchool || "(not filled in)"}\n- School on the page: ${a.schoolOnDocument}\n- Name on the page: ${a.studentOnDocument || "(not visible)"}\n\nWhy it was sent to you:\n${a.reasons.map((r) => "- " + r).join("\n")}\n\nMarks:\n${a.lines.map((l) => `- ${l.subject}: entered ${l.entered}, page shows ${l.onDocument} (${l.decision})`).join("\n")}\n\nOpen the uploaded page and approve or reject:\n${link}\n\nConceptual Learning Online`;
     const rows = a.lines.map((l) => `<tr><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.subject)}</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.entered)}</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0">${escHtml(l.onDocument)}</td></tr>`).join("");
     const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1e293b;background:#f8fafc">
       <h2 style="margin-top:0;border-bottom:2px solid #f59e0b;padding-bottom:10px">School marks need your decision</h2>

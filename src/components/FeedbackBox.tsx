@@ -8,9 +8,9 @@ import { Star, MessageSquareHeart, Check, ExternalLink } from 'lucide-react';
 type Kind = 'complaint' | 'feedback' | 'testimonial';
 const LABELS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 const KINDS: { key: Kind; label: string; intro: string; placeholder: string; thanks: string }[] = [
-  { key: 'complaint', label: 'Complaint', intro: 'Something went wrong? Tell us plainly and Rohit Sir will look into it.', placeholder: 'What went wrong? Please tell us what happened.', thanks: 'We are sorry for the trouble. Your complaint has reached Rohit Sir and he will look into it.' },
-  { key: 'feedback', label: 'Feedback', intro: 'A suggestion or an idea to make Conceptual Learning better.', placeholder: 'What can we do better? Any idea is welcome.', thanks: 'Thank you! Your feedback has reached Rohit Sir. We read every message and use it to improve.' },
-  { key: 'testimonial', label: 'Testimonial', intro: 'Share your experience with a star rating and a few words.', placeholder: 'What did you like about Conceptual Learning?', thanks: 'Thank you! Your testimonial has reached Rohit Sir. Your kind words mean a lot to us.' },
+  { key: 'complaint', label: 'Complaint', intro: 'Something went wrong? Tell us plainly and we will look into it.', placeholder: 'What went wrong? Please tell us what happened.', thanks: 'We are sorry for the trouble. Your complaint has reached the admin and we will look into it.' },
+  { key: 'feedback', label: 'Feedback', intro: 'A suggestion or an idea to make Conceptual Learning better.', placeholder: 'What can we do better? Any idea is welcome.', thanks: 'Thank you! Your feedback has reached the admin. We read every message and use it to improve.' },
+  { key: 'testimonial', label: 'Testimonial', intro: 'Share your experience with a star rating and a few words.', placeholder: 'What did you like about Conceptual Learning?', thanks: 'Thank you! Your testimonial has reached the admin. Your kind words mean a lot to us.' },
 ];
 
 export function FeedbackPage({ token, isLightMode }: { token: string; isLightMode: boolean }) {
@@ -61,7 +61,7 @@ export function FeedbackPage({ token, isLightMode }: { token: string; isLightMod
         <span className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br from-amber-300 to-orange-400 shadow-lg shadow-amber-500/25"><MessageSquareHeart className="w-6 h-6 text-slate-950" /></span>
         <div>
           <h1 className={`text-2xl font-black ${heading}`}>Feedback</h1>
-          <p className={`text-sm font-semibold mt-0.5 ${muted}`}>Send a complaint, a feedback or a testimonial. It reaches Rohit Sir directly.</p>
+          <p className={`text-sm font-semibold mt-0.5 ${muted}`}>Send a complaint, a feedback or a testimonial. It reaches the admin directly.</p>
         </div>
       </div>
 

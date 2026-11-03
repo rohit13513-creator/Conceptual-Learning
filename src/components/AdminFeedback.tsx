@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MessageSquareHeart, Star, RefreshCw, Copy, Check } from 'lucide-react';
 
 // The teacher's list of every complaint, feedback and testimonial students have sent (each one is also e-mailed).
-interface Item { id: string; name: string; email: string; studentClass: string | null; kind: 'complaint' | 'feedback' | 'testimonial'; rating: number | null; message: string; allowPublic: boolean; isRead: boolean; createdAt: string }
+interface Item { id: string; name: string; email: string; studentClass: string | null; kind: 'complaint' | 'feedback' | 'testimonial'; rating: number | null; message: string; allowPublic: boolean; isRead: boolean; createdAt: string; homeEligible: boolean; showOnHome: boolean }
 type Filter = 'all' | 'new' | 'complaint' | 'feedback' | 'testimonial' | 'five' | 'public';
 
 const FILTERS: { key: Filter; label: string }[] = [
@@ -29,6 +29,17 @@ export default function AdminFeedback({ token, isLightMode }: { token: string; i
     setLoading(false);
   }, [token]);
   useEffect(() => { load(); }, [load]);
+
+  // A 5-star testimonial with proper words and the student's permission can be put on the first page (or taken off again).
+  const setHome = async (id: string, show: boolean) => {
+    setError(null);
+    try {
+      const r = await fetch('/api/admin/feedback/home', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ id, show }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'Could not update.');
+      setItems((cur) => (cur ? cur.map((i) => (i.id === id ? { ...i, showOnHome: show } : i)) : cur));
+    } catch (e: any) { setError(e.message); }
+  };
 
   const setRead = async (id: string, isRead: boolean) => {
     setItems((cur) => (cur ? cur.map((i) => (i.id === id ? { ...i, isRead } : i)) : cur));
@@ -79,11 +90,15 @@ export default function AdminFeedback({ token, isLightMode }: { token: string; i
                   <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${i.kind === 'complaint' ? 'bg-red-500/15 text-red-400' : i.kind === 'testimonial' ? 'bg-amber-500/15 text-amber-500' : 'bg-cyan-500/15 text-cyan-500'}`}>{i.kind === 'complaint' ? 'Complaint' : i.kind === 'testimonial' ? 'Testimonial' : 'Feedback'}</span>
                   {i.rating !== null && <>{stars(i.rating)}<span className={`text-[11px] font-bold ${muted}`}>{i.rating}/5</span></>}
                   {i.allowPublic && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">May be shown</span>}
+                  {i.showOnHome && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400">On home page</span>}
                 </div>
                 <p className={`text-sm font-medium whitespace-pre-wrap break-words ${light ? 'text-slate-700' : 'text-slate-200'}`}>{i.message}</p>
                 <div className="flex flex-wrap gap-2 pt-0.5">
                   <button onClick={() => setRead(i.id, !i.isRead)} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{i.isRead ? 'Mark as new' : 'Mark as read'}</button>
                   <button onClick={() => copyText(i)} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{copiedId === i.id ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> {i.kind === 'testimonial' ? 'Copy as testimonial' : 'Copy text'}</>}</button>
+                  {i.homeEligible && (
+                    <button onClick={() => setHome(i.id, !i.showOnHome)} className={`px-2.5 py-1 rounded-lg text-[11px] font-black cursor-pointer ${i.showOnHome ? (light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700') : 'bg-cyan-400 text-slate-950 hover:bg-cyan-300'}`}>{i.showOnHome ? 'Remove from home page' : 'Show on home page'}</button>
+                  )}
                   <a href={`mailto:${i.email}`} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Reply by e-mail</a>
                 </div>
               </div>

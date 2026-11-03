@@ -11,13 +11,15 @@ create table if not exists student_feedback (
   message text,
   allow_public boolean not null default false,   -- the student agreed that the words may be shown as a testimonial
   is_read boolean not null default false,
+  show_on_home boolean not null default false,   -- the admin approved this 5-star testimonial for the first page
   created_at timestamptz not null default now()
 );
 -- If an earlier version of this script was already run, bring the table up to date:
 alter table student_feedback add column if not exists kind text not null default 'feedback';
 alter table student_feedback alter column rating drop not null;
+alter table student_feedback add column if not exists show_on_home boolean not null default false;
 create index if not exists student_feedback_created_idx on student_feedback (created_at desc);
 alter table student_feedback enable row level security;  -- same protection as every other table: only the server can read it
 
--- Check: should show the columns kind and rating.
-select column_name, is_nullable from information_schema.columns where table_name = 'student_feedback' and column_name in ('kind', 'rating');
+-- Check: should show the columns kind, rating and show_on_home.
+select column_name, is_nullable from information_schema.columns where table_name = 'student_feedback' and column_name in ('kind', 'rating', 'show_on_home');
