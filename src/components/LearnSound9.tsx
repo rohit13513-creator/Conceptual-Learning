@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { DownloadNotesLink } from "./DownloadNotesLink";
 import { Award, HelpCircle, ChevronLeft, ChevronRight, FlaskConical, Zap, Waves, Ear, Volume2, Network, Trophy, Lightbulb, Radio } from "lucide-react";
 import { SoundChainDiagram, WaveTermsDiagram, VfLambdaDiagram, PitchLoudnessDiagram, SpeedMediaDiagram, EchoDiagram, HearingRangeDiagram, SonarDiagram, SoundMindMap } from "./sound9Diagrams";
 
@@ -676,6 +677,9 @@ interface LearnSound9Props {
   onGoToSelfAssessment?: () => void;
 }
 
+const NOTES_PDF_URL = "/download/downloads/Class-9-Physics-Sound-Notes.pdf";
+const NOTES_PDF_NAME = "Class-9-Physics-Sound-Notes.pdf";
+
 export function LearnSound9({ isLightMode = false, onCompleteNotes, onGoToSelfAssessment }: LearnSound9Props) {
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
@@ -685,15 +689,19 @@ export function LearnSound9({ isLightMode = false, onCompleteNotes, onGoToSelfAs
   return (
     <div className={`flex-1 flex flex-col md:flex-row overflow-hidden h-full transition-colors duration-300 ${isLightMode ? "bg-slate-50" : "bg-[#060b14]"}`} id="learn-sound9-container">
       <div className={`sticky top-0 shrink-0 z-20 p-3 md:hidden w-full ${isLightMode ? "bg-white/95 border-b border-slate-200" : "bg-[#0d1424]/95 border-b border-slate-800"}`}>
-        <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
-          {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select value={activeId} onChange={(e) => setActiveId(e.target.value)} className={`flex-1 min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
+            {TOPICS.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} compact />
+        </div>
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Volume2 className="w-5 h-5 text-cyan-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>Sound</h3></div>
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>How sound is made, how it travels, its properties and uses.</p>
+          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t) => (
