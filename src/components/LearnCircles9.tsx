@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { Circle, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, Trophy, Brain, Sigma, CheckCircle2, ShieldCheck } from "lucide-react";
 import { GeoFigure, GeoSpec } from "./GeoFigure";
-import { CIRCLES9_TOPICS, NBlock } from "../data/circles9Notes";
+import { CIRCLES9_TOPICS, NBlock, NTopic } from "../data/circles9Notes";
+import { PROPS9_TOPICS, PROPS9_BRANCHES } from "../data/props9Notes";
 
 // Class IX Maths: Circles. Topic-wise notes with proofs, diagrams, a mind map and a Competition Zone.
+// The same screen also shows the notes of "Propositions and their Converses" (chapter = "propositions").
 
 const ICONS: Record<string, React.ElementType> = {
   Basics: Circle, "Circles through points": Circle, Chords: Sigma, "Arcs and angles": Sigma, "Concyclic points": Sigma,
-  "Cyclic quadrilaterals": Sigma, Revision: Brain, "Competition Zone": Trophy,
+  "Cyclic quadrilaterals": Sigma, Revision: Brain, "Competition Zone": Trophy, Theory: Sigma, "Solved Examples": Lightbulb,
 };
 
 // "**bold**" markers inside a string become bold text
@@ -47,9 +49,9 @@ const BRANCHES: Branch[] = [
   { title: "8. Key formulas", color: "#a21caf", lines: ["Chord = 2√(r² − d²)", "Right triangle: R = hypotenuse ÷ 2", "Hexagon side = r", "Chord = r: 60°, 30° (major), 150°"] },
 ];
 
-const MindMap: React.FC = () => {
+const MindMap: React.FC<{ branches: Branch[]; title: string; subtitle: string; titleSize?: number; circleIcon?: boolean }> = ({ branches, title, subtitle, titleSize = 26, circleIcon = true }) => {
   const W = 1000, H = 700, bw = 292, bh = 128, cx = W / 2, cy = H / 2;
-  const left = BRANCHES.slice(0, 4), right = BRANCHES.slice(4);
+  const left = branches.slice(0, 4), right = branches.slice(4);
   const ys = [8, 182, 356, 530];
   const box = (b: Branch, x: number, y: number, side: "l" | "r", key: number) => {
     const ex = side === "l" ? x + bw : x, ey = y + bh / 2;
@@ -66,15 +68,15 @@ const MindMap: React.FC = () => {
   };
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-300 bg-white p-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[820px]" role="img" aria-label="Mind map of the chapter Circles">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[820px]" role="img" aria-label={`Mind map of the chapter ${title}`}>
         {left.map((b, i) => box(b, 6, ys[i], "l", i))}
         {right.map((b, i) => box(b, W - bw - 6, ys[i], "r", i + 4))}
         <ellipse cx={cx} cy={cy} rx={108} ry={62} fill="#0f172a" />
         <circle cx={cx - 62} cy={cy - 6} r={20} fill="none" stroke="#38bdf8" strokeWidth={2.4} />
         <circle cx={cx - 62} cy={cy - 6} r={2.6} fill="#38bdf8" />
         <line x1={cx - 62} y1={cy - 6} x2={cx - 45} y2={cy - 15} stroke="#38bdf8" strokeWidth={2} />
-        <text x={cx + 14} y={cy + 6} textAnchor="middle" fontSize={26} fontWeight={800} fill="#ffffff">Circles</text>
-        <text x={cx} y={cy + 36} textAnchor="middle" fontSize={12.5} fontWeight={600} fill="#bae6fd">Class IX Maths</text>
+        <text x={circleIcon ? cx + 14 : cx} y={cy + 6} textAnchor="middle" fontSize={titleSize} fontWeight={800} fill="#ffffff">{title}</text>
+        <text x={cx} y={cy + 36} textAnchor="middle" fontSize={12.5} fontWeight={600} fill="#bae6fd">{subtitle}</text>
       </svg>
     </div>
   );
@@ -85,7 +87,9 @@ const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
   <div className="flex flex-wrap justify-center gap-4">{specs.map((s, i) => <GeoFigure key={i} spec={s} />)}</div>
 );
 
-const Block: React.FC<{ b: NBlock; light: boolean }> = ({ b, light }) => {
+type Chapter = "circles" | "propositions";
+
+const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, light, chapter }) => {
   switch (b.t) {
     case "p": return <p className="text-sm font-semibold leading-relaxed">{md(b.s)}</p>;
     case "h": return <div className="flex items-center gap-2 text-[12.5px] font-black uppercase tracking-wider text-cyan-300 font-mono"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400" /><span>{b.s}</span></div>;
@@ -94,7 +98,9 @@ const Block: React.FC<{ b: NBlock; light: boolean }> = ({ b, light }) => {
     case "table": return <Table head={b.head} rows={b.rows} light={light} />;
     case "fig": return <div className="flex justify-center"><GeoFigure spec={b.spec} max={340} /></div>;
     case "figs": return <Figs specs={b.specs} />;
-    case "mindmap": return <MindMap />;
+    case "mindmap": return chapter === "propositions"
+      ? <MindMap branches={PROPS9_BRANCHES} title="Propositions" subtitle="and their Converses" titleSize={23} circleIcon={false} />
+      : <MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" />;
     case "key": return (
       <div className="bg-cyan-950/25 border border-cyan-500/25 p-4 rounded-xl space-y-1.5 font-semibold">
         <h5 className="font-black text-cyan-300 text-[12.5px] uppercase tracking-wider flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> {b.title}</h5>
@@ -139,10 +145,11 @@ const Block: React.FC<{ b: NBlock; light: boolean }> = ({ b, light }) => {
   }
 };
 
-export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack }: { isLightMode?: boolean; onCompleteNotes?: () => void; onBack?: () => void }) {
-  const [activeId, setActiveId] = useState<string>(CIRCLES9_TOPICS[0].id);
-  const idx = Math.max(0, CIRCLES9_TOPICS.findIndex((t) => t.id === activeId));
-  const topic = CIRCLES9_TOPICS[idx];
+export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, chapter = "circles" }: { isLightMode?: boolean; onCompleteNotes?: () => void; onBack?: () => void; chapter?: Chapter }) {
+  const TOPICS: NTopic[] = chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
+  const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
+  const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
+  const topic = TOPICS[idx];
   const navBtn = `flex items-center gap-1 px-3 py-1.5 rounded-lg border font-bold text-[13.5px] cursor-pointer transition ${isLightMode ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm" : "bg-slate-900 border-slate-800 text-slate-200 hover:text-white hover:border-slate-700"}`;
   const go = (id: string) => { setActiveId(id); document.getElementById("learn-circles-main")?.scrollTo({ top: 0 }); };
   const Icon = ICONS[topic.category] || ListChecks;
@@ -151,17 +158,17 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack }: 
     <div className={`flex-1 flex flex-col md:flex-row overflow-hidden h-full transition-colors duration-300 ${isLightMode ? "bg-slate-50" : "bg-[#060b14]"}`} id="learn-circles-container">
       <div className={`sticky top-0 shrink-0 z-20 p-3 md:hidden w-full ${isLightMode ? "bg-white/95 border-b border-slate-200" : "bg-[#0d1424]/95 border-b border-slate-800"}`}>
         <select value={activeId} onChange={(e) => go(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
-          {CIRCLES9_TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
+          {TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
         </select>
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2"><Circle className="w-5 h-5 text-cyan-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>Circles</h3></div>
-          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone.</p>
+          <div className="flex items-center gap-2">{chapter === "propositions" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
+          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
         </div>
         <nav className="flex-1 p-2 space-y-1">
-          {CIRCLES9_TOPICS.map((t, i) => (
+          {TOPICS.map((t, i) => (
             <button key={t.id} onClick={() => go(t.id)} className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-150 ${activeId === t.id ? (isLightMode ? "bg-cyan-50 border border-cyan-300" : "bg-cyan-950/40 border border-cyan-500/30") : "border border-transparent hover:bg-slate-800/40"}`}>
               <span className={`text-[12px] font-black uppercase tracking-widest block ${activeId === t.id ? "text-cyan-400" : "text-slate-500"}`}>{t.category}</span>
               <span className={`text-sm font-bold ${activeId === t.id ? (isLightMode ? "text-cyan-900" : "text-white") : isLightMode ? "text-slate-700" : "text-slate-300"}`}>{i + 1}. {t.title}</span>
@@ -187,13 +194,13 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack }: 
           </div>
 
           <div className="space-y-6" key={topic.id}>
-            {topic.blocks.map((blk, i) => <Block key={i} b={blk} light={isLightMode} />)}
+            {topic.blocks.map((blk, i) => <Block key={i} b={blk} light={isLightMode} chapter={chapter} />)}
           </div>
 
           <div className={`flex flex-wrap items-center justify-between gap-3 border-t pt-5 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-            {idx > 0 ? <button onClick={() => go(CIRCLES9_TOPICS[idx - 1].id)} className={navBtn}><ChevronLeft className="w-3 h-3" />Previous Topic</button> : <div />}
-            {idx < CIRCLES9_TOPICS.length - 1
-              ? <button onClick={() => go(CIRCLES9_TOPICS[idx + 1].id)} className={navBtn}>Next Topic<ChevronRight className="w-3 h-3" /></button>
+            {idx > 0 ? <button onClick={() => go(TOPICS[idx - 1].id)} className={navBtn}><ChevronLeft className="w-3 h-3" />Previous Topic</button> : <div />}
+            {idx < TOPICS.length - 1
+              ? <button onClick={() => go(TOPICS[idx + 1].id)} className={navBtn}>Next Topic<ChevronRight className="w-3 h-3" /></button>
               : onCompleteNotes
                 ? <button onClick={onCompleteNotes} className={navBtn}>Go to Solved Questions<ChevronRight className="w-3 h-3" /></button>
                 : onBack && <button onClick={onBack} className={navBtn}>Back to Home<ChevronRight className="w-3 h-3" /></button>}

@@ -7,6 +7,7 @@ export interface BankParams {
   bioChapter10: string;
   chemChapter10: string;
   mathsChapter8: string;
+  mathsChapter9: string;
   scienceChapter8: string;
 }
 

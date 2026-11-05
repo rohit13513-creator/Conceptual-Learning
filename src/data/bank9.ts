@@ -34,10 +34,24 @@ import { CIRCLES9_MCQS } from './circles9_mcq';
 import { CIRCLES9_VERY_SHORT, CIRCLES9_SHORT } from './circles9_short';
 import { CIRCLES9_LONG, CIRCLES9_COMPETENCY } from './circles9_long';
 import { CIRCLES9_NCERT_SOLVED } from './circles9_ncert';
+import { PROPS9_MCQS } from './props9_mcq';
+import { PROPS9_VERY_SHORT, PROPS9_SHORT } from './props9_short';
+import { PROPS9_LONG, PROPS9_COMPETENCY } from './props9_long';
+import { PROPS9_NCERT_SOLVED } from './props9_ncert';
 
 export function getBank(p: BankParams): Bank {
-  const { preparingFor, qbSubject, physicsChapter9, bioChapter9 } = p;
-  if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'sound') {
+  const { preparingFor, qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
+  if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'propositions') {
+    return {
+          ncert: PROPS9_NCERT_SOLVED,
+          mcqs: PROPS9_MCQS,
+          veryshort: PROPS9_VERY_SHORT,
+          short: PROPS9_SHORT,
+          long: PROPS9_LONG,
+          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          competency: PROPS9_COMPETENCY,
+    };
+  } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'sound') {
     return {
           ncert: SOUND9_NCERT_SOLVED,
           mcqs: SOUND9_MCQS,

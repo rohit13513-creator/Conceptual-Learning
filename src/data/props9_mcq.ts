@@ -1,0 +1,73 @@
+import type { QuizQuestion } from "../types-custom";
+
+// 30 multiple-choice questions: Class IX Maths, Propositions and their Converses.
+// 20 ordinary questions, then 10 assertion and reasoning questions.
+
+let n = 0;
+const m = (question: string, options: string[], correctAnswer: number, explanation: string): QuizQuestion => ({ id: ++n, question, options, correctAnswer, explanation });
+const AR = ["Both A and R are true and R is the correct explanation of A", "Both A and R are true but R is NOT the correct explanation of A", "A is true but R is false", "A is false but R is true"];
+
+export const PROPS9_MCQS: QuizQuestion[] = [
+  m("Which of the following is a proposition?", ["Is 9 a perfect square?", "Draw a circle of radius 3 cm.", "Every square is a rectangle.", "What a big number!"], 2,
+    "A proposition is a statement that is true or false. A question, a command and an exclamation are not. \"Every square is a rectangle\" is a statement and it is true."),
+  m("The converse of \"If a number is divisible by 10, then it ends in 0\" is", ["If a number ends in 0, then it is divisible by 10", "If a number is divisible by 10, then it ends in 5", "If a number is divisible by 5, then it ends in 0", "A number ends in 0 and is divisible by 10"], 0,
+    "The converse of \"if X then Y\" is \"if Y then X\". Here X is \"divisible by 10\" and Y is \"ends in 0\"."),
+  m("The converse of \"If a quadrilateral is a rectangle, then its diagonals are equal\" is false. Which figure is a counterexample to it?", ["A square", "A rhombus", "A parallelogram", "An isosceles trapezium"], 3,
+    "A counterexample has equal diagonals but is not a rectangle. An isosceles trapezium has equal diagonals and its angles are not all 90°. A square is a rectangle, and the diagonals of a rhombus or a parallelogram are not equal in general."),
+  m("How many of these propositions have a true converse? (i) If x = y, then a + x = a + y. (ii) If x = y, then x² = y². (iii) If n is divisible by 12, then n is divisible by 3. (iv) If n is divisible by 15, then n is divisible by 3 and 5.", ["1", "2", "3", "4"], 1,
+    "(i) The converse is the cancellation rule and is true. (ii) The converse is false (x = 3, y = −3). (iii) The converse is false (6 is divisible by 3, not by 12). (iv) The converse is true, as 3 and 5 have no common factor. So two converses are true."),
+  m("Which number is a counterexample to \"If n is a prime number, then n is odd\"?", ["1", "2", "9", "15"], 1,
+    "A counterexample is a prime that is not odd. The number 2 is prime and even. The numbers 9 and 15 are odd but not prime, and 1 is neither."),
+  m("Which of these is the if-then form of \"A triangle is equilateral when its three sides are equal\"? (The part after \"when\" is the condition.)", ["If a triangle is equilateral, then its three sides are equal", "If a triangle is equilateral, then it is isosceles", "If a triangle has two equal sides, then it is equilateral", "If the three sides of a triangle are equal, then it is equilateral"], 3,
+    "\"Y when X\" means \"if X then Y\". The condition X is \"its three sides are equal\" and Y is \"it is equilateral\". The first option is the converse."),
+  m("A triangle has sides 6 cm, 8 cm and 10 cm. We conclude that it is right-angled because of", ["the Baudhāyana–Pythagoras theorem", "the isosceles triangle theorem", "the converse of the Baudhāyana–Pythagoras theorem", "the SAS criterion"], 2,
+    "6² + 8² = 100 = 10². The theorem goes from \"right-angled\" to \"a² + b² = c²\". To go from \"a² + b² = c²\" to \"right-angled\" we need its converse."),
+  m("In △ABC, ∠B = ∠C = 40° and AB = 9 cm. The length of AC is", ["9 cm", "40 cm", "18 cm", "cannot be found"], 0,
+    "Two angles are equal, so the sides opposite them are equal (converse of the isosceles triangle theorem). AB is opposite ∠C and AC is opposite ∠B, so AC = AB = 9 cm."),
+  m("Which proposition is true but has a false converse?", ["If n is divisible by 60, then n is divisible by both 5 and 12", "If x = y, then x + 4 = y + 4", "If two triangles are congruent, then their areas are equal", "If two lines are parallel, then their corresponding angles are equal"], 2,
+    "Congruent triangles have equal areas, but triangles of equal area need not be congruent. In the other three the converse is also true."),
+  m("Euler disproved Fermat's claim that all numbers 2²ⁿ + 1 are prime by showing that 2³² + 1 is", ["a prime number", "a composite number", "a perfect square", "equal to 257"], 1,
+    "2³² + 1 = 4 294 967 297 = 641 × 6 700 417, so it is composite. One counterexample ended the claim."),
+  m("For which value of n is n² + n + 11 not a prime number?", ["n = 5", "n = 7", "n = 9", "n = 10"], 3,
+    "n = 5, 7 and 9 give 41, 67 and 101, which are prime. n = 10 gives 100 + 10 + 11 = 121 = 11 × 11."),
+  m("A positive integer n has exactly 3 factors. Then", ["n is the square of a prime number", "n is a prime number", "n is a product of two unequal primes", "n is the cube of a prime number"], 0,
+    "An odd number of factors means n is a perfect square, n = m². The factors 1, m and m² are already three, so m must be prime. A prime has 2 factors, pq has 4 and p³ has 4."),
+  m("The argument \"If n has an odd number of factors, then some factor pair has the same number twice, so n = f × f\" proves", ["only: a perfect square has an odd number of factors", "both statements", "only: a number with an odd number of factors is a perfect square", "neither statement"], 2,
+    "The argument starts at \"odd number of factors\" and ends at \"perfect square\". It proves that one direction only."),
+  m("If a proposition is true, then its converse is", ["always true", "always false", "sometimes true and sometimes false", "true only for numbers"], 2,
+    "The converse has to be checked separately. It can be true (parallel lines) or false (the rain and the wet road)."),
+  m("For which of these propositions is the converse also true?", ["If n is divisible by 8, then n is divisible by both 2 and 4", "If n is divisible by 6, then n is divisible by both 2 and 3", "If n is a multiple of 9, then n is a multiple of 3", "If n is a multiple of 4, then n is even"], 1,
+    "2 and 3 have no common factor, so a number divisible by both is divisible by 6. The other converses fail: 12 for the first, 6 for the third and fourth."),
+  m("Two lines are cut by a transversal and a pair of corresponding angles is equal. By the converse of the corresponding angles statement the lines are", ["parallel", "perpendicular", "intersecting", "equal"], 0,
+    "The proposition \"parallel lines give equal corresponding angles\" has a true converse: equal corresponding angles mean the lines are parallel."),
+  m("Which values of x and y give a counterexample to \"If x² = y², then x = y\"?", ["x = 2, y = 2", "x = 0, y = 0", "x = 1, y = 2", "x = 3, y = −3"], 3,
+    "A counterexample needs x² = y² and x ≠ y. For x = 3 and y = −3, x² = 9 = y², but x ≠ y. In the first two x = y, and in the third x² ≠ y²."),
+  m("A counterexample to \"If ab is a perfect square, then a and b are perfect squares\" is", ["a = 4, b = 9", "a = 2, b = 8", "a = 3, b = 5", "a = 9, b = 16"], 1,
+    "For a = 2 and b = 8, ab = 16 = 4², a perfect square, but 2 and 8 are not. In a = 4, b = 9 and a = 9, b = 16 both are squares, and 3 × 5 = 15 is not a square."),
+  m("A type Q of quadrilateral satisfies: \"If a quadrilateral has equal diagonals, then it is of type Q.\" Two equal sticks are crossed and their ends are joined. The quadrilateral formed", ["is of type Q only if the sticks cross at their midpoints", "is never of type Q", "is of type Q only if the sticks are perpendicular", "is of type Q however the sticks cross"], 3,
+    "The property says that every quadrilateral with equal diagonals is of type Q, so how the equal sticks cross does not matter."),
+  m("To show that △ABC with a² + b² = c² is right-angled, we compare it with a right triangle XYZ having perpendicular sides a and b. We get XY = c because", ["XY² = a² + b² = c² by the Baudhāyana–Pythagoras theorem on △XYZ", "△ABC and △XYZ are similar", "XY is a diameter of a circle", "∠Z is equal to ∠C by definition"], 0,
+    "In the right triangle XYZ, XY² = a² + b², and a² + b² = c². So XY = c, and then △ABC ≅ △XYZ by SSS, which gives ∠C = 90°."),
+
+  // ── Assertion and reasoning ──
+  m("Assertion (A): The converse of \"If x = y, then x³ = y³\" is true for real numbers.\nReason (R): If x³ = y³, then (x − y)(x² + xy + y²) = 0, and x² + xy + y² is zero only when x = y = 0.", AR, 0,
+    "Both are true. If x ≠ y, the second factor would have to be 0, which happens only when x = y = 0, so we get x = y anyway. R gives the reason for A."),
+  m("Assertion (A): The converse of \"If x = y, then x² = y²\" is false.\nReason (R): If x = y, then x² = y².", AR, 1,
+    "Both are true, but R only says that the proposition is true. It does not explain why the converse is false. The reason is the counterexample x = 3, y = −3."),
+  m("Assertion (A): One counterexample is enough to show that a proposition is false.\nReason (R): If a proposition is true in ten different examples, it is true in all cases.", AR, 2,
+    "A is true, because the counterexample satisfies the condition and breaks the conclusion. R is false. Examples never prove a proposition (Fermat's claim held for five cases and failed for the sixth)."),
+  m("Assertion (A): The converse of \"If n is divisible by 60, then n is divisible by 5 and by 12\" is false.\nReason (R): The numbers 5 and 12 have no common factor other than 1.", AR, 3,
+    "R is true. But because of R the converse is true: a number divisible by 5 and 12 is divisible by 60. So A is false."),
+  m("Assertion (A): If a number has an odd number of factors, then it is a perfect square.\nReason (R): In the factor-partner pairs of a number with an odd number of factors, some pair must have the same factor twice.", AR, 0,
+    "Both are true. If all pairs had two different factors, the number of factors would be even. So some pair is (f, f), and n = f × f. R explains A."),
+  m("Assertion (A): Two triangles that have the same area need not be congruent.\nReason (R): Congruent triangles have equal areas.", AR, 1,
+    "Both are true, but R does not explain A. A is shown by a counterexample, such as right triangles with legs 6, 4 and 8, 3, both with area 12."),
+  m("Assertion (A): If a number is divisible by 6, then it is divisible by 3.\nReason (R): If a number is divisible by 3, then it is divisible by 6.", AR, 2,
+    "A is true, because 6k = 3 × 2k. R is false, because 9 is divisible by 3 and not by 6."),
+  m("Assertion (A): If two angles of a triangle are equal, then the sides opposite them are equal.\nReason (R): If two sides of a triangle are equal, then the angles opposite them are equal.", AR, 1,
+    "Both are true. But R is the converse of A. The proof of A (draw the altitude and use AAS) does not use R, so R is not the explanation of A."),
+  m("Assertion (A): A number with exactly 4 divisors is always a product of two unequal primes.\nReason (R): The number 8 has exactly 4 divisors but it is not a product of two unequal primes.", AR, 3,
+    "R is true: the divisors of 8 are 1, 2, 4 and 8. This is a counterexample to A, so A is false."),
+  m("Assertion (A): If n is not a multiple of 3, then n and n + 3 have no common factor other than 1.\nReason (R): Any common factor of n and n + 3 divides their difference, which is 3.", AR, 0,
+    "Both are true. A common factor divides 3, so it is 1 or 3. It cannot be 3, because n is not a multiple of 3. So it is 1. R explains A."),
+];
