@@ -711,6 +711,10 @@ interface SubmissionNotes {
   // Marks deducted for lateness on the ORIGINAL submission. It is fixed at the first check and carried
   // unchanged through every improvement, so improving neither adds a new deduction nor wipes the old one.
   latePenalty?: number;
+  // The score the student already had when they re-uploaded to improve it. An improvement can never end up
+  // lower than this: a later check of the same homework (a different doubt count, a different reading of the
+  // pages, a stale deduction) must not take away marks the student had already earned.
+  scoreBeforeImprove?: number;
   // Epoch ms of when an automatic check claimed this still-"pending" row. Never persisted on a
   // finished row (serializeAdminNotes drops it) -- it only exists while a check is in flight.
   checkingSince?: number;
@@ -733,6 +737,7 @@ function serializeAdminNotes(notes: SubmissionNotes): string | null {
   if (typeof notes.totalQuestionCount === "number" && notes.totalQuestionCount > 0) cleaned.totalQuestionCount = notes.totalQuestionCount;
   if (notes.followUp) cleaned.followUp = true;
   if (typeof notes.latePenalty === "number" && notes.latePenalty > 0) cleaned.latePenalty = notes.latePenalty;
+  if (typeof notes.scoreBeforeImprove === "number") cleaned.scoreBeforeImprove = notes.scoreBeforeImprove;
   return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
 }
 
@@ -747,7 +752,7 @@ async function upsertHomeworkSubmission(params: {
 }): Promise<{ row: any; priorMissingQuestions: string[] | null }> {
   const { data: existing, error: existingError } = await supabase
     .from("homework_submissions")
-    .select("id, file_path, status, admin_notes, submitted_at")
+    .select("id, file_path, status, admin_notes, submitted_at, ai_score")
     .eq("student_email", params.studentEmail)
     .eq("assignment_id", params.assignmentId)
     .order("submitted_at", { ascending: false })
@@ -787,6 +792,8 @@ async function upsertHomeworkSubmission(params: {
     // forward unchanged. Rows checked before this rule existed have no stored value, so it is worked out here.
     if (existing.status === "checked") {
       notesForUpdate.followUp = true;
+      // remember the score the student has right now, so the improvement can never end below it
+      if (typeof existing.ai_score === "number") notesForUpdate.scoreBeforeImprove = existing.ai_score;
       let carried = existingNotes.latePenalty;
       if (typeof carried !== "number") {
         carried = 0;
@@ -807,7 +814,11 @@ async function upsertHomeworkSubmission(params: {
           }
         } catch { carried = 0; }
       }
-      if (carried > 0) notesForUpdate.latePenalty = carried;
+      // an admin's "not late" call wins over any penalty that was stored earlier
+      if (carried > 0 && nextLateOverride !== "not_late") notesForUpdate.latePenalty = carried;
+    } else if (typeof existingNotes.scoreBeforeImprove === "number") {
+      // a second upload while the first improvement is still being checked keeps the same earlier score
+      notesForUpdate.scoreBeforeImprove = existingNotes.scoreBeforeImprove;
     }
     // Same reasoning applies to totalQuestionCount: it must survive this "pending" window too, or
     // the scoped check that eventually runs has no real denominator to fall back on and ends up
@@ -1688,7 +1699,8 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       // An improvement is a re-upload after a completed check. Never penalised; the original submission's
       // own late deduction (stored when it was first checked) simply stays.
       const isResubmission = !!notesFromRow.followUp;
-      let latePenaltyForStore: number | undefined = notesFromRow.latePenalty;
+      // when the admin has set "not late", a penalty stored by an earlier check no longer applies
+      let latePenaltyForStore: number | undefined = notesFromRow.lateOverride === "not_late" ? undefined : notesFromRow.latePenalty;
       let isLate = false;
       let daysLate = 0;
       if (isLateExempt(assignmentForDeadline?.title)) {
@@ -1735,6 +1747,17 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
         parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}\n\n${keepNote}` : keepNote;
       }
       parsed.__latePenalty = latePenaltyForStore;
+    }
+
+    // An improvement never lowers the score. Whatever this check found (another doubt count, a different reading
+    // of the earlier pages, a deduction that was already applied once), the student keeps at least the score they
+    // had when they sent the improvement. Only for the normal "fix the outstanding questions" upload.
+    if (isScopedResubmission && !parsed.__wrongHomework && typeof parsed.score === "number" && typeof notesFromRow.scoreBeforeImprove === "number" && parsed.score < notesFromRow.scoreBeforeImprove) {
+      const keptNote = `Your earlier score of ${notesFromRow.scoreBeforeImprove} stays. Improving your homework never lowers your marks.`;
+      parsed.score = notesFromRow.scoreBeforeImprove;
+      parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}
+
+${keptNote}` : keptNote;
     }
 
     // Union of truly-missing and attempted-but-wrong questions -- everything still outstanding
@@ -1801,7 +1824,7 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
       ai_score: typeof parsed.score === "number" ? parsed.score : null,
       ai_feedback: feedbackForStudent,
       integrity_flag: sanitizePlaceholderText(parsed.integrityFlag),
-      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount, followUp: notesFromRow.followUp, latePenalty: typeof parsed.__latePenalty === "number" ? parsed.__latePenalty : notesFromRow.latePenalty }),
+      admin_notes: serializeAdminNotes({ outstandingQuestions, lateOverride: notesFromRow.lateOverride, totalQuestionCount: effectiveTotalQuestionCount, followUp: notesFromRow.followUp, latePenalty: typeof parsed.__latePenalty === "number" ? parsed.__latePenalty : (notesFromRow.lateOverride === "not_late" ? undefined : notesFromRow.latePenalty), scoreBeforeImprove: notesFromRow.scoreBeforeImprove }),
     }).eq("id", submissionId);
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
@@ -10138,13 +10161,14 @@ function buildApp(): express.Express {
     if (!submissionId) return res.status(400).json({ error: "Missing submissionId." });
     if (typeof late !== "boolean") return res.status(400).json({ error: "Missing or invalid 'late' flag." });
 
-    const { data: sub } = await supabase.from("homework_submissions").select("admin_notes").eq("id", submissionId).maybeSingle();
+    const { data: sub } = await supabase.from("homework_submissions").select("admin_notes, ai_score").eq("id", submissionId).maybeSingle();
     if (!sub) return res.status(404).json({ error: "Submission not found." });
 
     const notes = parseAdminNotes(sub.admin_notes);
+    const scoreBeforeSwitch: number | null = typeof sub.ai_score === "number" ? sub.ai_score : null;
     const { error: saveErr } = await supabase
       .from("homework_submissions")
-      .update({ admin_notes: serializeAdminNotes({ ...notes, lateOverride: late ? "late" : "not_late" }) })
+      .update({ admin_notes: serializeAdminNotes({ ...notes, lateOverride: late ? "late" : "not_late", ...(late ? {} : { latePenalty: undefined }) }) })
       .eq("id", submissionId);
     if (saveErr) {
       console.error("Set late-status save error:", saveErr.message);
@@ -10152,8 +10176,18 @@ function buildApp(): express.Express {
     }
 
     await checkHomeworkSubmission(String(submissionId));
-    const { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
+    let { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!updated) return res.status(404).json({ error: "Submission not found after regrading." });
+    // Taking a late mark off can only help the student. The regrade reads the pages again and can come out
+    // different, so if the score dropped, put the earlier score back.
+    if (!late && scoreBeforeSwitch !== null && typeof updated.ai_score === "number" && updated.ai_score < scoreBeforeSwitch) {
+      const keptNote = `Your earlier score of ${scoreBeforeSwitch} stays. Taking away a late mark never lowers your marks.`;
+      const keptFeedback = updated.ai_feedback && String(updated.ai_feedback).trim() ? `${updated.ai_feedback}
+
+${keptNote}` : keptNote;
+      const { data: restored } = await supabase.from("homework_submissions").update({ ai_score: scoreBeforeSwitch, ai_feedback: keptFeedback }).eq("id", submissionId).select("*").maybeSingle();
+      if (restored) updated = restored;
+    }
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
   });
 
