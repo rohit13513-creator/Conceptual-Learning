@@ -5,16 +5,23 @@ import * as F from "./props9Figs";
 // Order of the notes: first the theory (definitions, rules and proofs), then the solved examples, then the revision.
 // **bold** inside a string makes bold text. A slash is avoided in the text because some screens show it as a fraction.
 
-export const PROPS9_BRANCHES = [
-  { title: "1. Proposition", color: "#2563eb", lines: ["A statement, true or false", "Not: question, order, opinion", "Form: if X then Y", "X implies Y, or Y when X"] },
-  { title: "2. Parts", color: "#0f766e", lines: ["X is the hypothesis (condition)", "Y is the conclusion (result)", "The setup sentence stays as it is", "Any statement can be put in if-then"] },
-  { title: "3. Converse", color: "#b45309", lines: ["if X then Y becomes if Y then X", "Only swap. Never add 'not'", "Converse of converse = original", "Check the converse separately"] },
-  { title: "4. Four cases", color: "#7c3aed", lines: ["True and true: imply each other", "True and false: very common", "False and true: roles exchanged", "False and false: also possible"] },
-  { title: "5. Counterexample", color: "#be123c", lines: ["Satisfies X but breaks Y", "One is enough to disprove", "Many examples never prove", "Fermat and Euler: 2³² + 1"] },
-  { title: "6. Geometry pairs", color: "#0369a1", lines: ["Isosceles pair: both true (AAS)", "Pythagoras pair: both true (SSS)", "Same area does not mean congruent", "Equal angles do not give a square"] },
-  { title: "7. Number pairs", color: "#15803d", lines: ["Odd factors if and only if square", "Div by 6 gives div by 3, not back", "60: 5 and 12 work both ways", "24: 4 and 6 fail, 12 is the proof"] },
-  { title: "8. Uses", color: "#a21caf", lines: ["Equations: add the same, cancel", "Squaring is not reversible", "A test needs both directions", "a² + b² = c² tests a right angle"] },
-];
+// The revision mind map: four steps in the order a student meets them, then the pairs worth remembering.
+export const PROPS9_MAP = {
+  steps: [
+    { title: "Proposition", color: "#2563eb", lines: ["A sentence that is true or false", "Written as: If X, then Y", "X is the given, Y is the result"] },
+    { title: "Converse", color: "#b45309", lines: ["Swap the two parts", "If Y, then X", "Do not add the word not"] },
+    { title: "Is the converse true?", color: "#7c3aed", lines: ["Not always, so check it separately", "True both ways: say if and only if", "Try a few numbers or a figure first"] },
+    { title: "Counterexample", color: "#be123c", lines: ["It fits X but fails Y", "One counterexample proves it false", "Many examples never prove it true"] },
+  ],
+  pairs: [
+    { statement: "Equal sides, so equal angles (isosceles triangle)", converse: "Equal angles, so equal sides", holds: true },
+    { statement: "Right-angled triangle, so a² + b² = c²", converse: "a² + b² = c², so a right-angled triangle", holds: true },
+    { statement: "Perfect square, so an odd number of factors", converse: "Odd number of factors, so a perfect square", holds: true },
+    { statement: "Divisible by 6, so divisible by 3", converse: "Divisible by 3, so divisible by 6 (3 is a counterexample)", holds: false },
+    { statement: "Congruent triangles, so the same area", converse: "Same area, so congruent (a counterexample exists)", holds: false },
+  ],
+  rule: "Proving a statement does not prove its converse. Always check the converse on its own.",
+};
 
 export const PROPS9_TOPICS: NTopic[] = [
   // ───────────────────────────── 1 THEORY

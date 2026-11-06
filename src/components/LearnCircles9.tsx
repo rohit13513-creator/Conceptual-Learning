@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Circle, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, Trophy, Brain, Sigma, CheckCircle2, ShieldCheck } from "lucide-react";
 import { GeoFigure, GeoSpec } from "./GeoFigure";
 import { CIRCLES9_TOPICS, NBlock, NTopic } from "../data/circles9Notes";
-import { PROPS9_TOPICS, PROPS9_BRANCHES } from "../data/props9Notes";
+import { PROPS9_TOPICS, PROPS9_MAP } from "../data/props9Notes";
+import { DownloadNotesLink } from "./DownloadNotesLink";
 
 // Class IX Maths: Circles. Topic-wise notes with proofs, diagrams, a mind map and a Competition Zone.
 // The same screen also shows the notes of "Propositions and their Converses" (chapter = "propositions").
@@ -82,12 +83,57 @@ const MindMap: React.FC<{ branches: Branch[]; title: string; subtitle: string; t
   );
 };
 
+// Simple revision map for Propositions and their Converses: big readable cards, four steps in order, then the pairs to remember.
+// Colours are set inline because the notes page recolours text inside white cards.
+const PropsMindMap: React.FC = () => (
+  <div className="bg-white rounded-2xl border border-slate-300 p-3 sm:p-5 space-y-4">
+    <div className="text-center">
+      <div className="inline-block rounded-2xl px-5 py-3" style={{ background: "#0f172a" }}>
+        <div className="text-lg sm:text-xl font-black" style={{ color: "#ffffff" }}>Propositions and their Converses</div>
+        <div className="text-xs font-bold" style={{ color: "#bae6fd" }}>Class IX Maths: read the four steps from 1 to 4</div>
+      </div>
+      <div className="mx-auto h-4 w-0.5" style={{ background: "#94a3b8" }} />
+    </div>
+    <div className="grid sm:grid-cols-2 gap-3">
+      {PROPS9_MAP.steps.map((st, i) => (
+        <div key={st.title} className="rounded-xl overflow-hidden" style={{ border: `2px solid ${st.color}` }}>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: st.color }}>
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-black" style={{ background: "#ffffff", color: st.color }}>{i + 1}</span>
+            <span className="text-base font-black" style={{ color: "#ffffff" }}>{st.title}</span>
+          </div>
+          <ul className="px-3 py-2.5 space-y-1.5">
+            {st.lines.map((l) => <li key={l} className="text-[15px] font-bold leading-snug" style={{ color: "#1e293b" }}>{"• "}{l}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+    <div className="rounded-xl overflow-hidden" style={{ border: "2px solid #15803d" }}>
+      <div className="px-3 py-2 text-base font-black" style={{ background: "#15803d", color: "#ffffff" }}>Pairs to remember</div>
+      <div className="divide-y" style={{ borderColor: "#e2e8f0" }}>
+        {PROPS9_MAP.pairs.map((p) => (
+          <div key={p.statement} className="px-3 py-2.5 space-y-1" style={{ borderColor: "#e2e8f0" }}>
+            <div className="text-[15px] font-bold leading-snug" style={{ color: "#1e293b" }}>{p.statement}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[14px] font-semibold leading-snug" style={{ color: "#475569" }}>Converse: {p.converse}</span>
+              <span className="text-xs font-black rounded-full px-2.5 py-0.5" style={p.holds ? { background: "#dcfce7", color: "#166534" } : { background: "#ffe4e6", color: "#9f1239" }}>{p.holds ? "TRUE" : "FALSE"}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div className="rounded-xl px-4 py-3 text-center text-[15px] font-black leading-snug" style={{ background: "#fef3c7", color: "#78350f", border: "2px solid #f59e0b" }}>{PROPS9_MAP.rule}</div>
+  </div>
+);
+
 // ── Blocks ─────────────────────────────────────────────────────────────────────────────────────────────
 const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
   <div className="flex flex-wrap justify-center gap-4">{specs.map((s, i) => <GeoFigure key={i} spec={s} />)}</div>
 );
 
 type Chapter = "circles" | "propositions";
+
+const PROPS_NOTES_PDF_URL = "/download/downloads/Class-9-Maths-Propositions-Notes.pdf";
+const PROPS_NOTES_PDF_NAME = "Class-9-Maths-Propositions-and-Converses-Notes.pdf";
 
 const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, light, chapter }) => {
   switch (b.t) {
@@ -99,7 +145,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
     case "fig": return <div className="flex justify-center"><GeoFigure spec={b.spec} max={340} /></div>;
     case "figs": return <Figs specs={b.specs} />;
     case "mindmap": return chapter === "propositions"
-      ? <MindMap branches={PROPS9_BRANCHES} title="Propositions" subtitle="and their Converses" titleSize={23} circleIcon={false} />
+      ? <PropsMindMap />
       : <MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" />;
     case "key": return (
       <div className="bg-cyan-950/25 border border-cyan-500/25 p-4 rounded-xl space-y-1.5 font-semibold">
@@ -160,12 +206,14 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
         <select value={activeId} onChange={(e) => go(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
           {TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
         </select>
+        {chapter === "propositions" && <div className="mt-2"><DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} compact /></div>}
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2">{chapter === "propositions" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
+          {chapter === "propositions" && <DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t, i) => (
