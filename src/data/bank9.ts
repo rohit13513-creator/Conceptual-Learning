@@ -40,6 +40,7 @@ import { PROPS9_LONG, PROPS9_COMPETENCY } from './props9_long';
 import { PROPS9_NCERT_SOLVED } from './props9_ncert';
 import { PROPS9_SELF_ASSESSMENT } from './props9_self';
 import { SOUND9_SELF_MORE } from './sound9_self_more';
+import { CIRCLES9_SELF_ASSESSMENT } from './circles9_self';
 
 export function getBank(p: BankParams): Bank {
   const { preparingFor, qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
@@ -148,7 +149,7 @@ export function getBank(p: BankParams): Bank {
 
 export function getSelf(p: BankParams): any[] {
   const { qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
-  // Class IX Maths: only Propositions and their Converses has a self assessment (Circles has none yet, so it must not fall through to Biology).
-  if (qbSubject === 'maths') return mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : [];
+  // Class IX Maths: both chapters have a self assessment (Circles: 100 questions, Propositions and Converses: 50).
+  if (qbSubject === 'maths') return mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : CIRCLES9_SELF_ASSESSMENT;
   return (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? [...SOUND9_SELF_ASSESSMENT, ...SOUND9_SELF_MORE] : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : qbSubject === 'foundations' ? FOUNDATIONS9_SELF_ASSESSMENT : bioChapter9 === 'diversity' ? DIVERSITY9_SELF_ASSESSMENT : bioChapter9 === 'tissues' ? TISSUES9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT);
 }

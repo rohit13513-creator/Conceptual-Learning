@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { QUIZ_8TH, QUIZ_10TH, QUIZ_12TH, QUIZ_JEE } from "../quizData";
 import { QuizQuestion } from "../types";
+import { lazyView } from "../lazyView";
 import { CheckCircle, XCircle, ChevronRight, Award, HelpCircle, GraduationCap, Sparkles, Clock, AlertTriangle, BookOpen, Play } from "lucide-react";
+
+// A question can carry a figure (Maths); the drawing code is downloaded only when such a question is opened.
+const QuestionFigure = lazyView(() => import("./QuestionFigure"));
 
 type QuizGrade = "8th" | "9th" | "10th" | "12th" | "jee";
 
@@ -297,6 +301,7 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
           <h4 className={`text-sm sm:text-base font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'} leading-snug`}>
             {activeQuestion.question}
           </h4>
+          {(activeQuestion as any).figure && <QuestionFigure q={activeQuestion as any} />}
 
           {/* Options Grid */}
           <div className="space-y-2">
@@ -504,6 +509,7 @@ export const Quiz: React.FC<QuizProps> = ({ initialGrade, customQuestions, isLig
                     </div>
 
                     <h4 className={`text-xs sm:text-sm font-bold ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{q.question}</h4>
+                    {(q as any).figure && <QuestionFigure q={q as any} />}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {q.options.map((opt, optIndex) => {
