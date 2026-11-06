@@ -38,10 +38,12 @@ function send(res: ServerResponse, status: number, message: string) {
   res.end(message);
 }
 
-// The browser may keep a copy, but must ask the server (which checks the login and the account) before every use;
-// when nothing changed the server answers "304 not modified" without resending the file.
-function sendWithEtag(req: IncomingMessage, res: ServerResponse, body: Buffer, etag: string) {
-  res.setHeader("Cache-Control", "private, no-cache");
+// The browser keeps a private copy for `maxAge` seconds and then asks the server (which checks the login and the
+// account); when nothing changed the server answers "304 not modified" without resending the file. Every request
+// that reaches the server starts the function, so a short private cache saves most repeat requests. Nothing is ever
+// cached by shared caches, and a file the browser has not fetched yet is always checked against the login.
+function sendWithEtag(req: IncomingMessage, res: ServerResponse, body: Buffer, etag: string, maxAge: number) {
+  res.setHeader("Cache-Control", `private, max-age=${maxAge}`);
   res.setHeader("ETag", etag);
   if (req.headers["if-none-match"] === etag) { res.statusCode = 304; return void res.end(); }
   res.statusCode = 200;
@@ -88,7 +90,8 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     res.statusCode = 200;
     res.setHeader("Content-Type", TYPES[rel.split(".").pop() as string] || "application/octet-stream");
     if (encoded) res.setHeader("Content-Encoding", "br");
-    return sendWithEtag(req, res, body, `"${rel}-${encoded ? "br" : "raw"}-${body.length}"`);
+    // code files have a new name on every build, so a copy kept for 6 hours is never stale
+    return sendWithEtag(req, res, body, `"${rel}-${encoded ? "br" : "raw"}-${body.length}"`, 6 * 3600);
   }
 
   if (kind === "d") {
@@ -102,7 +105,7 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     if (!body) return send(res, 404, "Not found");
     res.statusCode = 200;
     res.setHeader("Content-Type", TYPES[rel.split(".").pop()!.toLowerCase()] || "application/octet-stream");
-    return sendWithEtag(req, res, body, `"${crypto.createHash("sha1").update(body).digest("hex").slice(0, 20)}"`);
+    return sendWithEtag(req, res, body, `"${crypto.createHash("sha1").update(body).digest("hex").slice(0, 20)}"`, 3600);
   }
 
   if (kind === "f") {

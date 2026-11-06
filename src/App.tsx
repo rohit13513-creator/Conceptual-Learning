@@ -1302,14 +1302,21 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     return () => { window.fetch = originalFetch; };
   }, []);
 
-  // While someone is logged in, ask the server every 30 seconds (and whenever they return to the tab) whether the
-  // account is still approved. If the teacher rejected or suspended the student, the server answers 401 and the
-  // global guard above logs them out -- so even a student who is only reading is cut off within about 30 seconds.
+  // While someone is logged in and looking at the page, ask the server every 3 minutes (and when they return to the
+  // tab, at most once a minute) whether the account is still approved. If the teacher rejected or suspended the
+  // student, the server answers 401 and the global guard above logs them out; every other request they make is
+  // checked the same way. Each ping starts the server function, so a hidden tab sends none and the rate is kept low
+  // (it used to be every 30 seconds from every open tab, which used up the hosting plan's processing time).
   useEffect(() => {
     const token = user?.token;
     if (!token) return;
-    const ping = () => { fetch('/api/session/ping', { headers: { Authorization: `Bearer ${token}` } }).catch(() => {}); };
-    const timer = window.setInterval(ping, 30_000);
+    let lastPing = 0;
+    const ping = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastPing < 60_000) return;
+      lastPing = Date.now();
+      fetch('/api/session/ping', { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    };
+    const timer = window.setInterval(ping, 180_000);
     const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };

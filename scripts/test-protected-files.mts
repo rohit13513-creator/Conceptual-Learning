@@ -89,7 +89,7 @@ await check("POST not allowed", "a", chunk, { cookie: tok("offline@x.com"), meth
   const etag = first.headers.get("etag") || "";
   const beforeLookups = lookups;
   const again = await fetch(url, { headers: { cookie, "if-none-match": etag } });
-  ok1("saved copy: server answers 304 (not modified) after re-checking the account", again.status === 304 && lookups === beforeLookups + 1 && /no-cache/.test(first.headers.get("cache-control") || ""), `${again.status} lookups+${lookups - beforeLookups} ${first.headers.get("cache-control")}`);
+  ok1("saved copy: server answers 304 (not modified) after re-checking the account", again.status === 304 && lookups === beforeLookups + 1 && /^private, max-age=\d+$/.test(first.headers.get("cache-control") || ""), `${again.status} lookups+${lookups - beforeLookups} ${first.headers.get("cache-control")}`);
   users["cut@x.com"].status = "rejected"; // the teacher rejects the student
   const after = await fetch(url, { headers: { cookie, "if-none-match": etag } });
   ok1("rejected student: very next request refused, even with a saved copy", after.status === 403, String(after.status));
