@@ -1011,6 +1011,25 @@ function stripOutOfRangeLabels(parsed: any) {
   }
 }
 
+// The printed text of a question sheet (a typed PDF), so the grader can take every number from the text instead of reading
+// it off the picture. Returns "" for a scanned or photographed sheet, or if anything goes wrong; never blocks a check.
+async function extractPdfText(buf: Buffer): Promise<string> {
+  try {
+    const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: true, verbosity: 0 }).promise;
+    let out = "";
+    for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
+      const t = await (await pdf.getPage(i)).getTextContent();
+      out += t.items.map((x: any) => x.str).join(" ") + "\n";
+    }
+    out = out.replace(/[ \t]+/g, " ").trim();
+    return out.length >= 40 ? out.slice(0, 7000) : "";
+  } catch (e: any) {
+    console.warn("Could not read the question sheet's text, using the picture only:", e?.message);
+    return "";
+  }
+}
+
 async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
@@ -1071,6 +1090,7 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
 
   let assignmentContext = "";
   let questionSheetBlock: any = null;
+  let questionSheetText = "";
   let assignmentForDeadline: { target_class: string; assigned_date: string; deadline: string | null; title?: string | null } | null = null;
   if (sub.assignment_id) {
     const { data: a } = await supabase.from("homework_assignments").select("title, description, subject, file_path, target_class, assigned_date, deadline").eq("id", sub.assignment_id).maybeSingle();
@@ -1087,6 +1107,7 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
           const sheetBuffer = await sheetBlob.arrayBuffer();
           const sheetBase64 = Buffer.from(sheetBuffer).toString("base64");
           const sheetIsPdf = sheetBlob.type === "application/pdf" || a.file_path.toLowerCase().endsWith(".pdf");
+          if (sheetIsPdf) questionSheetText = await extractPdfText(Buffer.from(sheetBuffer));
           questionSheetBlock = sheetIsPdf
             ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: sheetBase64 } }
             : { type: "image", source: { type: "base64", media_type: sheetBlob.type || "image/jpeg", data: sheetBase64 } };
@@ -1108,6 +1129,7 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
     : "";
   const questionSheetNote = boardNote + (questionSheetBlock
     ? "The FIRST attached file below is the student's handwritten submission. The SECOND attached file is a question sheet, attached for reference on the content/wording of individual questions.\n"
+      + (questionSheetText ? `The exact printed text of the question sheet, copied from the file (every number in it is reliable; if the picture of the sheet seems to differ from this text, trust this text):\n"""\n${questionSheetText}\n"""\n` : "")
     : "");
 
   // Split into a STATIC system prompt (byte-identical on every single call, across every student
@@ -1137,6 +1159,10 @@ Counting the assignment for the doubt-percentage rule: separately from questionB
 Some students write a question number followed by the word "doubt" (sometimes misspelled "dought") -- this means the student is stuck and wants the teacher to explain that question in class. This applies whether the doubt marker stands alone with no attempt at all, OR the student made a partial/incorrect attempt first and then wrote "doubt" (e.g. gave up partway through and flagged it, rather than leaving it fully blank) -- either way, treat the WHOLE question as a self-flagged doubt, not a wrong or missing answer. Do not grade the partial attempt as incorrect just because one exists alongside the doubt marker, and never mark a doubt as incorrect.
 
 A doubt-marked question is fully accounted for and resolved from a grading standpoint -- it is neither missing nor something still "to be attempted." It must never appear in missingQuestions or incorrectQuestions, must never be cited as a reason the submission is INCOMPLETE, and must never be described in feedback as something the student still needs to attempt or complete (e.g. never write phrasing like "cannot be graded complete until the doubt-marked questions are attempted" -- that is exactly backwards). If literally every assigned question is either correct or marked doubt, with nothing missing and nothing incorrect, the submission is COMPLETE, and your own score for it should be 10/10 -- score purely on the merits of the non-doubt questions, as if the doubt-marked ones simply weren't part of the assignment. A doubt marker is very often only a few words on a single line -- "Q7 Doubt" written by itself at the very top of a page, directly above the start of the NEXT question's working, or a lone "Q10 Doubt" with nothing else on that line or page area -- and is easy to read past while focusing on the worked solutions around it. Before you put ANY question in missingQuestions, go back through every page one more time looking specifically for that question's number written next to "doubt"/"dought" (top of page, bottom of page, margin, or sandwiched between two other questions), and only call the question missing if no such marker exists anywhere. A real, confirmed case had a student write "Q7 Doubt" as a single line at the top of a page right above her Q8 working; Q7 was reported as "completely missing from your submission" and cost her a mark, even though the doubt marker was plainly there. Separately, list every doubt-marked question number in doubtQuestions (matching the same per-sub-part granularity as questionByQuestionCheck). Do NOT factor how many questions were marked doubt into your own score in any way, however many there are -- a deterministic step outside your scoring already applies a defined deduction based on that proportion, and if you also reduce your own score for it, the submission gets penalized twice for the same thing.
+
+A doubt marker written next to a question's number alone (for example "9. doubt", with the question's own working crossed out above it) covers the WHOLE question: every one of its parts (i), (ii), (iii) is then doubt-marked, and none of them may be reported as missing. A real case had a student cross out her attempt at Q9 and write "9. doubt"; Q9(ii) and Q9(iii) were then reported as "missing from your submission" and cost her a mark.
+
+Read every final answer exactly as it is written, digit by digit, before comparing it with your own result, and copy it that way into your notes. A stray extra digit or a last line that does not follow from the line above it is an error even when all the working above it is right: for example "240 = 4n" followed by "n = 160" is wrong (n = 60), and must not be read as 60. In the same way, never mark an answer wrong when the student's final answer is the correct value and only the layout is untidy or part of the working is scribbled out; untidiness is not an error. And take every number of a question from the question sheet's exact text when it is given below, never from memory (a real case read "a6 + a10 = 44" as 34 and told a student with a correct answer that she was wrong).
 
 Students often submit homework as phone photos of each page, one photo per page, which get combined into one file in the order they were uploaded. That order does not always match question order (e.g. a student may photograph pages out of sequence) -- this is normal and not a mistake. Never comment on question numbering being "inconsistent with page order/numbering" or similar; just work out which questions are present regardless of what order they appear in.
 
