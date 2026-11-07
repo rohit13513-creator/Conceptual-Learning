@@ -1752,7 +1752,14 @@ ${assignmentContext}${questionSheetNote}${resubmissionNote}`;
     // An improvement never lowers the score. Whatever this check found (another doubt count, a different reading
     // of the earlier pages, a deduction that was already applied once), the student keeps at least the score they
     // had when they sent the improvement. Only for the normal "fix the outstanding questions" upload.
-    if (isScopedResubmission && !parsed.__wrongHomework && typeof parsed.score === "number" && typeof notesFromRow.scoreBeforeImprove === "number" && parsed.score < notesFromRow.scoreBeforeImprove) {
+    // Pages that do not belong to this homework, sent as an improvement, change nothing: the earlier score and the
+    // earlier list of questions to fix stay, and the student is told to send the right pages. (A first upload of the
+    // wrong pages still gets 0, so the student knows to send the right homework.)
+    const keepEarlierOnWrongPages = !!parsed.__wrongHomework && typeof notesFromRow.scoreBeforeImprove === "number";
+    if (keepEarlierOnWrongPages) {
+      parsed.score = notesFromRow.scoreBeforeImprove;
+      parsed.feedback = `The pages you sent this time do not match the questions of this homework, so nothing has changed. Your earlier score of ${notesFromRow.scoreBeforeImprove} stays. Please open this homework, check its title, and send the pages for the questions you want to improve.`;
+    } else if (isScopedResubmission && !parsed.__wrongHomework && typeof parsed.score === "number" && typeof notesFromRow.scoreBeforeImprove === "number" && parsed.score < notesFromRow.scoreBeforeImprove) {
       const keptNote = `Your earlier score of ${notesFromRow.scoreBeforeImprove} stays. Improving your homework never lowers your marks.`;
       parsed.score = notesFromRow.scoreBeforeImprove;
       parsed.feedback = typeof parsed.feedback === "string" && parsed.feedback.trim() ? `${parsed.feedback}
@@ -1769,7 +1776,7 @@ ${keptNote}` : keptNote;
     // discard an admin's earlier late/not-late call.
     // A wrong-homework result leaves nothing "outstanding": the student's next upload for this
     // assignment must be graded as a full fresh check, not scoped to a placeholder question.
-    const outstandingQuestions = parsed.__wrongHomework ? [] : Array.from(new Set([
+    const outstandingQuestions = keepEarlierOnWrongPages ? (effectivePriorMissingQuestions ?? []) : parsed.__wrongHomework ? [] : Array.from(new Set([
       ...(Array.isArray(parsed.missingQuestions) ? parsed.missingQuestions : []),
       ...(Array.isArray(parsed.incorrectQuestions) ? parsed.incorrectQuestions : []),
     ]));
