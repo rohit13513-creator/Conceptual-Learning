@@ -1,0 +1,123 @@
+import type { QuizQuestion } from "../types-custom";
+
+// 50 multiple-choice questions: Class IX Maths, The World of Algorithms.
+// 38 ordinary questions, then 12 assertion and reasoning questions.
+// Each ordinary question is written with the right answer first; it is then placed at the position listed in POSITION
+// so the right answers are spread evenly over the four options.
+
+const POSITION = [3, 1, 0, 2, 2, 0, 3, 1, 1, 3, 2, 0, 0, 2, 1, 3, 3, 1, 0, 2, 2, 0, 3, 1, 1, 3, 2, 0, 0, 2, 1, 3, 3, 1, 2, 0, 1, 3];
+
+let n = 0;
+const m = (question: string, right: string, wrong: string[], explanation: string): QuizQuestion => {
+  const at = POSITION[n];
+  const options = [...wrong];
+  options.splice(at, 0, right);
+  return { id: ++n, question, options, correctAnswer: at, explanation };
+};
+const AR = ["Both A and R are true and R is the correct explanation of A", "Both A and R are true but R is NOT the correct explanation of A", "A is true but R is false", "A is false but R is true"];
+const ar = (question: string, correct: number, explanation: string): QuizQuestion => ({ id: ++n, question, options: AR, correctAnswer: correct, explanation });
+
+export const AL9_MCQS: QuizQuestion[] = [
+  m("An algorithm is", "a step-by-step procedure to arrive at an answer", ["an answer to a problem", "a single mathematical formula", "a table of values"],
+    "An algorithm is a systematic, step-by-step procedure, described as precisely as possible, that leads to an answer."),
+  m("Every algorithm is built from steps that are", "basic steps that we know how to execute directly", ["always written with numbers only", "different for every person", "too hard to describe in words"],
+    "An algorithm uses basic steps, such as adding two single digits or checking whether a smaller number divides a larger one, that we can do directly."),
+  m("In adding 473 and 695 by the algorithm, how many columns give a carry of 1?", "2", ["0", "1", "3"],
+    "Units: 3 + 5 = 8, carry 0. Tens: 7 + 9 = 16, carry 1. Hundreds: 4 + 6 + 1 = 11, carry 1. So two columns give a carry (the answer is 1168)."),
+  m("The digits are aligned from the right in the addition algorithm so that", "units are added to units, tens to tens, and so on", ["the answer is always shorter", "no carry is needed", "the larger number is written first"],
+    "Only digits of the same place value can be added together."),
+  m("The largest possible total in one column (two digits and a carry) is", "19", ["18", "20", "10"],
+    "9 + 9 + 1 = 19. Its tens digit is 1, so the carry can never be more than 1."),
+  m("If step 5 of the addition algorithm is left out, the sum 56 + 67 would come out as", "23", ["123", "113", "13"],
+    "6 + 7 = 13 gives 3 and carry 1. 5 + 6 + 1 = 12 gives 2 and carry 1. Without step 5 the last carry is lost, so the answer is 23 instead of 123."),
+  m("Step 5 of the addition algorithm is NOT needed when", "the last carry is 0", ["the numbers have different lengths", "the numbers are even", "the sum has two digits"],
+    "Step 5 writes down a last carry of 1. When the last carry is 0 there is nothing to write, for example 21 + 34 = 55."),
+  m("To add 12345 and 678 with the steps, the missing digits of 678 in the thousands and ten-thousands columns are taken as", "0", ["1", "5", "the digits of 12345"],
+    "A column with a missing digit is treated as if that digit is 0, so each column still has two digits to add."),
+  m("At 1 dot per second, counting the dots in 334 + 272 takes about", "10 minutes", ["1 minute", "1 hour", "45 seconds"],
+    "334 + 272 = 606 dots, which is about 10 minutes. (Digit by digit it takes about 45 seconds.)"),
+  m("If it takes 15 seconds to add two digits with a carry, adding 3347 and 2729 by the algorithm takes about", "1 minute", ["15 seconds", "1 hour 40 minutes", "10 minutes"],
+    "There are four columns, 4 × 15 = 60 seconds. Counting the 6076 dots one by one would take over 1 hour 40 minutes."),
+  m("If the numbers being added change from 3 digits to 5 digits, the work of the addition algorithm", "increases by 2 columns", ["becomes 100 times", "becomes 10 times", "does not change at all"],
+    "The algorithm adds one column for each extra digit, so 2 more digits mean 2 more columns. Counting dots would become 100 times as much work."),
+  m("To add two decimal fractions with the algorithm, we", "align the decimal points and then add as before", ["align the last digits on the right", "remove the decimal points first", "add only the whole number parts"],
+    "Aligning the decimal points puts equal place values (tenths, hundredths, ...) in the same column."),
+  m("In the algorithm for divisors of n, the name j stands for", "the number we are checking next as a possible divisor", ["the number of divisors found", "the largest divisor", "the remainder"],
+    "j runs through 1, 2, 3, ..., n. Giving it a name lets us say what to do each time j divides n."),
+  m("In the algorithm to find the divisors of n, the list-of-divisors at the start is", "empty", ["[1]", "[n]", "[1, n]"],
+    "We do not yet know any divisor, so we start with an empty list [ ] and add each divisor at the end when we find it."),
+  m("Executing the divisors algorithm for 18 gives", "[1, 2, 3, 6, 9, 18]", ["[1, 2, 3, 9, 18]", "[2, 3, 6, 9]", "[1, 18]"],
+    "1, 2, 3, 6, 9 and 18 divide 18. They are added in the order in which j is checked, so the list is in increasing order."),
+  m("How many elements are in divisors(36)?", "9", ["8", "10", "12"],
+    "divisors(36) = [1, 2, 3, 4, 6, 9, 12, 18, 36], which has 9 elements."),
+  m("Using the divisors algorithm for n = 30, the list after j = 1 to 7 have been checked is", "[1, 2, 3, 5, 6]", ["[1, 2, 3, 5, 6, 7]", "[1, 2, 3, 5]", "[1, 2, 3, 6]"],
+    "1, 2, 3, 5 and 6 divide 30. The number 4 and the number 7 do not."),
+  m("The basic step that the divisors algorithm assumes we can do is", "to tell whether a smaller number divides a larger number", ["to find the largest prime", "to multiply two large numbers", "to add two lists"],
+    "The algorithm repeats this one check for every j from 1 to n."),
+  m("The number of common divisors of 36 and 48 is", "6", ["4", "8", "12"],
+    "The common divisors are 1, 2, 3, 4, 6 and 12, so there are 6, and the gcd is 12."),
+  m("The first gcd algorithm reports the rightmost element of the list of common divisors as the gcd because", "the list is in increasing order", ["the list is in decreasing order", "the rightmost element is always 1", "the list has only one element"],
+    "The lists of divisors are in increasing order, so the list of common divisors is also in increasing order and its last element is the largest."),
+  m("For gcd(100, 40), the first gcd algorithm (which finds both lists of divisors) examines how many numbers in all?", "140", ["100", "40", "60"],
+    "It checks the numbers 1 to 100 for 100 and then 1 to 40 for 40, which is m + n = 140. The improved versions check max(m, n) = 100 or min(m, n) = 40."),
+  m("In the version that keeps most-recent-common-divisor, we start the value at 1 because", "1 divides every number, so it is always a common divisor", ["1 is the largest common divisor", "the gcd is always 1", "we cannot start with the larger number"],
+    "Since 1 is a common divisor of every pair, the variable starts at 1 and is updated every time a larger common divisor is found."),
+  m("Scanning from min(m, n) down to 1 for a common divisor, the gcd is", "the first number found that divides both m and n", ["the last number found that divides both", "always min(m, n)", "always 1"],
+    "Going downwards, every larger candidate has already failed, so the first common divisor met is the greatest."),
+  m("According to Euclid's observation, for m ≥ n, gcd(m, n) is equal to", "gcd(n, m − n)", ["gcd(m, m + n)", "gcd(m − n, m + n)", "gcd(m, n − 1)"],
+    "Any common divisor of m and n also divides m − n, and any common divisor of n and m − n also divides m, so the two pairs have the same gcd."),
+  m("In Euclid's algorithm gcd(23, 23) reduces to", "gcd(23, 0), and the answer is 23", ["gcd(0, 23), and the answer is 0", "gcd(1, 23), and the answer is 1", "gcd(46, 23), and the answer is 23"],
+    "23 − 23 = 0, so gcd(23, 23) = gcd(23, 0). When n = 0 the answer is m."),
+  m("Euclid's subtraction algorithm stops when", "n = 0, and the answer is m", ["m = n", "m = 1", "n = 1, and the answer is 1"],
+    "The stopping condition is gcd(m, 0) = m. When m = n the algorithm still does one more reduction to reach n = 0."),
+  m("The number of reductions in Euclid's subtraction algorithm for gcd(48, 18) is", "5", ["3", "4", "6"],
+    "(48, 18), (18, 30), reverse (30, 18), (18, 12), (12, 6), (6, 6), (6, 0). That is 5 reductions and the answer is 6."),
+  m("For gcd(99, 2), the number of reductions needed in Euclid's subtraction algorithm and in Āryabhaṭa's division algorithm are respectively about", "50 and 2", ["2 and 50", "99 and 99", "2 and 2"],
+    "Subtracting 2 repeatedly takes about 50 reductions. With division, 99 mod 2 = 1, so gcd(99, 2) goes to gcd(2, 1) and then gcd(1, 0): 2 reductions."),
+  m("33 mod 7 equals", "5", ["4", "6", "26"],
+    "33 = 4 × 7 + 5, so the remainder is 5. (4 is the quotient.)"),
+  m("Using Āryabhaṭa's algorithm, gcd(252, 105) is", "21", ["42", "7", "105"],
+    "252 = 2 × 105 + 42, 105 = 2 × 42 + 21, 42 = 2 × 21 + 0. The last divisor is 21."),
+  m("In the long division for gcd(60, 16), the remainders obtained one after the other are", "12, 4, 0", ["16, 12, 4", "3, 1, 3", "12, 8, 0"],
+    "60 = 3 × 16 + 12, 16 = 1 × 12 + 4, 12 = 3 × 4 + 0. So the gcd is 4."),
+  m("gcd(51000, 81000) equals", "3000", ["27000", "30000", "1000"],
+    "81000 = 1 × 51000 + 30000, 51000 = 1 × 30000 + 21000, 30000 = 1 × 21000 + 9000, 21000 = 2 × 9000 + 3000, 9000 = 3 × 3000 + 0."),
+  m("The gcd algorithm whose number of steps grows with the number of digits of the numbers (not with their values) is", "Āryabhaṭa's division algorithm", ["Euclid's subtraction algorithm", "the algorithm that finds both lists of divisors", "counting the common divisors from 1"],
+    "Repeated division by remainder reduces the numbers quickly, so the number of reductions is proportional to the number of digits."),
+  m("The word algorithm comes from the name of", "Al-Khwārizmī", ["Euclid", "Āryabhaṭa", "Brahmagupta"],
+    "The Latin form of his name, Algoritmi, gave algorismus, then algorism and then algorithm. He wrote about the Indian place value system and Indian arithmetic."),
+  m("The lcm of 15 and 20, found with the gcd algorithm, is", "60", ["5", "300", "30"],
+    "gcd(15, 20) = 5, so lcm = 15 × 20 ÷ 5 = 60."),
+  m("An algorithm prime(n) built from divisors(n) reports that n is prime when divisors(n)", "has exactly 2 elements", ["has exactly 1 element", "has more than 2 elements", "is empty"],
+    "A prime has exactly two divisors, 1 and itself. For n = 1 the list [1] has one element, so 1 is not prime."),
+  m("The list primedivisors(30) is", "[2, 3, 5]", ["[1, 2, 3, 5]", "[2, 3, 5, 6]", "[1, 2, 3, 5, 6, 10, 15, 30]"],
+    "divisors(30) = [1, 2, 3, 5, 6, 10, 15, 30]. Only 2, 3 and 5 are prime."),
+  m("While the divisors algorithm is executed for n = 12, a new divisor is added to the list how many times?", "6", ["12", "4", "5"],
+    "The list ends as [1, 2, 3, 4, 6, 12]. A divisor is added six times (for j = 1, 2, 3, 4, 6 and 12), although all 12 numbers are checked."),
+
+  // ── Assertion and reasoning ──
+  ar("Assertion (A): Step 5 of the addition algorithm is needed.\nReason (R): A last carry of 1 would otherwise be lost, as in 56 + 67 where we would get 23 instead of 123.", 0,
+    "Both are true. R gives the example that shows why step 5 cannot be left out."),
+  ar("Assertion (A): In the algorithm that keeps most-recent-common-divisor, the value can be started at 1.\nReason (R): The number 1 divides every number, so it is always a common divisor.", 0,
+    "Both are true, and R is exactly the reason why we can start at 1."),
+  ar("Assertion (A): Āryabhaṭa's algorithm needs only 2 reductions for gcd(99, 2).\nReason (R): 99 mod 2 = 1, which is what is left after subtracting 2 from 99 again and again, so gcd(99, 2) becomes gcd(2, 1) in one step.", 0,
+    "Both are true. The remainder step does at once what many subtractions do, so only gcd(2, 1) and gcd(1, 0) follow."),
+  ar("Assertion (A): divisors(18) is in increasing order.\nReason (R): The number 18 has exactly 6 divisors.", 1,
+    "Both are true. But the list is in increasing order because j is checked from 1 up to 18, not because there are 6 divisors."),
+  ar("Assertion (A): Counting the dots of 3347 + 2729 at one dot per second takes more than 1 hour 40 minutes.\nReason (R): Adding 3347 and 2729 digit by digit, at 15 seconds a column, takes about 1 minute.", 1,
+    "Both are true (6076 dots is about 101 minutes, and 4 columns take 60 seconds). The second fact compares the methods but does not explain the first."),
+  ar("Assertion (A): In the addition algorithm the carry is never more than 1.\nReason (R): Numbers are aligned from the right so that units are added to units.", 1,
+    "Both are true. But the reason for the carry is that the largest column sum is 9 + 9 + 1 = 19. The alignment does not explain it."),
+  ar("Assertion (A): gcd(m, n) can never be larger than min(m, n).\nReason (R): A common divisor of m and n can be larger than both m and n.", 2,
+    "A is true, because a divisor of a number cannot be more than that number. R is false, since a divisor is at most the number it divides."),
+  ar("Assertion (A): Āryabhaṭa's algorithm reduces gcd(m, n) to gcd(n, m mod n).\nReason (R): m mod n is the quotient obtained when m is divided by n.", 2,
+    "A is true. R is false: m mod n is the remainder, not the quotient. (For 33 mod 7 the remainder is 5 and the quotient is 4.)"),
+  ar("Assertion (A): The first gcd algorithm reports the rightmost element of the list of common divisors.\nReason (R): The list of common divisors is in decreasing order.", 2,
+    "A is true. R is false: the list is in increasing order, which is why the rightmost element is the largest."),
+  ar("Assertion (A): A carry in the addition algorithm can be 2.\nReason (R): The largest possible sum in a column is 9 + 9 + 1 = 19.", 3,
+    "A is false. The sum 19 gives the units digit 9 and a carry of 1, so the carry is only 0 or 1. R is true."),
+  ar("Assertion (A): The number of reductions in Euclid's subtraction algorithm is proportional to the number of digits of the numbers.\nReason (R): gcd(99, 2) takes about 50 reductions in Euclid's subtraction algorithm.", 3,
+    "A is false: the number of steps depends on the value of the numbers. The example in R, about 50 reductions for the 2-digit number 99, shows this. R is true."),
+  ar("Assertion (A): The first gcd algorithm examines fewer numbers than the improved algorithm that scans up to min(m, n).\nReason (R): The first algorithm examines m + n numbers and the improved one examines about min(m, n) numbers.", 3,
+    "A is false: the improved algorithm examines fewer numbers. R is true, and it shows that m + n is larger than min(m, n)."),
+];

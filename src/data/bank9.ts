@@ -46,10 +46,25 @@ import { LIN9_VERY_SHORT, LIN9_SHORT } from './lin9_short';
 import { LIN9_LONG, LIN9_COMPETENCY } from './lin9_long';
 import { LIN9_NCERT_SOLVED } from './lin9_ncert';
 import { LIN9_SELF_ASSESSMENT } from './lin9_self';
+import { AL9_MCQS } from './al9_mcq';
+import { AL9_VERY_SHORT, AL9_SHORT } from './al9_short';
+import { AL9_LONG, AL9_COMPETENCY } from './al9_long';
+import { AL9_NCERT_SOLVED } from './al9_ncert';
+import { AL9_SELF_ASSESSMENT } from './al9_self';
 
 export function getBank(p: BankParams): Bank {
   const { preparingFor, qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
-  if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'linear') {
+  if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'algorithms') {
+    return {
+          ncert: AL9_NCERT_SOLVED,
+          mcqs: AL9_MCQS,
+          veryshort: AL9_VERY_SHORT,
+          short: AL9_SHORT,
+          long: AL9_LONG,
+          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          competency: AL9_COMPETENCY,
+    };
+  } else if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'linear') {
     return {
           ncert: LIN9_NCERT_SOLVED,
           mcqs: LIN9_MCQS,
@@ -165,6 +180,6 @@ export function getBank(p: BankParams): Bank {
 export function getSelf(p: BankParams): any[] {
   const { qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
   // Class IX Maths: both chapters have a self assessment (Circles: 100 questions, Propositions and Converses: 50).
-  if (qbSubject === 'maths') return mathsChapter9 === 'linear' ? LIN9_SELF_ASSESSMENT : mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : CIRCLES9_SELF_ASSESSMENT;
+  if (qbSubject === 'maths') return mathsChapter9 === 'algorithms' ? AL9_SELF_ASSESSMENT : mathsChapter9 === 'linear' ? LIN9_SELF_ASSESSMENT : mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : CIRCLES9_SELF_ASSESSMENT;
   return (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? [...SOUND9_SELF_ASSESSMENT, ...SOUND9_SELF_MORE] : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : qbSubject === 'foundations' ? FOUNDATIONS9_SELF_ASSESSMENT : bioChapter9 === 'diversity' ? DIVERSITY9_SELF_ASSESSMENT : bioChapter9 === 'tissues' ? TISSUES9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT);
 }

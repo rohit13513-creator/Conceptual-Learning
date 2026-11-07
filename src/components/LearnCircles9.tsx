@@ -4,6 +4,7 @@ import { GeoFigure, GeoSpec } from "./GeoFigure";
 import { CIRCLES9_TOPICS, NBlock, NTopic } from "../data/circles9Notes";
 import { PROPS9_TOPICS, PROPS9_MAP } from "../data/props9Notes";
 import { LIN9_TOPICS, LIN9_MAP } from "../data/lin9Notes";
+import { AL9_TOPICS, AL9_MAP } from "../data/al9Notes";
 import { DownloadNotesLink } from "./DownloadNotesLink";
 
 // Class IX Maths: Circles. Topic-wise notes with proofs, diagrams, a mind map and a Competition Zone.
@@ -166,12 +167,51 @@ const LinMindMap: React.FC = () => (
   </div>
 );
 
+// Simple revision map for The World of Algorithms: five cards in order, then a table that compares the algorithms.
+// Colours are set inline because the notes page recolours text inside white cards.
+const AlgoMindMap: React.FC = () => (
+  <div className="bg-white rounded-2xl border border-slate-300 p-3 sm:p-5 space-y-4">
+    <div className="text-center">
+      <div className="inline-block rounded-2xl px-5 py-3" style={{ background: "#0f172a" }}>
+        <div className="text-lg sm:text-xl font-black" style={{ color: "#ffffff" }}>The World of Algorithms</div>
+        <div className="text-xs font-bold" style={{ color: "#bae6fd" }}>Class IX Maths: read the five steps from 1 to 5</div>
+      </div>
+      <div className="mx-auto h-4 w-0.5" style={{ background: "#94a3b8" }} />
+    </div>
+    <div className="grid sm:grid-cols-2 gap-3">
+      {AL9_MAP.steps.map((st, i) => (
+        <div key={st.title} className="rounded-xl overflow-hidden" style={{ border: `2px solid ${st.color}` }}>
+          <div className="flex items-center gap-2 px-3 py-2" style={{ background: st.color }}>
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-black" style={{ background: "#ffffff", color: st.color }}>{i + 1}</span>
+            <span className="text-base font-black" style={{ color: "#ffffff" }}>{st.title}</span>
+          </div>
+          <ul className="px-3 py-2.5 space-y-1.5">
+            {st.lines.map((l) => <li key={l} className="text-[15px] font-bold leading-snug" style={{ color: "#1e293b" }}>{"• "}{l}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+    <div className="rounded-xl overflow-hidden" style={{ border: "2px solid #0f172a" }}>
+      <div className="px-3 py-2 text-base font-black" style={{ background: "#0f172a", color: "#ffffff" }}>How much work does each algorithm do?</div>
+      <div className="divide-y" style={{ borderColor: "#e2e8f0" }}>
+        {AL9_MAP.compare.map((r) => (
+          <div key={r.name} className="px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1" style={{ borderColor: "#e2e8f0" }}>
+            <span className="text-[15px] font-black" style={{ color: "#1e293b" }}>{r.name}</span>
+            <span className="text-[14px] font-semibold" style={{ color: "#475569" }}>{r.work}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div className="rounded-xl px-4 py-3 text-center text-[15px] font-black leading-snug" style={{ background: "#fef3c7", color: "#78350f", border: "2px solid #f59e0b" }}>{AL9_MAP.rule}</div>
+  </div>
+);
+
 // ── Blocks ─────────────────────────────────────────────────────────────────────────────────────────────
 const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
   <div className="flex flex-wrap justify-center gap-4">{specs.map((s, i) => <GeoFigure key={i} spec={s} />)}</div>
 );
 
-type Chapter = "circles" | "propositions" | "linear";
+type Chapter = "circles" | "propositions" | "linear" | "algorithms";
 
 const PROPS_NOTES_PDF_URL = "/download/downloads/Class-9-Maths-Propositions-Notes.pdf";
 const PROPS_NOTES_PDF_NAME = "Class-9-Maths-Propositions-and-Converses-Notes.pdf";
@@ -185,7 +225,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
     case "table": return <Table head={b.head} rows={b.rows} light={light} />;
     case "fig": return <div className="flex justify-center"><GeoFigure spec={b.spec} max={340} /></div>;
     case "figs": return <Figs specs={b.specs} />;
-    case "mindmap": return chapter === "linear" ? <LinMindMap /> : chapter === "propositions"
+    case "mindmap": return chapter === "algorithms" ? <AlgoMindMap /> : chapter === "linear" ? <LinMindMap /> : chapter === "propositions"
       ? <PropsMindMap />
       : <MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" />;
     case "key": return (
@@ -233,7 +273,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
 };
 
 export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, chapter = "circles" }: { isLightMode?: boolean; onCompleteNotes?: () => void; onBack?: () => void; chapter?: Chapter }) {
-  const TOPICS: NTopic[] = chapter === "linear" ? LIN9_TOPICS : chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
+  const TOPICS: NTopic[] = chapter === "algorithms" ? AL9_TOPICS : chapter === "linear" ? LIN9_TOPICS : chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
   const topic = TOPICS[idx];
@@ -252,8 +292,8 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
-          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" || chapter === "linear" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
+          <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
+          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
           {chapter === "propositions" && <DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">
