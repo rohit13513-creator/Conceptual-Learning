@@ -718,6 +718,8 @@ interface SubmissionNotes {
   // Epoch ms of when an automatic check claimed this still-"pending" row. Never persisted on a
   // finished row (serializeAdminNotes drops it) -- it only exists while a check is in flight.
   checkingSince?: number;
+  // ISO time when the student's uploaded pages were removed from storage (full marks, more than 15 days ago).
+  fileRemovedOn?: string;
 }
 function parseAdminNotes(raw: string | null | undefined): SubmissionNotes {
   if (!raw) return {};
@@ -738,6 +740,7 @@ function serializeAdminNotes(notes: SubmissionNotes): string | null {
   if (notes.followUp) cleaned.followUp = true;
   if (typeof notes.latePenalty === "number" && notes.latePenalty > 0) cleaned.latePenalty = notes.latePenalty;
   if (typeof notes.scoreBeforeImprove === "number") cleaned.scoreBeforeImprove = notes.scoreBeforeImprove;
+  if (notes.fileRemovedOn) cleaned.fileRemovedOn = notes.fileRemovedOn;
   return Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
 }
 
@@ -9981,8 +9984,41 @@ function buildApp(): express.Express {
     }
 
     const result = await processPendingHomework();
-    return res.json(result);
+    let cleanup: { removed: number; skippedShared: number } | null = null;
+    try { cleanup = await removeOldFullMarkSolutions(); } catch (e: any) { console.warn("Full-mark clean-up failed:", e?.message); }
+    return res.json({ ...result, cleanup });
   });
+
+  // Rohit's rule: the pages a student uploaded for a homework that scored 10 out of 10 are removed from storage 15 days
+  // after the submission, to save space. The row, the score and the feedback stay. Nothing else is ever removed: question
+  // sheets (the assignments folder), papers and work that scored less than 10 are never touched. A file that another row
+  // also points to is kept unless every row pointing to it qualifies.
+  async function removeOldFullMarkSolutions(dryRun = false): Promise<{ removed: number; skippedShared: number; paths?: string[] }> {
+    const cutoff = new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString();
+    const { data: rows } = await supabase.from("homework_submissions").select("id, student_email, file_path, ai_score, status, submitted_at, admin_notes")
+      .eq("status", "checked").gte("ai_score", 10).lt("submitted_at", cutoff).order("submitted_at", { ascending: true }).limit(300);
+    const eligible = (rows || []).filter((r: any) => r.file_path && typeof r.file_path === "string" && r.file_path.startsWith(`${r.student_email}/`) && !parseAdminNotes(r.admin_notes).fileRemovedOn);
+    if (eligible.length === 0) return { removed: 0, skippedShared: 0, paths: [] };
+    const paths = Array.from(new Set(eligible.map((r: any) => r.file_path as string)));
+    const { data: sharing } = await supabase.from("homework_submissions").select("id, file_path, ai_score, status, submitted_at").in("file_path", paths);
+    const eligibleIds = new Set(eligible.map((r: any) => r.id));
+    const blocked = new Set<string>();
+    for (const x of sharing || []) if (!eligibleIds.has(x.id)) blocked.add(x.file_path);
+    const toRemove = paths.filter((p) => !blocked.has(p));
+    if (dryRun) return { removed: toRemove.length, skippedShared: blocked.size, paths: toRemove };
+    let removed = 0;
+    for (let i = 0; i < toRemove.length; i += 50) {
+      const batch = toRemove.slice(i, i + 50);
+      const { error } = await supabase.storage.from(HOMEWORK_BUCKET).remove(batch);
+      if (error) { console.warn("Could not remove a batch of full-mark files:", error.message); continue; }
+      removed += batch.length;
+      const gone = new Set(batch);
+      for (const r of eligible.filter((x: any) => gone.has(x.file_path))) {
+        await supabase.from("homework_submissions").update({ admin_notes: serializeAdminNotes({ ...parseAdminNotes(r.admin_notes), fileRemovedOn: new Date().toISOString() }) }).eq("id", r.id);
+      }
+    }
+    return { removed, skippedShared: blocked.size };
+  }
 
   // Admin-triggered immediate check of all pending homework (for local testing, or to skip
   // waiting for the next scheduled cron run).
@@ -10417,13 +10453,10 @@ ${keptNote}` : keptNote;
     // to anyone on the internet, including the signed download links of every question sheet.
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { data: rows } = await supabase
-      .from("homework_assignments")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    let visibleRows = rows || [];
+    // ALL worksheets and test papers ever posted, newest first. This used to stop at the newest 100, so the oldest
+    // sheets would quietly drop off the list as more were posted.
+    const { data: allRows } = await selectAllRows(() => supabase.from("homework_assignments").select("*").order("id"));
+    let visibleRows = (allRows || []).sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)));
     if (!ADMIN_EMAILS.includes(auth.email)) {
       const { data: me } = await supabase.from("users").select("student_class").eq("email", auth.email).maybeSingle();
       const cls = me?.student_class as string | undefined;
@@ -10434,14 +10467,15 @@ ${keptNote}` : keptNote;
       }
     }
 
-    const assignments = await Promise.all(visibleRows.map(async (r) => {
-      let fileUrl: string | null = null;
-      if (r.file_path) {
-        const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrl(r.file_path, 3600);
-        fileUrl = signed?.signedUrl || null;
-      }
-      return mapAssignmentRow(r, fileUrl);
-    }));
+    // One batch request for all the links, valid for 24 hours (they were valid for 1 hour, so a page that had been
+    // open for a while showed links that no longer opened).
+    const urlByPath = new Map<string, string>();
+    const paths = Array.from(new Set(visibleRows.map((r: any) => r.file_path).filter(Boolean))) as string[];
+    for (let i = 0; i < paths.length; i += 100) {
+      const { data: signedBatch } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrls(paths.slice(i, i + 100), 24 * 3600);
+      for (const x of signedBatch || []) if (x.path && x.signedUrl) urlByPath.set(x.path, x.signedUrl);
+    }
+    const assignments = visibleRows.map((r: any) => mapAssignmentRow(r, r.file_path ? urlByPath.get(r.file_path) ?? null : null));
 
     return res.json({ assignments });
   });
@@ -10506,6 +10540,8 @@ ${keptNote}` : keptNote;
       return res.status(500).json({ error: "Failed to unlink existing submissions from this assignment." });
     }
 
+    // The question sheet file is deliberately NOT removed from storage: questions are never deleted, so a sheet can
+    // always be found again later.
     const { error: deleteError } = await supabase.from("homework_assignments").delete().eq("id", id);
     if (deleteError) {
       console.error("Error deleting homework assignment:", deleteError.message);

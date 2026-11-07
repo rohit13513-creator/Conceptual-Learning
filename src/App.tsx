@@ -36,6 +36,7 @@ const LearnTissues9 = lazyView(() => import('./components/LearnTissues9').then((
 const LearnDiversity9 = lazyView(() => import('./components/LearnDiversity9').then((m) => ({ default: m.LearnDiversity9 })));
 const LearnCircles9 = lazyView(() => import('./components/LearnCircles9').then((m) => ({ default: m.LearnCircles9 })));
 const QuestionFigure = lazyView(() => import('./components/QuestionFigure'));
+import { AllSheetsLibrary } from './components/AllSheetsLibrary';
 import { HomeHero } from './components/HomeHero';
 const LearnCanadianMaths = lazyView(() => import('./components/LearnCanadianMaths').then((m) => ({ default: m.LearnCanadianMaths })));
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
@@ -1145,6 +1146,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const todayDateStr = new Date().toISOString().slice(0, 10);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignSearch, setAssignSearch] = useState('');
   const [assignTitle, setAssignTitle] = useState('');
   const [assignDescription, setAssignDescription] = useState('');
   const [assignSubject, setAssignSubject] = useState('');
@@ -2261,6 +2263,14 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
       .sort((a, b) => new Date(b.assignedDate).getTime() - new Date(a.assignedDate).getTime())
       .slice(0, 10);
   }, [assignments, isClassExempt, studentTrack]);
+
+  // Every question sheet ever posted for this student's class, newest first (the list above only shows the latest ten).
+  const allAssignmentsForStudent = useMemo(() => {
+    return assignments
+      .filter(a => isCanadianStudent ? a.targetClass === 'canadian' : (a.targetClass === 'All' || isClassExempt || a.targetClass === studentTrack))
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [assignments, isClassExempt, studentTrack, isCanadianStudent]);
 
   const mySubmissionByAssignment = useMemo(() => {
     const map: Record<string, any> = {};
@@ -7894,6 +7904,8 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               )}
             </div>
 
+            <AllSheetsLibrary sheets={allAssignmentsForStudent} isLightMode={isLightMode} formatDate={formatDateIST} />
+
             <div id="homework-upload-form" className={`border rounded-2xl p-6 shadow-lg space-y-4 ${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/60 border-slate-800'}`}>
               <h2 className={`text-lg font-black flex items-center gap-2 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                 <Upload className="w-5 h-5 text-cyan-400" /> {mySubmissions.some((s) => s.assignmentId === selectedAssignmentId) ? 'Update Homework' : 'Submit Homework'}
@@ -9085,11 +9097,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                     </div>
                   </form>
 
-                  <div className={`divide-y pt-2 border-t max-h-[220px] overflow-y-auto ${isLightMode ? 'divide-slate-200 border-slate-200' : 'divide-slate-800 border-slate-800'}`}>
+                  <input value={assignSearch} onChange={(e) => setAssignSearch(e.target.value)} placeholder={`Search all ${assignments.length} worksheets and test papers`} className={`w-full rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${isLightMode ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-700 text-slate-100'}`} />
+                  <div className={`divide-y pt-2 border-t max-h-[420px] overflow-y-auto ${isLightMode ? 'divide-slate-200 border-slate-200' : 'divide-slate-800 border-slate-800'}`}>
                     {assignments.length === 0 ? (
                       <p className="text-center py-4 text-xs font-semibold text-slate-500">No assignments posted yet.</p>
                     ) : (
-                      assignments.map((a) => (
+                      assignments.filter((a) => !assignSearch.trim() || `${a.title} ${a.subject || ''} ${a.description || ''}`.toLowerCase().includes(assignSearch.trim().toLowerCase())).map((a) => (
                         <div key={a.id} className="py-2.5 flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className={`text-xs font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-slate-100'}`}>{a.title}</p>
