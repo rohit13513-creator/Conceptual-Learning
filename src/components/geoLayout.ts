@@ -2,6 +2,8 @@
 // text label where it touches nothing (no line, no point, no other label). The same function is used by
 // the renderer and by the overlap checker, so what the checker approves is exactly what is drawn.
 
+import type { GraphData } from "./graphLayout";
+
 export type GPoint = [number, number] | { a: number; r?: number; c?: [number, number] };
 
 export interface GeoSpec {
@@ -22,6 +24,7 @@ export interface GeoSpec {
   noLabel?: string[];
   labelAway?: string;
   caption?: string;
+  graph?: GraphData; // a coordinate-plane graph (lines and points) instead of a circle figure; pts is then {}
 }
 
 export const INK = "#0f172a";
