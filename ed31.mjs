@@ -1,7 +1,0 @@
-import fs from "fs";
-let s = fs.readFileSync("src/data/al9_long.ts","utf8");
-const rep=(a,b)=>{ if(s.split(a).length!==2) throw new Error("nf "+a.slice(0,70)); s=s.replace(a,()=>b); };
-rep(`"Subtracting the smaller number again and again: (1071, 462) goes to (462, 609), then (609, 462), (462, 147), (147, 315), (315, 147), (147, 168), (168, 147), (147, 21), (21, 126) and so on with the reversal each time, until (21, 0). It needs about 15 reductions."`, `"(1071, 462) goes to (462, 609); reverse to (609, 462), then (462, 147), (147, 315); reverse to (315, 147), then (147, 168); reverse to (168, 147), then (147, 21), (21, 126); reverse to (126, 21), then (21, 105), (21, 84), (21, 63), (21, 42), (21, 21), (21, 0). The answer is 21 after 12 reductions."`);
-rep(`"The division method needs 3 divisions and the subtraction method needs many more, because one division does the work of many subtractions."`, `"The division method needs 3 divisions and the subtraction method needs 12 reductions, because one division does the work of many subtractions."`);
-rep(`"Length 6 (6 rows of 6) and 9 (4 rows... no: 4 rows is fewer than 5) so only 6 works: 36 ÷ 6 = 6 rows of 6 books. Length 9 gives 4 rows, which is fewer than 5."`, `"Only the length 6 works: 36 ÷ 6 = 6 rows of 6 books. The length 9 gives only 4 rows, which is fewer than 5, and the lengths 4 or less give rows shorter than 5."`);
-fs.writeFileSync("src/data/al9_long.ts", s);
