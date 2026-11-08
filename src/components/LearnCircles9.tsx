@@ -216,8 +216,10 @@ const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
 
 type Chapter = "circles" | "propositions" | "linear" | "algorithms";
 
-const PROPS_NOTES_PDF_URL = "/download/downloads/Class-9-Maths-Propositions-Notes.pdf";
-const PROPS_NOTES_PDF_NAME = "Class-9-Maths-Propositions-and-Converses-Notes.pdf";
+const NOTES_PDFS: Partial<Record<Chapter, { url: string; name: string }>> = {
+  propositions: { url: "/download/downloads/Class-9-Maths-Propositions-Notes.pdf", name: "Class-9-Maths-Propositions-and-Converses-Notes.pdf" },
+  linear: { url: "/download/downloads/Class-9-Maths-Two-Variables-Notes.pdf", name: "Class-9-Maths-Two-Variables-One-Line-Notes.pdf" },
+};
 
 const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, light, chapter }) => {
   switch (b.t) {
@@ -277,6 +279,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
 
 export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, chapter = "circles" }: { isLightMode?: boolean; onCompleteNotes?: () => void; onBack?: () => void; chapter?: Chapter }) {
   const TOPICS: NTopic[] = chapter === "algorithms" ? AL9_TOPICS : chapter === "linear" ? LIN9_TOPICS : chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
+  const notesPdf = NOTES_PDFS[chapter];
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
   const topic = TOPICS[idx];
@@ -291,7 +294,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
         <select value={activeId} onChange={(e) => go(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
           {TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
         </select>
-        {chapter === "propositions" && <div className="mt-2"><DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} compact /></div>}
+        {notesPdf && <div className="mt-2"><DownloadNotesLink href={notesPdf.url} fileName={notesPdf.name} isLightMode={isLightMode} compact /></div>}
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
@@ -299,7 +302,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
           <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
           {chapter === "circles" && <p className={`text-[13.5px] mt-1 font-black italic ${isLightMode ? "text-cyan-800" : "text-cyan-300"}`}>{CIRCLES_BOOK_NAME}</p>}
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
-          {chapter === "propositions" && <DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} />}
+          {notesPdf && <DownloadNotesLink href={notesPdf.url} fileName={notesPdf.name} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t, i) => (
