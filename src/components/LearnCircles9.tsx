@@ -217,6 +217,7 @@ const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
 type Chapter = "circles" | "propositions" | "linear" | "algorithms";
 
 const NOTES_PDFS: Partial<Record<Chapter, { url: string; name: string }>> = {
+  circles: { url: "/download/downloads/Class-9-Maths-Circles-Notes.pdf", name: "Class-9-Maths-Circles-Notes.pdf" },
   propositions: { url: "/download/downloads/Class-9-Maths-Propositions-Notes.pdf", name: "Class-9-Maths-Propositions-and-Converses-Notes.pdf" },
   linear: { url: "/download/downloads/Class-9-Maths-Two-Variables-Notes.pdf", name: "Class-9-Maths-Two-Variables-One-Line-Notes.pdf" },
 };
