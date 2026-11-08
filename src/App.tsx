@@ -38,6 +38,7 @@ const LearnCircles9 = lazyView(() => import('./components/LearnCircles9').then((
 const QuestionFigure = lazyView(() => import('./components/QuestionFigure'));
 import { AllSheetsLibrary } from './components/AllSheetsLibrary';
 import { HomeHero } from './components/HomeHero';
+import { DiwaliStrip } from './components/DiwaliTheme';
 const LearnCanadianMaths = lazyView(() => import('./components/LearnCanadianMaths').then((m) => ({ default: m.LearnCanadianMaths })));
 import { AuthSidePanel, AuthMobileInfo } from './components/AuthSidePanel';
 const LearnMaths8 = lazyView(() => import('./components/LearnMaths8').then((m) => ({ default: m.LearnMaths8 })));
@@ -3274,6 +3275,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     return (
       <>
       <div className={`cl-aurora flex flex-col lg:flex-row items-center justify-center lg:gap-20 min-h-screen p-4 sm:p-8 font-sans select-none relative overflow-y-auto ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#060b14] text-slate-100'}`}>
+        <div className="absolute top-0 inset-x-0 z-20"><DiwaliStrip /></div>
         <div className="cl-grid-bg absolute inset-0 pointer-events-none" />
 
         {/* Information panel: advantages of logging in, or of registering plus the two ways to join */}

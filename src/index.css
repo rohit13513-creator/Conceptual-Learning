@@ -955,3 +955,17 @@ html.light #learn-chemistry-container .text-cyan-300, html.light #learn-chemistr
 @media (prefers-reduced-motion: reduce) {
   .cl-twinkle, .cl-flicker, .cl-flame-glow { animation: none; }
 }
+
+/* Diwali fireworks and embers (first page) */
+.cl-burst { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 1; }
+.cl-burst > span { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px 2px var(--c); opacity: 0; animation: cl-burst 2.8s ease-out infinite; }
+@keyframes cl-burst {
+  0% { opacity: 0; transform: rotate(var(--a)) translateX(0) scale(1.2); }
+  8% { opacity: 1; }
+  70% { opacity: .9; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(56px) scale(.35); }
+}
+.cl-embers { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.cl-embers > span { position: absolute; bottom: -10px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 8px 2px rgba(251,191,36,.8); opacity: 0; animation: cl-ember 9s linear infinite; }
+@keyframes cl-ember { 0% { opacity: 0; transform: translateY(0) translateX(0); } 12% { opacity: .9; } 100% { opacity: 0; transform: translateY(-460px) translateX(24px); } }
+@media (prefers-reduced-motion: reduce) { .cl-burst, .cl-embers { display: none; } }

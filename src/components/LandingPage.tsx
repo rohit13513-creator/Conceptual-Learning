@@ -3,7 +3,7 @@ import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Ma
 import { GOOGLE_LISTING, GOOGLE_REVIEWS, GoogleReview } from '../data/googleReviews';
 import { SCORE_CARDS } from '../data/results';
 import { AboutUs } from './AboutUs';
-import { DiwaliStrip } from './DiwaliTheme';
+import { DiwaliStrip, DiwaliBanner, DiwaliLights, DiwaliFireworks, DiwaliEmbers, useDiwali } from './DiwaliTheme';
 
 interface LandingPageProps {
   isLightMode: boolean;
@@ -80,6 +80,7 @@ const SubjectShowcase: React.FC<{ light: boolean; subject: 'Maths' | 'Science'; 
 // src/data/googleReviews.ts (copied from the Google listing); nothing here is invented.
 export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleTheme, onLogin, onRegister }) => {
   const light = isLightMode;
+  const diwali = useDiwali(); // Diwali decoration: switches itself on and off by time (see DiwaliTheme.tsx)
   const card = light ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900/60 border-slate-800';
   const muted = light ? 'text-slate-600' : 'text-slate-400';
   const heading = light ? 'text-slate-900' : 'text-white';
@@ -183,8 +184,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
       `}</style>
 
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[640px] overflow-hidden">
-        <div className={`absolute -top-24 left-1/2 -translate-x-1/2 w-[780px] h-[480px] rounded-full blur-3xl ${light ? 'bg-cyan-300/30' : 'bg-cyan-500/15'}`} />
-        <div className={`absolute top-40 -right-24 w-[420px] h-[420px] rounded-full blur-3xl ${light ? 'bg-teal-300/30' : 'bg-teal-500/10'}`} />
+        <div className={`absolute -top-24 left-1/2 -translate-x-1/2 w-[780px] h-[480px] rounded-full blur-3xl ${diwali ? (light ? 'bg-amber-300/40' : 'bg-orange-500/20') : (light ? 'bg-cyan-300/30' : 'bg-cyan-500/15')}`} />
+        <div className={`absolute top-40 -right-24 w-[420px] h-[420px] rounded-full blur-3xl ${diwali ? (light ? 'bg-rose-300/30' : 'bg-rose-500/15') : (light ? 'bg-teal-300/30' : 'bg-teal-500/10')}`} />
         <div className={`absolute top-56 -left-28 w-[360px] h-[360px] rounded-full blur-3xl ${light ? 'bg-indigo-300/20' : 'bg-indigo-500/10'}`} />
       </div>
 
@@ -193,9 +194,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
       <DiwaliStrip />
 
       <main className="relative flex-1 pb-44">
-        <section className="max-w-6xl mx-auto px-4 pt-14 pb-10 sm:pt-20 text-center space-y-6">
+        <section className="relative max-w-6xl mx-auto px-4 pt-14 pb-10 sm:pt-20 text-center space-y-6">
+          {diwali && (<><DiwaliEmbers /><DiwaliFireworks /><DiwaliLights className="cl-diwali-lights-hero" /></>)}
+          {diwali && <div className="relative z-10 max-w-3xl mx-auto"><DiwaliBanner /></div>}
           <span className={`inline-flex items-center gap-2 text-[10px] sm:text-[11px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-full border ${light ? 'text-cyan-800 bg-cyan-50 border-cyan-200' : 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20'}`}>
-            <Sparkles className="w-3.5 h-3.5" /> Your learning guide &middot; Online and in class &middot; Class VIII to X
+            <Sparkles className="w-3.5 h-3.5" /> {diwali ? 'Shubh Deepavali · Happy Diwali' : <>Your learning guide &middot; Online and in class &middot; Class VIII to X</>}
           </span>
           <h1 className={`text-4xl sm:text-6xl font-black tracking-tight leading-[1.05] ${heading}`}>
             Learn the concept.<br />

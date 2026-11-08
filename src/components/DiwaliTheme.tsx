@@ -93,3 +93,33 @@ export const DiwaliStrip: React.FC = () => {
     </div>
   );
 };
+
+const BURST_COLORS = ["#fbbf24", "#fb7185", "#38bdf8", "#4ade80", "#f472b6", "#fde047"];
+
+/** One firework burst: sparks that fly out and fade, over and over. The parent must be position: relative. */
+const Burst: React.FC<{ className: string; delay: number; color: string }> = ({ className, delay, color }) => (
+  <div aria-hidden className={`cl-burst ${className}`} style={{ ["--c" as string]: color, animationDelay: `${delay}s` }}>
+    {Array.from({ length: 14 }).map((_, i) => <span key={i} style={{ ["--a" as string]: `${i * (360 / 14)}deg`, animationDelay: `${delay}s` }} />)}
+  </div>
+);
+
+/** Fireworks in the top corners of a section. */
+export const DiwaliFireworks: React.FC = () => (
+  <>
+    <Burst className="left-[6%] top-[14%]" delay={0} color={BURST_COLORS[0]} />
+    <Burst className="right-[7%] top-[10%]" delay={0.9} color={BURST_COLORS[1]} />
+    <Burst className="left-[22%] top-[3%] hidden sm:block" delay={1.7} color={BURST_COLORS[2]} />
+    <Burst className="right-[24%] top-[6%] hidden sm:block" delay={2.3} color={BURST_COLORS[3]} />
+    <Burst className="left-[2%] top-[48%] hidden md:block" delay={1.2} color={BURST_COLORS[4]} />
+    <Burst className="right-[3%] top-[52%] hidden md:block" delay={2.0} color={BURST_COLORS[5]} />
+  </>
+);
+
+/** Golden sparks drifting upwards, like lamp embers. */
+export const DiwaliEmbers: React.FC = () => (
+  <div aria-hidden className="cl-embers">
+    {Array.from({ length: 16 }).map((_, i) => (
+      <span key={i} style={{ left: `${(i * 37 + 8) % 96}%`, animationDelay: `${(i % 8) * 0.9}s`, animationDuration: `${7 + (i % 5)}s`, width: 3 + (i % 3), height: 3 + (i % 3) }} />
+    ))}
+  </div>
+);
