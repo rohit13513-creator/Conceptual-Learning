@@ -52,6 +52,9 @@ const BRANCHES: Branch[] = [
   { title: "8. Key formulas", color: "#a21caf", lines: ["Chord = 2√(r² − d²)", "Right triangle: R = hypotenuse ÷ 2", "Hexagon side = r", "Chord = r: 60°, 30° (major), 150°"] },
 ];
 
+// The textbook's own title for the Circles chapter; shown beside "Circles" on the notes screens.
+const CIRCLES_BOOK_NAME = "I’m Up and Down, and Round and Round";
+
 const MindMap: React.FC<{ branches: Branch[]; title: string; subtitle: string; titleSize?: number; circleIcon?: boolean }> = ({ branches, title, subtitle, titleSize = 26, circleIcon = true }) => {
   const W = 1000, H = 700, bw = 292, bh = 128, cx = W / 2, cy = H / 2;
   const left = branches.slice(0, 4), right = branches.slice(4);
@@ -227,7 +230,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
     case "figs": return <Figs specs={b.specs} />;
     case "mindmap": return chapter === "algorithms" ? <AlgoMindMap /> : chapter === "linear" ? <LinMindMap /> : chapter === "propositions"
       ? <PropsMindMap />
-      : <MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" />;
+      : <div className="space-y-2"><p className="text-center text-sm font-black">Circles: {CIRCLES_BOOK_NAME}</p><MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" /></div>;
     case "key": return (
       <div className="bg-cyan-950/25 border border-cyan-500/25 p-4 rounded-xl space-y-1.5 font-semibold">
         <h5 className="font-black text-cyan-300 text-[12.5px] uppercase tracking-wider flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> {b.title}</h5>
@@ -284,6 +287,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
   return (
     <div className={`flex-1 flex flex-col md:flex-row overflow-hidden h-full transition-colors duration-300 ${isLightMode ? "bg-slate-50" : "bg-[#060b14]"}`} id="learn-circles-container">
       <div className={`sticky top-0 shrink-0 z-20 p-3 md:hidden w-full ${isLightMode ? "bg-white/95 border-b border-slate-200" : "bg-[#0d1424]/95 border-b border-slate-800"}`}>
+        {chapter === "circles" && <p className={`text-xs font-black mb-1.5 leading-snug ${isLightMode ? "text-slate-700" : "text-slate-200"}`}>Circles: {CIRCLES_BOOK_NAME}</p>}
         <select value={activeId} onChange={(e) => go(e.target.value)} className={`w-full min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
           {TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
         </select>
@@ -293,6 +297,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
+          {chapter === "circles" && <p className={`text-[13.5px] mt-1 font-black italic ${isLightMode ? "text-cyan-800" : "text-cyan-300"}`}>{CIRCLES_BOOK_NAME}</p>}
           <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
           {chapter === "propositions" && <DownloadNotesLink href={PROPS_NOTES_PDF_URL} fileName={PROPS_NOTES_PDF_NAME} isLightMode={isLightMode} />}
         </div>
@@ -317,6 +322,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
         ` }} />
         <div className="max-w-4xl mx-auto w-full space-y-8 pb-12">
           <div className="space-y-1.5 border-b border-slate-800 pb-4">
+            {chapter === "circles" && <p className="text-[13px] font-black italic text-cyan-400">Circles: {CIRCLES_BOOK_NAME}</p>}
             <span className="text-[12px] font-black uppercase tracking-widest text-cyan-400 flex items-center gap-1.5"><Icon className="w-3.5 h-3.5" />{topic.category}</span>
             <h1 className="text-2xl font-black tracking-tight leading-tight">{topic.heading}</h1>
             <p className="text-base font-semibold text-slate-400">{topic.sub}</p>
