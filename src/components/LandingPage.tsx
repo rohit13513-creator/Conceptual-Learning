@@ -3,6 +3,7 @@ import { Star, BookOpen, FlaskConical, MessageCircle, ClipboardCheck, Trophy, Ma
 import { GOOGLE_LISTING, GOOGLE_REVIEWS, GoogleReview } from '../data/googleReviews';
 import { SCORE_CARDS } from '../data/results';
 import { AboutUs } from './AboutUs';
+import { DiwaliStrip } from './DiwaliTheme';
 
 interface LandingPageProps {
   isLightMode: boolean;
@@ -188,6 +189,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ isLightMode, onToggleT
       </div>
 
       {headerEl}
+
+      <DiwaliStrip />
 
       <main className="relative flex-1 pb-44">
         <section className="max-w-6xl mx-auto px-4 pt-14 pb-10 sm:pt-20 text-center space-y-6">

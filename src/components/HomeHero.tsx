@@ -1,5 +1,6 @@
 import React from "react";
 import { Sparkles, GraduationCap, MonitorSmartphone, School } from "lucide-react";
+import { useDiwali, DiwaliLights, DiwaliBanner, Diya } from "./DiwaliTheme";
 
 // Welcome banner at the top of the student home page. Styles: shared premium layer in index.css.
 const greeting = () => {
@@ -9,17 +10,21 @@ const greeting = () => {
   return "Good evening";
 };
 
-export const HomeHero: React.FC<{ firstName: string; studentClass?: string; studentType?: "online" | "offline"; subtitle?: string }> = ({ firstName, studentClass, studentType, subtitle }) => (
-  <section className="cl-card cl-aurora cl-view-in relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
+export const HomeHero: React.FC<{ firstName: string; studentClass?: string; studentType?: "online" | "offline"; subtitle?: string }> = ({ firstName, studentClass, studentType, subtitle }) => {
+  const diwali = useDiwali();
+  return (
+  <>
+  <section className={`cl-card cl-aurora cl-view-in relative overflow-hidden px-6 py-8 sm:px-10 sm:py-10 ${diwali ? "cl-diwali-hero" : ""}`}>
+    {diwali && <DiwaliLights />}
     <div className="cl-grid-bg absolute inset-0 pointer-events-none" />
     <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
       <div className="space-y-3">
-        <span className="cl-eyebrow"><Sparkles className="w-3.5 h-3.5" /> Home</span>
+        <span className="cl-eyebrow"><Sparkles className="w-3.5 h-3.5" /> {diwali ? "Shubh Deepavali" : "Home"}</span>
         <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-[1.05] cl-heading">
-          {greeting()}, <span className="cl-gradient-text">{firstName}</span>
+          {diwali ? "Happy Diwali" : greeting()}, <span className="cl-gradient-text">{firstName}</span>
         </h1>
         <p className="text-sm sm:text-base font-medium cl-page max-w-xl">
-          {subtitle || "Learn the concept. The marks follow."}
+          {diwali ? "Wishing you and your family a bright and happy Diwali." : (subtitle || "Learn the concept. The marks follow.")}
         </p>
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {studentClass && (
@@ -35,7 +40,10 @@ export const HomeHero: React.FC<{ firstName: string; studentClass?: string; stud
           )}
         </div>
       </div>
-      <img src="/favicon.svg" alt="" className="hidden sm:block w-28 h-28 rounded-3xl shadow-2xl shadow-cyan-500/20 cl-float" />
+      {diwali ? <Diya size={112} className="hidden sm:block cl-float" /> : <img src="/favicon.svg" alt="" className="hidden sm:block w-28 h-28 rounded-3xl shadow-2xl shadow-cyan-500/20 cl-float" />}
     </div>
   </section>
-);
+  {diwali && <DiwaliBanner />}
+  </>
+  );
+};
