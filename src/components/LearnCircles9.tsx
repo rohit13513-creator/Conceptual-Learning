@@ -220,6 +220,7 @@ const NOTES_PDFS: Partial<Record<Chapter, { url: string; name: string }>> = {
   circles: { url: "/download/downloads/Class-9-Maths-Circles-Notes.pdf", name: "Class-9-Maths-Circles-Notes.pdf" },
   propositions: { url: "/download/downloads/Class-9-Maths-Propositions-Notes.pdf", name: "Class-9-Maths-Propositions-and-Converses-Notes.pdf" },
   linear: { url: "/download/downloads/Class-9-Maths-Two-Variables-Notes.pdf", name: "Class-9-Maths-Two-Variables-One-Line-Notes.pdf" },
+  algorithms: { url: "/download/downloads/Class-9-Maths-Algorithms-Notes.pdf", name: "Class-9-Maths-World-of-Algorithms-Notes.pdf" },
 };
 
 const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, light, chapter }) => {
