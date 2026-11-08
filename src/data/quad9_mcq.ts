@@ -1,0 +1,100 @@
+import type { QuizQuestion } from "../types-custom";
+import type { GeoSpec } from "../components/GeoFigure";
+import * as F from "./quad9Figs";
+
+// 40 multiple-choice questions: Class IX Maths, Quadrilaterals (the 20 assertion and reason questions are in quad9_ar.ts).
+// Each question is written with the right answer first and is then placed at the position listed in POSITION,
+// so the right answers are spread evenly over the four options.
+
+const POSITION = [1, 3, 0, 2, 2, 0, 3, 1, 3, 1, 2, 0, 0, 2, 1, 3, 2, 0, 3, 1, 1, 3, 0, 2, 3, 1, 2, 0, 0, 2, 3, 1, 2, 3, 0, 1, 1, 0, 3, 2];
+
+let n = 0;
+const m = (question: string, right: string, wrong: string[], explanation: string, figure?: GeoSpec): QuizQuestion => {
+  const at = POSITION[n];
+  const options = [...wrong];
+  options.splice(at, 0, right);
+  return { id: ++n, question, options, correctAnswer: at, explanation, figure };
+};
+
+export const QUAD9_MCQS: QuizQuestion[] = [
+  m("A quadrilateral ABCD is formed by four points A, B, C, D that are", "distinct, in one plane, with no three collinear and with sides that do not cross", ["any four points in space", "distinct points of which three are collinear", "points of a plane whose sides may cross each other"],
+    "Definition 1: four distinct points in a plane, the points on AB, BC, CD, DA with every other point on exactly one side. This also means no three are collinear."),
+  m("In how many different ways can the quadrilateral ABCD be named (starting at any vertex and going round either way)?", "8", ["4", "6", "24"],
+    "There are 4 starting vertices and 2 directions: 4 × 2 = 8 names, such as BCDA and DCBA."),
+  m("Which of these is NOT a name of the quadrilateral ABCD?", "ACBD", ["CDAB", "DCBA", "BADC"],
+    "The letters must go round the figure, so that neighbouring letters are sides. In ACBD the pair AC would be a side, but AC is a diagonal."),
+  m("The diagonals of the quadrilateral ABCD are", "AC and BD", ["AB and CD", "AD and BC", "AB and BC"],
+    "A diagonal joins two vertices that are not adjacent: A with C and B with D."),
+  m("The angle opposite to ∠A in the quadrilateral ABCD is", "∠C", ["∠B", "∠D", "∠A + ∠C"],
+    "Opposite angles are at vertices that are not adjacent. A and C are opposite vertices."),
+  m("A quadrilateral is convex when", "all its internal angles are less than 180°", ["one internal angle is more than 180°", "its diagonals do not meet", "all its sides are equal"],
+    "A convex quadrilateral has no dent. Equivalently its diagonals intersect."),
+  m("In the quadrilateral DART shown, the internal angle at the dent D is", "more than 180°", ["less than 90°", "exactly 180°", "equal to the angle at A"],
+    "At the dent the internal angle is a reflex angle, more than 180°. So DART is non-convex.", F.quadDart({ cap: "DART" })),
+  m("The sum of the four internal angles of a quadrilateral (planar, not self-intersecting) is", "360°", ["180°", "270°", "540°"],
+    "A diagonal inside the quadrilateral splits it into two triangles, 2 × 180° = 360°."),
+  m("Three angles of a quadrilateral are 80°, 100° and 70°. The fourth angle is", "110°", ["100°", "120°", "90°"],
+    "360° − (80° + 100° + 70°) = 360° − 250° = 110°."),
+  m("In a self-intersecting quadrilateral ABCD, AB and CD cross at E and ∠AED = 40°. The sum ∠A + ∠B + ∠C + ∠D is", "280°", ["320°", "360°", "140°"],
+    "The sum is 360° − 2∠AED = 360° − 80° = 280°, less than 360°."),
+  m("If a quadrilateral has one pair of parallel opposite sides, it must be", "convex", ["non-convex", "self-intersecting", "non-planar"],
+    "With AB ∥ DC and no crossing sides, the figure is a trapezium, which is convex (Exercise 12.1, question 3)."),
+  m("The opposite sides of a parallelogram are", "parallel and equal", ["parallel but not necessarily equal", "equal but not necessarily parallel", "perpendicular"],
+    "By definition they are parallel, and by Theorem 1(a) they are equal."),
+  m("In a parallelogram ABCD, ∠A = 65°. Then ∠B is", "115°", ["65°", "25°", "125°"],
+    "Adjacent angles of a parallelogram add up to 180°, so ∠B = 180° − 65° = 115°."),
+  m("In a parallelogram ABCD, ∠A = (2x + 10)° and ∠C = (3x − 20)°. The value of x is", "30", ["10", "20", "40"],
+    "Opposite angles are equal: 2x + 10 = 3x − 20, so x = 30 (and ∠A = 70°)."),
+  m("The diagonals of a parallelogram ABCD meet at E and AC = 14 cm. Then AE is", "7 cm", ["14 cm", "28 cm", "3.5 cm"],
+    "The diagonals bisect each other, so AE = ½ AC = 7 cm.", F.parallelogram({ diag: true, cap: "ABCD, diagonals meet at E" })),
+  m("Adjacent angles of a parallelogram are", "supplementary", ["equal", "complementary", "both acute"],
+    "Two adjacent angles are interior angles on the same side of a transversal, so they add up to 180°."),
+  m("Which of these conditions is NOT enough to say that a quadrilateral is a parallelogram?", "one pair of opposite sides is equal", ["both pairs of opposite sides are equal", "the diagonals bisect each other", "one pair of opposite sides is equal and parallel"],
+    "One pair of equal sides is not enough. The pair must also be parallel (Theorem 5). The other three are tests (Theorems 2, 4 and 5)."),
+  m("The converse of 'the opposite angles of a parallelogram are equal' is", "if the opposite angles of a quadrilateral are equal, it is a parallelogram", ["if a quadrilateral is a parallelogram, its opposite angles are equal", "if the opposite sides of a quadrilateral are equal, it is a parallelogram", "if the adjacent angles of a quadrilateral are equal, it is a parallelogram"],
+    "A converse swaps the 'if' part and the 'then' part. This converse is Theorem 3."),
+  m("The proof that a quadrilateral with equal opposite sides is a parallelogram uses the congruence of △ACD and △CAB by", "SSS", ["ASA", "SAS", "RHS"],
+    "The sides AD = CB, DC = AB and AC = CA are all equal, so SSS gives the congruence (Theorem 2)."),
+  m("The proof of the equal and parallel sides test (Theorem 5) shows △EAB ≅ △ECD by", "ASA", ["SSS", "RHS", "SAS"],
+    "AB ∥ DC gives equal alternate angles at A, C and at B, D, and AB = CD, so ASA applies."),
+  m("The angles of a quadrilateral are in the ratio 3 : 2 : 3 : 2 in order. It is", "a parallelogram", ["a rectangle", "a rhombus", "a square"],
+    "The angles are 108°, 72°, 108°, 72° (k = 36°). Opposite angles are equal, so it is a parallelogram, but there is no right angle."),
+  m("A parallelogram whose diagonals are equal is", "a rectangle", ["a rhombus", "always a square", "a quadrilateral with no special name"],
+    "Equal diagonals give △ABC ≅ △DCB, so ∠ABC = ∠DCB = 90°. A parallelogram with a right angle is a rectangle."),
+  m("The diagonals of a rhombus are", "perpendicular bisectors of each other", ["equal", "parallel", "equal and perpendicular"],
+    "In a rhombus the diagonals bisect each other at right angles. They are equal only in a square."),
+  m("The diagonal AC of a parallelogram ABCD bisects ∠A. Then ABCD is a", "rhombus", ["rectangle", "square", "trapezium"],
+    "∠ACD = ∠CAB = ∠DAC, so DA = DC. Two adjacent sides are equal, so all four are equal."),
+  m("P and Q are the midpoints of AB and AC in △ABC, and BC = 18 cm. Then PQ is", "9 cm", ["18 cm", "36 cm", "6 cm"],
+    "By the Midpoint Theorem, PQ = ½ BC = 9 cm.", F.triMidLen({ bc: "BC", pq: "PQ", cap: "P, Q are midpoints" })),
+  m("D and E are the midpoints of AB and AC in △ABC, and DE = 7 cm. Then BC is", "14 cm", ["7 cm", "3.5 cm", "21 cm"],
+    "BC = 2 × DE = 14 cm."),
+  m("P and Q are the midpoints of AB and AC in △ABC and ∠ABC = 60°. Then ∠APQ is", "60°", ["120°", "30°", "90°"],
+    "PQ ∥ BC, so ∠APQ and ∠ABC are corresponding angles and are equal."),
+  m("The line through the midpoint of AB parallel to BC meets AC at Q. If AC = 12 cm, then QC is", "6 cm", ["12 cm", "4 cm", "3 cm"],
+    "By the converse of the Midpoint Theorem, Q is the midpoint of AC, so QC = 6 cm."),
+  m("The perimeter of a triangle is 36 cm. The perimeter of the triangle formed by joining the midpoints of its sides is", "18 cm", ["9 cm", "12 cm", "36 cm"],
+    "Each side of the new triangle is half of the side it is parallel to, so the perimeter is half: 18 cm."),
+  m("Joining the midpoints of the three sides of a triangle cuts it into how many congruent triangles?", "4", ["2", "3", "6"],
+    "The three midsegments make 4 triangles, all congruent to each other.", F.triFour({ cap: "P, Q, R are midpoints" })),
+  m("The three medians of a triangle", "pass through one point, called the centroid", ["meet in three different points", "meet at the midpoint of a side", "meet at a vertex"],
+    "The Centroid Theorem says that the three medians are concurrent."),
+  m("The centroid divides each median in the ratio (vertex part : other part)", "2 : 1", ["1 : 2", "1 : 1", "3 : 1"],
+    "The longer part, twice the other, is next to the vertex."),
+  m("M is the centroid of △ABC and the median AR is 18 cm long. Then AM is", "12 cm", ["6 cm", "9 cm", "14 cm"],
+    "AM = 2 ÷ 3 of AR = 2 ÷ 3 × 18 = 12 cm.", F.triMedians({ cap: "M is the centroid" })),
+  m("M is the centroid and P is the midpoint of the side, on the median CP. If MP = 5 cm, then CP is", "15 cm", ["10 cm", "7.5 cm", "20 cm"],
+    "CM = 2 × MP = 10 cm, so CP = CM + MP = 15 cm."),
+  m("The midpoints of the sides of any quadrilateral are the vertices of", "a parallelogram", ["a rectangle", "a rhombus", "a square"],
+    "Varignon's theorem: PQ ∥ AC ∥ SR and QR ∥ BD ∥ PS.", F.quadVarignon({ cap: "PQRS" })),
+  m("In a quadrilateral ABCD, AC = 12 cm and BD = 8 cm. The perimeter of its Varignon parallelogram is", "20 cm", ["40 cm", "10 cm", "24 cm"],
+    "The sides are ½ AC = 6 cm and ½ BD = 4 cm, so the perimeter is 2 × (6 + 4) = 20 cm."),
+  m("If the diagonals of a quadrilateral are equal and perpendicular, the Varignon parallelogram is", "a square", ["a rectangle", "a rhombus", "only a parallelogram"],
+    "Equal diagonals make it a rhombus, perpendicular diagonals make it a rectangle, so it is a square."),
+  m("In trapezium ABCD, AB ∥ DC, AB = 8 cm and DC = 12 cm. The segment joining the midpoints of AD and BC is", "10 cm", ["20 cm", "4 cm", "5 cm"],
+    "It is parallel to AB and DC and equals ½ (8 + 12) = 10 cm.", F.trapEF({ cap: "AB ∥ DC" })),
+  m("The number of diagonals of a hexagon is", "9", ["6", "12", "15"],
+    "n(n − 3) ÷ 2 with n = 6 gives 6 × 3 ÷ 2 = 9."),
+  m("Which statement about tiling the plane is correct?", "Any quadrilateral can tile the plane, but a regular pentagon cannot", ["Only rectangles can tile the plane", "A regular pentagon can tile the plane but a non-convex quadrilateral cannot", "Only parallelograms can tile the plane"],
+    "The four angles of any quadrilateral add up to 360°, so four copies fit round a point. A regular pentagon has angles of 108°, and 360° is not a multiple of 108°."),
+];

@@ -12,7 +12,7 @@ for (const c of ["quadrilaterals", "square-and-cube"]) add(`8 Maths ${c}`, b8, {
 for (const c of ["investigative-world", "invisible-living-world", "health", "matter", "elements-compounds"]) add(`8 Science ${c}`, b8, { preparingFor: "8th", qbSubject: "science", scienceChapter8: c });
 for (const c of ["motion", "forces", "energy", "sound"]) add(`9 Physics ${c}`, b9, { preparingFor: "9th", qbSubject: "physics", physicsChapter9: c });
 for (const c of ["cell", "tissues", "diversity"]) add(`9 Biology ${c}`, b9, { preparingFor: "9th", qbSubject: "biology", bioChapter9: c });
-for (const c of ["circles", "propositions", "linear", "algorithms"]) add(`9 Maths ${c}`, b9, { preparingFor: "9th", qbSubject: "maths", mathsChapter9: c });
+for (const c of ["circles", "propositions", "linear", "algorithms", "quadrilaterals"]) add(`9 Maths ${c}`, b9, { preparingFor: "9th", qbSubject: "maths", mathsChapter9: c });
 add("9 Foundations", b9, { preparingFor: "9th", qbSubject: "foundations" });
 add("10 Physics light", b10, { preparingFor: "10th", qbSubject: "physics" });
 for (const c of ["reactions", "carbon"]) add(`10 Chemistry ${c}`, b10, { preparingFor: "10th", qbSubject: "chemistry", chemChapter10: c });

@@ -5,6 +5,7 @@ import { CIRCLES9_TOPICS, NBlock, NTopic } from "../data/circles9Notes";
 import { PROPS9_TOPICS, PROPS9_MAP } from "../data/props9Notes";
 import { LIN9_TOPICS, LIN9_MAP } from "../data/lin9Notes";
 import { AL9_TOPICS, AL9_MAP } from "../data/al9Notes";
+import { QUAD9_TOPICS, QUAD_MAP } from "../data/quad9Notes";
 import { DownloadNotesLink } from "./DownloadNotesLink";
 
 // Class IX Maths: Circles. Topic-wise notes with proofs, diagrams, a mind map and a Competition Zone.
@@ -170,19 +171,20 @@ const LinMindMap: React.FC = () => (
   </div>
 );
 
-// Simple revision map for The World of Algorithms: five cards in order, then a table that compares the algorithms.
+// Simple revision map used by The World of Algorithms and Quadrilaterals: cards in order, then a table, then the rule to remember.
 // Colours are set inline because the notes page recolours text inside white cards.
-const AlgoMindMap: React.FC = () => (
+type CardsMap = { steps: { title: string; color: string; lines: string[] }[]; compare: { name: string; work: string }[]; rule: string };
+const CardsMindMap: React.FC<{ title: string; subtitle: string; map: CardsMap; tableTitle: string }> = ({ title, subtitle, map, tableTitle }) => (
   <div className="bg-white rounded-2xl border border-slate-300 p-3 sm:p-5 space-y-4">
     <div className="text-center">
       <div className="inline-block rounded-2xl px-5 py-3" style={{ background: "#0f172a" }}>
-        <div className="text-lg sm:text-xl font-black" style={{ color: "#ffffff" }}>The World of Algorithms</div>
-        <div className="text-xs font-bold" style={{ color: "#bae6fd" }}>Class IX Maths: read the five steps from 1 to 5</div>
+        <div className="text-lg sm:text-xl font-black" style={{ color: "#ffffff" }}>{title}</div>
+        <div className="text-xs font-bold" style={{ color: "#bae6fd" }}>{subtitle}</div>
       </div>
       <div className="mx-auto h-4 w-0.5" style={{ background: "#94a3b8" }} />
     </div>
     <div className="grid sm:grid-cols-2 gap-3">
-      {AL9_MAP.steps.map((st, i) => (
+      {map.steps.map((st, i) => (
         <div key={st.title} className="rounded-xl overflow-hidden" style={{ border: `2px solid ${st.color}` }}>
           <div className="flex items-center gap-2 px-3 py-2" style={{ background: st.color }}>
             <span className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-black" style={{ background: "#ffffff", color: st.color }}>{i + 1}</span>
@@ -195,9 +197,9 @@ const AlgoMindMap: React.FC = () => (
       ))}
     </div>
     <div className="rounded-xl overflow-hidden" style={{ border: "2px solid #0f172a" }}>
-      <div className="px-3 py-2 text-base font-black" style={{ background: "#0f172a", color: "#ffffff" }}>How much work does each algorithm do?</div>
+      <div className="px-3 py-2 text-base font-black" style={{ background: "#0f172a", color: "#ffffff" }}>{tableTitle}</div>
       <div className="divide-y" style={{ borderColor: "#e2e8f0" }}>
-        {AL9_MAP.compare.map((r) => (
+        {map.compare.map((r) => (
           <div key={r.name} className="px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1" style={{ borderColor: "#e2e8f0" }}>
             <span className="text-[15px] font-black" style={{ color: "#1e293b" }}>{r.name}</span>
             <span className="text-[14px] font-semibold" style={{ color: "#475569" }}>{r.work}</span>
@@ -205,16 +207,19 @@ const AlgoMindMap: React.FC = () => (
         ))}
       </div>
     </div>
-    <div className="rounded-xl px-4 py-3 text-center text-[15px] font-black leading-snug" style={{ background: "#fef3c7", color: "#78350f", border: "2px solid #f59e0b" }}>{AL9_MAP.rule}</div>
+    <div className="rounded-xl px-4 py-3 text-center text-[15px] font-black leading-snug" style={{ background: "#fef3c7", color: "#78350f", border: "2px solid #f59e0b" }}>{map.rule}</div>
   </div>
 );
+
+const AlgoMindMap: React.FC = () => <CardsMindMap title="The World of Algorithms" subtitle="Class IX Maths: read the five steps from 1 to 5" map={AL9_MAP} tableTitle="How much work does each algorithm do?" />;
+const QuadMindMap: React.FC = () => <CardsMindMap title="Quadrilaterals" subtitle="Class IX Maths: read the six cards from 1 to 6" map={QUAD_MAP} tableTitle="The four tests for a parallelogram, and how each is proved" />;
 
 // ── Blocks ─────────────────────────────────────────────────────────────────────────────────────────────
 const Figs: React.FC<{ specs: GeoSpec[] }> = ({ specs }) => (
   <div className="flex flex-wrap justify-center gap-4">{specs.map((s, i) => <GeoFigure key={i} spec={s} />)}</div>
 );
 
-type Chapter = "circles" | "propositions" | "linear" | "algorithms";
+type Chapter = "circles" | "propositions" | "linear" | "algorithms" | "quadrilaterals";
 
 const NOTES_PDFS: Partial<Record<Chapter, { url: string; name: string }>> = {
   circles: { url: "/download/downloads/Class-9-Maths-Circles-Notes.pdf", name: "Class-9-Maths-Circles-Notes.pdf" },
@@ -232,7 +237,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
     case "table": return <Table head={b.head} rows={b.rows} light={light} />;
     case "fig": return <div className="flex justify-center"><GeoFigure spec={b.spec} max={340} /></div>;
     case "figs": return <Figs specs={b.specs} />;
-    case "mindmap": return chapter === "algorithms" ? <AlgoMindMap /> : chapter === "linear" ? <LinMindMap /> : chapter === "propositions"
+    case "mindmap": return chapter === "quadrilaterals" ? <QuadMindMap /> : chapter === "algorithms" ? <AlgoMindMap /> : chapter === "linear" ? <LinMindMap /> : chapter === "propositions"
       ? <PropsMindMap />
       : <div className="space-y-2"><p className="text-center text-sm font-black">Circles: {CIRCLES_BOOK_NAME}</p><MindMap branches={BRANCHES} title="Circles" subtitle="Class IX Maths" /></div>;
     case "key": return (
@@ -280,7 +285,7 @@ const Block: React.FC<{ b: NBlock; light: boolean; chapter: Chapter }> = ({ b, l
 };
 
 export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, chapter = "circles" }: { isLightMode?: boolean; onCompleteNotes?: () => void; onBack?: () => void; chapter?: Chapter }) {
-  const TOPICS: NTopic[] = chapter === "algorithms" ? AL9_TOPICS : chapter === "linear" ? LIN9_TOPICS : chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
+  const TOPICS: NTopic[] = chapter === "quadrilaterals" ? QUAD9_TOPICS : chapter === "algorithms" ? AL9_TOPICS : chapter === "linear" ? LIN9_TOPICS : chapter === "propositions" ? PROPS9_TOPICS : CIRCLES9_TOPICS;
   const notesPdf = NOTES_PDFS[chapter];
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
@@ -301,7 +306,7 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
+          <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" || chapter === "quadrilaterals" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "quadrilaterals" ? "Quadrilaterals" : chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
           {chapter === "circles" && <p className={`text-[13.5px] mt-1 font-black italic ${isLightMode ? "text-cyan-800" : "text-cyan-300"}`}>{CIRCLES_BOOK_NAME}</p>}
           {notesPdf && <DownloadNotesLink href={notesPdf.url} fileName={notesPdf.name} isLightMode={isLightMode} />}
         </div>

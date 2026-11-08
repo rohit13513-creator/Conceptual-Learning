@@ -53,10 +53,26 @@ import { AL9_VERY_SHORT, AL9_SHORT } from './al9_short';
 import { AL9_LONG, AL9_COMPETENCY } from './al9_long';
 import { AL9_NCERT_SOLVED } from './al9_ncert';
 import { AL9_SELF_ASSESSMENT } from './al9_self';
+import { QUAD9_MCQS } from './quad9_mcq';
+import { QUAD9_ASSERTION_REASON } from './quad9_ar';
+import { QUAD9_VERY_SHORT, QUAD9_SHORT } from './quad9_short';
+import { QUAD9_LONG, QUAD9_COMPETENCY } from './quad9_long';
+import { QUAD9_NCERT_SOLVED } from './quad9_ncert';
+import { QUAD9_SELF_ASSESSMENT } from './quad9_self';
 
 export function getBank(p: BankParams): Bank {
   const { preparingFor, qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
-  if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'algorithms') {
+  if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'quadrilaterals') {
+    return {
+          ncert: QUAD9_NCERT_SOLVED,
+          mcqs: QUAD9_MCQS,
+          veryshort: QUAD9_VERY_SHORT,
+          short: QUAD9_SHORT,
+          long: QUAD9_LONG,
+          assertion: QUAD9_ASSERTION_REASON,
+          competency: QUAD9_COMPETENCY,
+    };
+  } else if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'algorithms') {
     return {
           ncert: AL9_NCERT_SOLVED,
           mcqs: AL9_MCQS,
@@ -182,6 +198,6 @@ export function getBank(p: BankParams): Bank {
 export function getSelf(p: BankParams): any[] {
   const { qbSubject, physicsChapter9, bioChapter9, mathsChapter9 } = p;
   // Class IX Maths: both chapters have a self assessment (Circles: 100 questions, Propositions and Converses: 50).
-  if (qbSubject === 'maths') return mathsChapter9 === 'algorithms' ? AL9_SELF_ASSESSMENT : mathsChapter9 === 'linear' ? LIN9_SELF_ASSESSMENT : mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : CIRCLES9_SELF_ASSESSMENT;
+  if (qbSubject === 'maths') return mathsChapter9 === 'quadrilaterals' ? QUAD9_SELF_ASSESSMENT : mathsChapter9 === 'algorithms' ? AL9_SELF_ASSESSMENT : mathsChapter9 === 'linear' ? LIN9_SELF_ASSESSMENT : mathsChapter9 === 'propositions' ? PROPS9_SELF_ASSESSMENT : CIRCLES9_SELF_ASSESSMENT;
   return (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? [...SOUND9_SELF_ASSESSMENT, ...SOUND9_SELF_MORE] : physicsChapter9 === 'energy' ? ENERGY9_SELF_ASSESSMENT : physicsChapter9 === 'forces' ? FORCES9_SELF_ASSESSMENT : PHYSICS9_SELF_ASSESSMENT) : qbSubject === 'foundations' ? FOUNDATIONS9_SELF_ASSESSMENT : bioChapter9 === 'diversity' ? DIVERSITY9_SELF_ASSESSMENT : bioChapter9 === 'tissues' ? TISSUES9_SELF_ASSESSMENT : BIOLOGY9_SELF_ASSESSMENT);
 }
