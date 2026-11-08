@@ -2557,7 +2557,12 @@ function getChemicalRGB(colorName: string, isPrecipitate = false) {
     pink: "rgba(244, 114, 182, 0.45)", // phenolphthalein endpoint
     brown: "rgba(161, 98, 7, 0.8)", // metallic copper solid
     white: "rgba(255, 255, 255, 0.85)", // barium sulfate ppt
-    yellow: "rgba(250, 204, 21, 0.75)"
+    yellow: "rgba(250, 204, 21, 0.75)",
+    black: "rgba(15, 23, 42, 0.85)", // CuS, PbS, Fe3O4
+    grey: "rgba(148, 163, 184, 0.75)", // freed metals
+    red: "rgba(220, 38, 38, 0.6)",
+    orange: "rgba(249, 115, 22, 0.65)",
+    purple: "rgba(147, 51, 234, 0.6)"
   };
 
   return colors[colorName.toLowerCase()] || "rgba(226, 232, 240, 0.15)";

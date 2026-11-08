@@ -17,6 +17,7 @@ import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken
 import { COUNTRIES, statesOf, citiesOf } from "./places.js";
 import { MOCK_SERIES, MOCK_TESTS } from "./mockTests.js";
 import { GOOGLE_REVIEW_URL } from "./feedbackConfig.js";
+import { simulateStandardReaction } from "./reactionEngine.js";
 
 interface DeviceSession {
   deviceId: string;
@@ -3408,30 +3409,21 @@ function buildApp(): express.Express {
       conceptualExplanationFoundational = "A highly famous and spectacular demonstration! Concentrated sulfuric acid has an extremely strong affinity for water. It literally rips away Hydrogen and Oxygen atoms from sugar as water molecules, leaving behind a steaming, expanding column of pure black carbon (charcoal).";
       conceptualExplanationAdvanced = "Exothermic acid-catalyzed carbohydrate dehydration. Sulfuric acid acts as a powerful dehydrating agent, protonating hydroxyl groups to drive beta-eliminations, leaving highly cross-linked amorphous carbon. The intense heat of hydration boils the eliminated water into steam, which expands the carbon residue into a highly porous snake-like column.";
     }
-    // Default dynamic formula handler
+    // Default handler: a combination the simulator has no rule for. It used to print made-up products such as "HNO3_Product".
+    // It now says plainly that no reaction is predicted, instead of showing something that is not chemistry.
     else {
-      // General dynamic handling of whatever they input
-      const combined = list.map(r => r.formula).join(" + ");
-      const combinedLabels = list.map(r => r.label).join(", ");
-      const concentrations = list.map(r => `${r.label} is ${r.concentration}`).join(" and ");
-
-      balancedEquation = `${list.map(r => r.formula).join(" + ")} → ${list.map(r => r.formula + "_Product").join(" + ")}`;
-      productsData = list.map((r, i) => ({
-        formula: `${r.formula}_Product`,
-        name: `Transformed ${r.label} Phase`,
-        pubchemId: `400${i}`,
-        state: "aq"
-      }));
-
-      visuals.animationDescription = solvent === "None"
-        ? `Multiple reactants (${combinedLabels}) are combined neat (without solvent). Standard solid/gas phase collisions indicate safe dry blend formation. Notice that ${concentrations}.`
-        : `Multiple reactants (${combinedLabels}) are combined inside ${solvent} solvent. Standard physical models indicate safe blend formation. Notice that ${concentrations}.`;
-      conceptualExplanationFoundational = solvent === "None"
-        ? `Combining ${list.length} variables (${combinedLabels}) neat triggers direct physical contact, solid-phase, or gas-phase thermodynamic exchange without solvent dilution.`
-        : `Combining ${list.length} variables (${combinedLabels}) triggers molecular and physical thermal exchange inside the ${solvent} solvent.`;
-      conceptualExplanationAdvanced = solvent === "None"
-        ? `This ${list.length}-reactant system reacts under temperature ${temperature}°C without solvent-mediated ions, proceeding as a gas, solid-phase or molten neat reaction.`
-        : `This ${list.length}-reactant system reacts under temperature ${temperature}°C. Free hydronium and solvent forces inside ${solvent} influence the kinetic parameters.`;
+      const combined = list.map((r) => r.formula).join(" + ");
+      const combinedLabels = list.map((r) => r.label).join(" and ");
+      reactionFeasible = false;
+      reactionClass = "Not in the simulator's reaction set";
+      balancedEquation = `${combined} → No reaction predicted`;
+      productsData = [];
+      deltaH_rxn = 0;
+      deltaS_rxn = 0;
+      visuals.animationDescription = `${combinedLabels} are mixed. This simulator has no verified rule for this exact combination, so it does not invent products. No change is shown.`;
+      conceptualExplanationFoundational = `The simulator can predict acid-base, metal-acid, metal-salt, precipitation, oxide, carbonate and several organic reactions. It has no verified rule for ${combinedLabels}, so it shows no reaction instead of guessing.`;
+      conceptualExplanationAdvanced = "If a reaction between these substances is part of your syllabus, tell your teacher so that the rule can be added.";
+      advice = ["Try an acid with a base, a metal with an acid, or two salt solutions that can form a precipitate."];
     }
 
     // Set thermodynamic constants based on temperature
@@ -3474,10 +3466,10 @@ function buildApp(): express.Express {
   }) : null;
 
   app.post("/api/simulate-reaction", async (req, res) => {
-    // Paid AI call: logged-in students only, and not more than 40 per 10 minutes per student.
+    // Logged-in students only. The limit of 40 per 10 minutes per student applies only to the paid AI call (see below), so a
+    // student trying many different reactions in a row is never stopped for the reactions the simulator answers itself.
     const auth = requireAuth(req, res);
     if (!auth) return;
-    if (rateLimited(req, res, "simulate", 40, 10 * 60_000, auth.email)) return;
     const { reactants, reactantA, reactantB, temperature, pressure, solvent, addedPeroxide, catalyst } = req.body;
     
     let reactantList: Array<{ formula: string; concentration: "dilute" | "concentrated"; gasSupply?: "limited" | "excess" }> = [];
@@ -3843,12 +3835,35 @@ function buildApp(): express.Express {
       return res.json(fallbackData);
     }
 
+    // The rule-based chemistry engine answers the standard school reactions (acids, bases, salts, metals, oxides, gases) with
+    // balanced equations and energies worked out from tabulated data. It runs before the AI and before the older fallback, so a
+    // reaction such as nitric acid with a base is answered the same way every time, whether or not an AI key is set.
+    try {
+      const engineResult: any = simulateStandardReaction({ reactants: reactantList, temperatureC: tKelvin - 273.15, solvent: solv });
+      if (engineResult) {
+        delete engineResult.coefficients;
+        const dGe = engineResult.deltaH_rxn - tKelvin * (engineResult.deltaS_rxn / 1000);
+        engineResult.calculatedDeltaG = Number(dGe.toFixed(2));
+        engineResult.isSpontaneous = engineResult.reactionFeasible && dGe < 0;
+        if (engineResult.reactionFeasible && dGe > 0) {
+          engineResult.reactionFeasible = false;
+          engineResult.conceptualExplanationFoundational = "The thermodynamic state under these conditions does not support a spontaneous reaction, so no chemical change is predicted.";
+          engineResult.conceptualExplanationAdvanced = `The Gibbs Free Energy (ΔG = ${engineResult.calculatedDeltaG} kJ) is positive at ${Number(temperature ?? 25)}°C, so the reaction is not spontaneous here.`;
+        }
+        return res.json(engineResult);
+      }
+    } catch (engineErr) {
+      console.warn("[Simulation] rule engine failed, using the older handler:", engineErr);
+    }
+
     // Call Gemini API if we have it and no static fallback matches; otherwise execute our physical simulation fallback
     if (!ai) {
       console.log("No Gemini API Key defined. Launching dynamic offline simulation backup.");
       const fallbackResult = generateDynamicFallback(reactantList, temperature, pressure, solvent, addedPeroxide, tKelvin, catalyst);
       return res.json(fallbackResult);
     }
+
+    if (rateLimited(req, res, "simulate", 40, 10 * 60_000, auth.email)) return;
 
     try {
       const reactantDescs = reactantList.map(r => `${r.formula} (${r.concentration || "concentrated"})`).join(", ");
