@@ -2,6 +2,7 @@
 // Loaded only when a student opens the question bank, solved questions or self assessment for this class,
 // so these question banks are no longer part of the download everyone waits for at log-in.
 import type { Bank, BankParams } from './bankTypes';
+import { LIFEPROC10_ASSERTION_REASON, CONTROL10_ASSERTION_REASON, REPRO10_ASSERTION_REASON, HEREDITY10_ASSERTION_REASON } from './ar10';
 import { CLASS10_NCERT_SOLVED as CLASSX_NCERT_SOLVED, CLASS10_MCQS as CLASSX_MCQS, CLASS10_ASSERTIONS as CLASSX_ASSERTION_REASON, CLASS10_VERY_SHORT as CLASSX_VERY_SHORT, CLASS10_SHORT as CLASSX_SHORT, CLASS10_LONG as CLASSX_LONG, CLASS10_COMPETENCY as CLASSX_CASE_COMPETENCY, CLASS10_SELF_ASSESSMENT as CLASSX_SELF_ASSESSMENT } from './class10';
 import { CHEMISTRY10_NCERT_SOLVED, CHEMISTRY10_MCQS, CHEMISTRY10_ASSERTIONS as CHEMISTRY10_ASSERTION_REASON, CHEMISTRY10_VERY_SHORT, CHEMISTRY10_SHORT, CHEMISTRY10_LONG, CHEMISTRY10_COMPETENCY, CHEMISTRY10_SELF_ASSESSMENT } from './chemistry10';
 import { BIOLOGY10_NCERT_SOLVED, BIOLOGY10_MCQS, BIOLOGY10_VERY_SHORT, BIOLOGY10_SHORT, BIOLOGY10_LONG, BIOLOGY10_COMPETENCY, BIOLOGY10_SELF_ASSESSMENT } from './biology10';
@@ -51,7 +52,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: HEREDITY10_VERY_SHORT,
           short: HEREDITY10_SHORT,
           long: HEREDITY10_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: HEREDITY10_ASSERTION_REASON,
           competency: HEREDITY10_COMPETENCY,
     };
   } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'reproduction') {
@@ -61,7 +62,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: REPRO10_VERY_SHORT,
           short: REPRO10_SHORT,
           long: REPRO10_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: REPRO10_ASSERTION_REASON,
           competency: REPRO10_COMPETENCY,
     };
   } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'control-coordination') {
@@ -71,7 +72,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: CC10_VERY_SHORT,
           short: CC10_SHORT,
           long: CC10_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: CONTROL10_ASSERTION_REASON,
           competency: CC10_COMPETENCY,
     };
   } else if (preparingFor === '10th' && qbSubject === 'biology') {
@@ -81,7 +82,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: BIOLOGY10_VERY_SHORT,
           short: BIOLOGY10_SHORT,
           long: BIOLOGY10_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: LIFEPROC10_ASSERTION_REASON,
           competency: BIOLOGY10_COMPETENCY,
     };
   } else {

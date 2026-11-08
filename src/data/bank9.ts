@@ -2,6 +2,8 @@
 // Loaded only when a student opens the question bank, solved questions or self assessment for this class,
 // so these question banks are no longer part of the download everyone waits for at log-in.
 import type { Bank, BankParams } from './bankTypes';
+import { FORCES9_ASSERTION_REASON, ENERGY9_ASSERTION_REASON, SOUND9_ASSERTION_REASON, FOUNDATIONS9_ASSERTION_REASON, BIOLOGY9_CELL_ASSERTION_REASON, BIOLOGY9_TISSUES_ASSERTION_REASON, BIOLOGY9_DIVERSITY_ASSERTION_REASON } from './ar9';
+import { CIRCLES9_ASSERTION_REASON, PROPS9_ASSERTION_REASON, LIN9_ASSERTION_REASON, AL9_ASSERTION_REASON } from './ar9m';
 import { CLASS10_ASSERTIONS as CLASSX_ASSERTION_REASON } from './class10';
 import { BIOLOGY9_NCERT_SOLVED, BIOLOGY9_MCQS, BIOLOGY9_VERY_SHORT, BIOLOGY9_SHORT, BIOLOGY9_LONG, BIOLOGY9_COMPETENCY, BIOLOGY9_SELF_ASSESSMENT } from './biology9';
 import { PHYSICS9_NCERT_SOLVED, PHYSICS9_MCQS, PHYSICS9_ASSERTION_REASON, PHYSICS9_VERY_SHORT, PHYSICS9_SHORT, PHYSICS9_LONG, PHYSICS9_COMPETENCY, PHYSICS9_SELF_ASSESSMENT } from './physics9';
@@ -61,7 +63,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: AL9_VERY_SHORT,
           short: AL9_SHORT,
           long: AL9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: AL9_ASSERTION_REASON,
           competency: AL9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'linear') {
@@ -71,7 +73,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: LIN9_VERY_SHORT,
           short: LIN9_SHORT,
           long: LIN9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: LIN9_ASSERTION_REASON,
           competency: LIN9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'maths' && mathsChapter9 === 'propositions') {
@@ -81,7 +83,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: PROPS9_VERY_SHORT,
           short: PROPS9_SHORT,
           long: PROPS9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: PROPS9_ASSERTION_REASON,
           competency: PROPS9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'sound') {
@@ -91,7 +93,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SOUND9_VERY_SHORT,
           short: SOUND9_SHORT,
           long: SOUND9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: SOUND9_ASSERTION_REASON,
           competency: SOUND9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'energy') {
@@ -101,7 +103,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: ENERGY9_VERY_SHORT,
           short: ENERGY9_SHORT,
           long: ENERGY9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: ENERGY9_ASSERTION_REASON,
           competency: ENERGY9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'forces') {
@@ -111,7 +113,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: FORCES9_VERY_SHORT,
           short: FORCES9_SHORT,
           long: FORCES9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: FORCES9_ASSERTION_REASON,
           competency: FORCES9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'physics') {
@@ -131,7 +133,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: DIVERSITY9_VERY_SHORT,
           short: DIVERSITY9_SHORT,
           long: DIVERSITY9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: BIOLOGY9_DIVERSITY_ASSERTION_REASON,
           competency: DIVERSITY9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'tissues') {
@@ -141,7 +143,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: TISSUES9_VERY_SHORT,
           short: TISSUES9_SHORT,
           long: TISSUES9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: BIOLOGY9_TISSUES_ASSERTION_REASON,
           competency: TISSUES9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'maths') {
@@ -151,7 +153,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: CIRCLES9_VERY_SHORT,
           short: CIRCLES9_SHORT,
           long: CIRCLES9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: CIRCLES9_ASSERTION_REASON,
           competency: CIRCLES9_COMPETENCY,
     };
   } else if (preparingFor === '9th' && qbSubject === 'foundations') {
@@ -161,7 +163,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: FOUNDATIONS9_VERY_SHORT,
           short: FOUNDATIONS9_SHORT,
           long: FOUNDATIONS9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: FOUNDATIONS9_ASSERTION_REASON,
           competency: FOUNDATIONS9_COMPETENCY,
     };
   } else {
@@ -171,7 +173,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: BIOLOGY9_VERY_SHORT,
           short: BIOLOGY9_SHORT,
           long: BIOLOGY9_LONG,
-          assertion: [] as typeof CLASSX_ASSERTION_REASON,
+          assertion: BIOLOGY9_CELL_ASSERTION_REASON,
           competency: BIOLOGY9_COMPETENCY,
     };
   }

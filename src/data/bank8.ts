@@ -2,6 +2,7 @@
 // Loaded only when a student opens the question bank, solved questions or self assessment for this class,
 // so these question banks are no longer part of the download everyone waits for at log-in.
 import type { Bank, BankParams } from './bankTypes';
+import { MATHS8SC_ASSERTION_REASON, SCIENCE8IW_ASSERTION_REASON, SCIENCE8IV_ASSERTION_REASON, SCIENCE8H_ASSERTION_REASON, SCIENCE8M_ASSERTION_REASON, SCIENCE8EC_ASSERTION_REASON } from './ar8';
 import { CLASS8_NCERT_SOLVED as CLASSVIII_NCERT_SOLVED, CLASS8_MCQS as CLASSVIII_MCQS, CLASS8_ASSERTIONS as CLASSVIII_ASSERTION_REASON, CLASS8_VERY_SHORT as CLASSVIII_VERY_SHORT, CLASS8_SHORT as CLASSVIII_SHORT, CLASS8_LONG as CLASSVIII_LONG, CLASS8_COMPETENCY as CLASSVIII_CASE_COMPETENCY, CLASS8_SELF_ASSESSMENT as CLASSVIII_SELF_ASSESSMENT } from './class8';
 import { MATHS8_SOLVED_QUESTIONS, MATHS8_MCQS, MATHS8_ASSERTION_REASON, MATHS8_VERY_SHORT, MATHS8_SHORT, MATHS8_LONG, MATHS8_COMPETENCY, MATHS8_SELF_ASSESSMENT } from './maths8';
 import { MATHS8SC_SOLVED_QUESTIONS, MATHS8SC_MCQS, MATHS8SC_VERY_SHORT, MATHS8SC_SHORT, MATHS8SC_LONG, MATHS8SC_COMPETENCY, MATHS8SC_SELF_ASSESSMENT } from './maths8SquareCube';
@@ -20,7 +21,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: MATHS8SC_VERY_SHORT,
           short: MATHS8SC_SHORT,
           long: MATHS8SC_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: MATHS8SC_ASSERTION_REASON,
           competency: MATHS8SC_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'maths') {
@@ -40,7 +41,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SCIENCE8EC_VERY_SHORT,
           short: SCIENCE8EC_SHORT,
           long: SCIENCE8EC_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: SCIENCE8EC_ASSERTION_REASON,
           competency: SCIENCE8EC_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'matter') {
@@ -50,7 +51,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SCIENCE8M_VERY_SHORT,
           short: SCIENCE8M_SHORT,
           long: SCIENCE8M_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: SCIENCE8M_ASSERTION_REASON,
           competency: SCIENCE8M_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'health') {
@@ -60,7 +61,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SCIENCE8H_VERY_SHORT,
           short: SCIENCE8H_SHORT,
           long: SCIENCE8H_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: SCIENCE8H_ASSERTION_REASON,
           competency: SCIENCE8H_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world') {
@@ -70,7 +71,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SCIENCE8IW_VERY_SHORT,
           short: SCIENCE8IW_SHORT,
           long: SCIENCE8IW_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: SCIENCE8IV_ASSERTION_REASON,
           competency: SCIENCE8IW_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'science') {
@@ -80,7 +81,7 @@ export function getBank(p: BankParams): Bank {
           veryshort: SCIENCE8_VERY_SHORT,
           short: SCIENCE8_SHORT,
           long: SCIENCE8_LONG,
-          assertion: [] as typeof MATHS8_ASSERTION_REASON,
+          assertion: SCIENCE8IW_ASSERTION_REASON,
           competency: SCIENCE8_COMPETENCY,
     };
   } else {
