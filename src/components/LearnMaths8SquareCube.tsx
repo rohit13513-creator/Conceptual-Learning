@@ -170,9 +170,6 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
               <Hash className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Squares & Cubes</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Perfect squares, patterns, Pythagorean triples, square roots, perfect cubes, and cube roots -- explained simply, one idea at a time.
-            </p>
           </div>
         </div>
 

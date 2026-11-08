@@ -282,9 +282,6 @@ export function LearnControlCoordination10({ isLightMode = false, onCompleteNote
               <Brain className="w-5 h-5 text-green-500" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Control & Coordination Notes</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Nerves, the brain, hormones, and how plants coordinate too -- without a single neuron.
-            </p>
           </div>
           <PdfOnly><a
             href={CONTROL_COORDINATION_NOTES_PDF_URL}

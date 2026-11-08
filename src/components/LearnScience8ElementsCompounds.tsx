@@ -169,9 +169,6 @@ export function LearnScience8ElementsCompounds({ isLightMode = false, onComplete
               <FlaskConical className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Elements, Compounds & Mixtures</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Almost nothing around you is a single, simple substance -- here is how to tell mixtures, elements, and compounds apart, and why the difference matters.
-            </p>
           </div>
         </div>
 

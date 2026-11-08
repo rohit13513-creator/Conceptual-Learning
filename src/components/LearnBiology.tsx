@@ -214,9 +214,6 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
               <Dna className="w-5 h-5 text-green-500" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Cells Notes</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              The basic unit of life: structure, organelles, and how cells work, explained simply.
-            </p>
           </div>
           <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
         </div>

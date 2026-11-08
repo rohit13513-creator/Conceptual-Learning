@@ -3982,13 +3982,6 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
                 {preparingFor === '8th' || preparingFor === '9th' ? 'Class VIII CBSE Notes' : preparingFor === '10th' ? 'Class X CBSE Study Notes' : 'Class XII Advanced Study Notes'}
               </h3>
             </div>
-            <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? 'text-slate-600' : 'text-slate-400'}`}>
-              {preparingFor === '8th' || preparingFor === '9th'
-                ? 'Syllabus definitions, laws of reflection, and plane mirror concepts.'
-                : preparingFor === '10th'
-                ? 'Class X Light syllabus definitions, sign conventions, and board formulas.'
-                : 'Comprehensive textbook coverage with standard SI Units and definitions.'}
-            </p>
           </div>
           <PdfOnly><button
             onClick={handleDownloadNotes}

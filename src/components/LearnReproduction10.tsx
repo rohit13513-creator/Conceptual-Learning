@@ -763,7 +763,6 @@ export function LearnReproduction10({ isLightMode = false, onCompleteNotes, onGo
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Sprout className="w-5 h-5 text-green-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>How do Organisms Reproduce?</h3></div>
-          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Asexual and sexual reproduction, plants and humans, reproductive health.</p>
           <PdfOnly><a href={NOTES_PDF_URL} download={NOTES_PDF_NAME} className={`mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md hover:scale-[1.02] active:scale-95 ${isLightMode ? "bg-green-600 hover:bg-green-700 text-white" : "bg-green-500 hover:bg-green-400 text-slate-950"}`}>
             <Download className="w-3.5 h-3.5" />
             Download Notes

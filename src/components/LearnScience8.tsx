@@ -171,9 +171,6 @@ export function LearnScience8({ isLightMode = false, onCompleteNotes, onGoToSelf
               <Compass className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Exploring Science</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              What science really is, how curiosity turns into knowledge, and the step-by-step way every real discovery gets made -- explained simply.
-            </p>
           </div>
         </div>
 

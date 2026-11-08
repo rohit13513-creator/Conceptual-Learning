@@ -170,9 +170,6 @@ export function LearnScience8Health({ isLightMode = false, onCompleteNotes, onGo
               <HeartPulse className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Health: The Ultimate Treasure</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              What it really means to be healthy, why diseases happen, how our body defends itself, and simple habits that protect this treasure every single day.
-            </p>
           </div>
         </div>
 

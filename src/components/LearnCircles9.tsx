@@ -302,7 +302,6 @@ export function LearnCircles9({ isLightMode = false, onCompleteNotes, onBack, ch
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2">{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? <Sigma className="w-5 h-5 text-cyan-500" /> : <Circle className="w-5 h-5 text-cyan-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{chapter === "algorithms" ? "The World of Algorithms" : chapter === "linear" ? "Two Variables, One Line" : chapter === "propositions" ? "Propositions and Converses" : "Circles"}</h3></div>
           {chapter === "circles" && <p className={`text-[13.5px] mt-1 font-black italic ${isLightMode ? "text-cyan-800" : "text-cyan-300"}`}>{CIRCLES_BOOK_NAME}</p>}
-          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>{chapter === "propositions" || chapter === "linear" || chapter === "algorithms" ? "Class IX Maths: theory first, then solved examples, then revision with a mind map." : "Class IX Maths: topic-wise notes, proofs with diagrams, mind map and Competition Zone."}</p>
           {notesPdf && <DownloadNotesLink href={notesPdf.url} fileName={notesPdf.name} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">

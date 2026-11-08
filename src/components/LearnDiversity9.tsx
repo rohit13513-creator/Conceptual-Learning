@@ -177,7 +177,6 @@ export function LearnDiversity9({ isLightMode = false, onCompleteNotes, onGoToSe
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
           <div className="flex items-center gap-2"><Globe2 className="w-5 h-5 text-green-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>Diversity and Classification</h3></div>
-          <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>Patterns in Life: how and why we group the living world.</p>
           <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
         </div>
         <nav className="flex-1 p-2 space-y-1">

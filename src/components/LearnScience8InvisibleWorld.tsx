@@ -170,9 +170,6 @@ export function LearnScience8InvisibleWorld({ isLightMode = false, onCompleteNot
               <Microscope className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Invisible Living World</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Tiny living things too small to see with the naked eye -- where they live, how some help us every day, how others cause disease, and how we stay safe.
-            </p>
           </div>
         </div>
 

@@ -205,9 +205,6 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
               <FlaskConical className="w-5 h-5 text-emerald-500" />
               <h3 className={`text-sm font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Chemical Reactions & Equations Notes</h3>
             </div>
-            <p className={`text-[11px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Reactions, equations, and everyday chemical change -- concept-first notes with worked examples.
-            </p>
           </div>
           <PdfOnly><button
             onClick={handleDownloadNotes}

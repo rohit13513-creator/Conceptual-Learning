@@ -169,9 +169,6 @@ export function LearnScience8Matter({ isLightMode = false, onCompleteNotes, onGo
               <Atom className="w-5 h-5 text-cyan-400" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Particulate Nature of Matter</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Why matter is really made of countless tiny particles, and how the spacing, forces, and motion between them decide whether something is a solid, a liquid, or a gas.
-            </p>
           </div>
         </div>
 

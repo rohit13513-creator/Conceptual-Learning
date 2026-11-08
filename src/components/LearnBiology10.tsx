@@ -300,9 +300,6 @@ export function LearnBiology10({ isLightMode = false, onCompleteNotes, onGoToSel
               <HeartPulse className="w-5 h-5 text-green-500" />
               <h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-850" : "text-slate-100"}`}>Life Processes Notes</h3>
             </div>
-            <p className={`text-[13.5px] mt-1 font-semibold ${isLightMode ? "text-slate-600" : "text-slate-400"}`}>
-              Nutrition, respiration, transportation, and excretion -- how living things keep themselves running.
-            </p>
           </div>
           <PdfOnly><a
             href={LIFE_PROCESSES_NOTES_PDF_URL}
