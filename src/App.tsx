@@ -5322,6 +5322,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <Download className="w-3 h-3" /> Download PDF
                           </a>
                         )}
+                        {a.answersUrl && (<a href={a.answersUrl} target="_blank" rel="noreferrer" download className={`mt-1.5 ml-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border transition-colors ${isLightMode ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'}`}><Download className="w-3 h-3" /> Answers</a>)}
                       </div>
                       );
                     })
@@ -7902,6 +7903,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                             <Download className="w-3.5 h-3.5" /> Download Question PDF
                           </a>
                         )}
+                        {a.answersUrl && (<a href={a.answersUrl} target="_blank" rel="noreferrer" download className={`mt-2 ml-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border transition-colors ${isLightMode ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'}`}><Download className="w-3 h-3" /> Answers</a>)}
                       </div>
                     </div>
                     );
@@ -9121,6 +9123,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                 <Eye className="w-3.5 h-3.5" />
                               </a>
                             )}
+                            {a.answersUrl && (<a href={a.answersUrl} target="_blank" rel="noreferrer" className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer" title="View the answer sheet">Answers</a>)}
                             <button
                               onClick={() => handleEditAssignmentClick(a)}
                               className="p-1 rounded hover:bg-amber-500/10 text-slate-500 hover:text-amber-400 cursor-pointer"

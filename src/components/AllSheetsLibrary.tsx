@@ -3,7 +3,7 @@ import { Download, FileText, Search } from "lucide-react";
 
 // Every worksheet, test paper and homework question sheet ever posted for the student's class (not only the newest ten),
 // with a search box, so an older sheet can always be found and downloaded again. The question files are never deleted.
-export interface SheetItem { id: string; title: string; subject?: string | null; description?: string | null; createdAt: string; targetClass: string; fileUrl: string | null }
+export interface SheetItem { id: string; title: string; subject?: string | null; description?: string | null; createdAt: string; targetClass: string; fileUrl: string | null; answersUrl?: string | null }
 
 export const AllSheetsLibrary: React.FC<{ sheets: SheetItem[]; isLightMode: boolean; formatDate: (iso: string) => string }> = ({ sheets, isLightMode, formatDate }) => {
   const [open, setOpen] = useState(false);
@@ -35,11 +35,18 @@ export const AllSheetsLibrary: React.FC<{ sheets: SheetItem[]; isLightMode: bool
                   <p className={`text-xs font-bold ${isLightMode ? "text-slate-900" : "text-slate-100"}`}>{s.title}</p>
                   <p className="text-[10px] font-mono text-slate-500">{s.subject ? `${s.subject} • ` : ""}{formatDate(s.createdAt)}</p>
                 </div>
-                {s.fileUrl ? (
-                  <a href={s.fileUrl} target="_blank" rel="noreferrer" download className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border ${isLightMode ? "bg-cyan-50 border-cyan-200 text-cyan-700" : "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"}`}>
-                    <Download className="w-3 h-3" /> PDF
-                  </a>
-                ) : <span className="text-[10px] font-semibold text-slate-500 shrink-0">No file</span>}
+                <div className="shrink-0 flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+                  {s.fileUrl ? (
+                    <a href={s.fileUrl} target="_blank" rel="noreferrer" download className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border ${isLightMode ? "bg-cyan-50 border-cyan-200 text-cyan-700" : "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"}`}>
+                      <Download className="w-3 h-3" /> PDF
+                    </a>
+                  ) : <span className="text-[10px] font-semibold text-slate-500">No file</span>}
+                  {s.answersUrl && (
+                    <a href={s.answersUrl} target="_blank" rel="noreferrer" download className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wide border ${isLightMode ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"}`}>
+                      <Download className="w-3 h-3" /> Answers
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>

@@ -75,6 +75,7 @@ interface HomeworkAssignment {
   subject: string | null;
   targetClass: string;
   fileUrl: string | null;
+  answersUrl?: string | null; // answer sheet (answers only), if one was added
   assignedDate: string;
   deadline: string | null;
   createdAt: string;
@@ -10475,7 +10476,25 @@ ${keptNote}` : keptNote;
       const { data: signedBatch } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrls(paths.slice(i, i + 100), 24 * 3600);
       for (const x of signedBatch || []) if (x.path && x.signedUrl) urlByPath.set(x.path, x.signedUrl);
     }
-    const assignments = visibleRows.map((r: any) => mapAssignmentRow(r, r.file_path ? urlByPath.get(r.file_path) ?? null : null));
+    // Answer sheets sit beside the questions as answers/<assignment id>.pdf, so no database column is needed.
+    // A problem in this lookup must never stop the list from loading.
+    const answerUrlById = new Map<string, string>();
+    try {
+      const names: string[] = [];
+      for (let off = 0; ; off += 1000) {
+        const { data } = await supabase.storage.from(HOMEWORK_BUCKET).list("answers", { limit: 1000, offset: off });
+        if (!data || !data.length) break;
+        names.push(...data.map((x: any) => x.name));
+        if (data.length < 1000) break;
+      }
+      const visibleIds = new Set(visibleRows.map((r: any) => String(r.id)));
+      const answerPaths = names.filter((n) => n.endsWith(".pdf") && visibleIds.has(n.slice(0, -4))).map((n) => `answers/${n}`);
+      for (let i = 0; i < answerPaths.length; i += 100) {
+        const { data: signed } = await supabase.storage.from(HOMEWORK_BUCKET).createSignedUrls(answerPaths.slice(i, i + 100), 24 * 3600);
+        for (const x of signed || []) if (x.path && x.signedUrl) answerUrlById.set(x.path.slice("answers/".length, -".pdf".length), x.signedUrl);
+      }
+    } catch (e) { console.warn("answer sheet lookup failed:", e); }
+    const assignments = visibleRows.map((r: any) => ({ ...mapAssignmentRow(r, r.file_path ? urlByPath.get(r.file_path) ?? null : null), answersUrl: answerUrlById.get(String(r.id)) ?? null }));
 
     return res.json({ assignments });
   });
