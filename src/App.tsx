@@ -2291,6 +2291,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const homeworkStatusBadge = (a: any): { text: string; className: string } => {
     const sub = mySubmissionByAssignment[a.id];
     if (!sub) return { text: 'Pending', className: isLightMode ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/10 text-amber-400' };
+    if (sub.status === 'pending' && sub.fileProblem) return { text: 'Upload again', className: isLightMode ? 'bg-red-100 text-red-700' : 'bg-red-500/10 text-red-400' };
     if (sub.status === 'pending') return { text: 'Checking...', className: isLightMode ? 'bg-slate-200 text-slate-600' : 'bg-slate-800 text-slate-400' };
     if (typeof sub.aiScore === 'number') return { text: `Score: ${sub.aiScore}`, className: isLightMode ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400' };
     return { text: 'Checked', className: isLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-500/10 text-cyan-400' };
@@ -2752,6 +2753,17 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
     setHomeworkError(null);
     setHomeworkPdfFile(null);
     if (!file) return;
+    // Look at the file itself, not its name: a zip folder or some other file can be chosen here by mistake and could never be read.
+    // (A zip of photos is converted by the server, so it is let through.)
+    try {
+      const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+      const text = String.fromCharCode(...head);
+      const isZip = head[0] === 0x50 && head[1] === 0x4b;
+      if (!text.includes('%PDF-') && !isZip) {
+        setHomeworkError('This file is not a PDF. Please choose a PDF, or use "Add photos" and add a picture of each page.');
+        return;
+      }
+    } catch { /* if the file cannot even be peeked at, let the upload report the problem */ }
     if (file.size <= PDF_SHRINK_THRESHOLD_BYTES) { setHomeworkPdfFile(file); return; }
     const mb = Math.round(file.size / (1024 * 1024));
     setHomeworkPdfPrep(`Your PDF is large (${mb} MB). Reducing its size so it can upload -- please wait and keep this screen open...`);
@@ -5565,9 +5577,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                           <span className="text-xs font-black text-emerald-400">{sub.aiScore}/10</span>
                         )}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                          sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                          sub.status === 'pending' && sub.fileProblem ? 'bg-red-500/10 text-red-400 border border-red-500/20' : sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
                         }`}>
-                          {sub.status}
+                          {sub.status === 'pending' && sub.fileProblem ? 'upload again' : sub.status}
                         </span>
                         {sub.fileUrl && (
                           <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-cyan-500/10 text-cyan-400 hover:text-cyan-300 cursor-pointer" title="View submitted file">
@@ -8101,9 +8113,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                           <span className="text-xs font-black text-emerald-400">{sub.aiScore}/10</span>
                         )}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                          sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                          sub.status === 'pending' && sub.fileProblem ? 'bg-red-500/10 text-red-400 border border-red-500/20' : sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
                         }`}>
-                          {sub.status}
+                          {sub.status === 'pending' && sub.fileProblem ? 'upload again' : sub.status}
                         </span>
                         {sub.fileUrl && (
                           <a href={sub.fileUrl} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-cyan-500/10 text-cyan-400 hover:text-cyan-300 cursor-pointer" title="View submitted file">
@@ -9588,7 +9600,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                       </td>
                                       <td className="py-3 px-4">
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider ${
-                                          sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                          sub.status === 'pending' && sub.checkNote ? 'bg-red-500/10 text-red-400 border border-red-500/20' : sub.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'
                                         }`}>
                                           {sub.status}
                                         </span>
@@ -9627,7 +9639,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                                             )}
                                           </>
                                         ) : (
-                                          <span className="text-slate-500 italic">Not checked yet</span>
+                                          <>
+                                            <span className="text-slate-500 italic">Not checked yet</span>
+                                            {sub.checkNote && <p className="mt-1 text-[10px] font-semibold text-red-400 whitespace-pre-line">{sub.checkNote}</p>}
+                                          </>
                                         )}
                                         {sub.integrityFlag && (
                                           <div className="mt-1.5 flex items-start gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">

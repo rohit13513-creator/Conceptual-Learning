@@ -67,6 +67,8 @@ interface HomeworkSubmission {
   adminNotes: string | null;
   integrityFlag: string | null;
   fileUrl: string | null;
+  // Why a still-pending submission has not been checked (admin: the reason; student: only that the file could not be opened).
+  checkNote?: string | null;
 }
 
 interface HomeworkAssignment {
@@ -460,6 +462,58 @@ async function mergeImagesToPdf(images: { buffer: Buffer }[]): Promise<Buffer> {
   return Buffer.from(await pdfDoc.save());
 }
 
+// A file saved as "submission.pdf" is not always a PDF. Real case: a student zipped her photos into one .zip and
+// uploaded it through the PDF button; it was stored as a PDF, the grader answered "The PDF specified was not valid" on
+// every attempt, and the homework stayed "pending" for days. So the bytes are looked at, not the name.
+const looksLikePdf = (b: Buffer) => b.subarray(0, 1024).includes("%PDF-");
+const looksLikeZip = (b: Buffer) => b.length > 4 && b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05);
+const looksLikeImage = (b: Buffer) => b.length > 12 && ((b[0] === 0xff && b[1] === 0xd8) || (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e) || (b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP"));
+const MAX_ZIP_PAGES = 80;
+
+/** Turns what a student uploaded into a PDF: a real PDF is returned untouched, a zip of photos (or of PDFs) and a lone photo are
+ *  converted, and anything else comes back as `{ error }` so the student can be told at once instead of waiting for a check that cannot work. */
+async function toReadablePdf(buf: Buffer): Promise<{ pdf: Buffer; converted: boolean } | { error: string }> {
+  if (looksLikePdf(buf)) return { pdf: buf, converted: false };
+  if (looksLikeImage(buf)) {
+    try { return { pdf: await mergeImagesToPdf([{ buffer: buf }]), converted: true }; } catch { return { error: "This picture could not be opened." }; }
+  }
+  if (!looksLikeZip(buf)) return { error: "This file is not a PDF or a photo, so it cannot be read." };
+  try {
+    const zip = new AdmZip(buf);
+    const entries = zip.getEntries()
+      .filter((e) => !e.isDirectory && !/(^|\/)(__MACOSX|\.)/.test(e.entryName) && !/(^|\/)\._/.test(e.entryName))
+      .sort((a, b) => a.entryName.localeCompare(b.entryName, undefined, { numeric: true, sensitivity: "base" }));
+    const total = entries.reduce((s, e) => s + (e.header.size || 0), 0);
+    if (total > 300 * 1024 * 1024) return { error: "The zip folder is too big to open." };
+    const pdfs: Buffer[] = [], images: Buffer[] = [];
+    for (const e of entries) {
+      const data = e.getData();
+      if (looksLikePdf(data)) pdfs.push(data); else if (looksLikeImage(data)) images.push(data);
+    }
+    if (images.length > 0) {
+      if (images.length > MAX_ZIP_PAGES) return { error: `The zip folder holds ${images.length} pictures, which is too many for one homework.` };
+      const good: { buffer: Buffer }[] = [];
+      for (const img of images) {
+        try { await sharp(img).metadata(); good.push({ buffer: img }); } catch { /* a picture that cannot be opened is skipped */ }
+      }
+      if (good.length === 0) return { error: "None of the pictures in the zip folder could be opened." };
+      return { pdf: await mergeImagesToPdf(good), converted: true };
+    }
+    if (pdfs.length === 1) return { pdf: pdfs[0], converted: true };
+    if (pdfs.length > 1) {
+      const out = await PDFDocument.create();
+      for (const p of pdfs) {
+        const d = await PDFDocument.load(p, { ignoreEncryption: true });
+        (await out.copyPages(d, d.getPageIndices())).forEach((pg) => out.addPage(pg));
+      }
+      return { pdf: Buffer.from(await out.save()), converted: true };
+    }
+    return { error: "The zip folder has no photos or PDFs in it." };
+  } catch (e: any) {
+    return { error: `The zip folder could not be opened (${String(e?.message || e).slice(0, 80)}).` };
+  }
+}
+
 // Photos uploaded one at a time (via /api/homework/upload-photo) land here temporarily, keyed by
 // the uploader's email + a client-generated session id, so a multi-photo submission never has to
 // go through the server in a single large multipart request (that's what was silently truncating
@@ -722,6 +776,14 @@ interface SubmissionNotes {
   checkingSince?: number;
   // ISO time when the student's uploaded pages were removed from storage (full marks, more than 15 days ago).
   fileRemovedOn?: string;
+  // Set while a still-"pending" row cannot be graded, so the reason is visible instead of the row just sitting
+  // there. checkProblem "file" = the uploaded file itself cannot be opened (the student must upload it again, or the
+  // admin presses Reevaluate); checkProblemDetail is the technical reason, for the admin only. lastCheckError is the
+  // reason the latest attempt failed for any other cause (for example the grading account being out of credit);
+  // such a row is retried automatically. None of these survive onto a checked row (serializeAdminNotes drops them).
+  checkProblem?: "file";
+  checkProblemDetail?: string;
+  lastCheckError?: string;
 }
 function parseAdminNotes(raw: string | null | undefined): SubmissionNotes {
   if (!raw) return {};
@@ -1035,7 +1097,9 @@ async function extractPdfText(buf: Buffer): Promise<string> {
   }
 }
 
-async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null) {
+// force = the admin pressed Reevaluate: take the row over even if another check still holds it, and try again even if an
+// earlier attempt found the file unreadable.
+async function checkHomeworkSubmission(submissionId: string, priorMissingQuestions?: string[] | null, opts: { force?: boolean } = {}) {
   const { data: sub } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
   if (!sub) return;
 
@@ -1051,7 +1115,10 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
   // than the lease is treated as a check that died and can be taken over.
   if (sub.status === "pending") {
     const LEASE_MS = 5 * 60 * 1000;
-    if (typeof notesFromRow.checkingSince === "number" && Date.now() - notesFromRow.checkingSince < LEASE_MS) return;
+    // A file that could not be opened is not tried again by the automatic sweeps (that only repeated the same failure every few
+    // minutes, forever); it waits for a new upload or for the admin's Reevaluate.
+    if (notesFromRow.checkProblem === "file" && !opts.force) return;
+    if (!opts.force && typeof notesFromRow.checkingSince === "number" && Date.now() - notesFromRow.checkingSince < LEASE_MS) return;
     let claim = supabase
       .from("homework_submissions")
       .update({ admin_notes: JSON.stringify({ ...notesFromRow, checkingSince: Date.now() }) })
@@ -1088,10 +1155,24 @@ async function checkHomeworkSubmission(submissionId: string, priorMissingQuestio
     return;
   }
 
-  const arrayBuffer = await fileBlob.arrayBuffer();
-  const base64Data = Buffer.from(arrayBuffer).toString("base64");
-  const isPdf = fileBlob.type === "application/pdf" || sub.file_path.toLowerCase().endsWith(".pdf");
-  const mediaType = isPdf ? "application/pdf" : (fileBlob.type || "image/jpeg");
+  let fileBuffer: Buffer = Buffer.from(await fileBlob.arrayBuffer());
+  let isPdf = fileBlob.type === "application/pdf" || sub.file_path.toLowerCase().endsWith(".pdf");
+  let mediaType = isPdf ? "application/pdf" : (fileBlob.type || "image/jpeg");
+  // The stored name says "pdf" even when the student sent a zip of photos. Look at the bytes and, where the file is not a PDF,
+  // turn it into one (and keep the converted copy as the submission's file, so the admin's "view file" shows readable pages too).
+  if (isPdf && !looksLikePdf(fileBuffer)) {
+    const fixed = await toReadablePdf(fileBuffer);
+    if ("error" in fixed) {
+      await markUnreadableFile(submissionId, notesFromRow, fixed.error);
+      return;
+    }
+    fileBuffer = fixed.pdf;
+    const fixedPath = `${sub.student_email}/${Date.now()}-submission.pdf`;
+    const { error: fixedUpErr } = await supabase.storage.from(HOMEWORK_BUCKET).upload(fixedPath, fileBuffer, { contentType: "application/pdf" });
+    if (!fixedUpErr) await supabase.from("homework_submissions").update({ file_path: fixedPath }).eq("id", submissionId).eq("status", "pending");
+    else console.warn("Could not save the converted copy of submission", submissionId, fixedUpErr.message);
+  }
+  const base64Data = fileBuffer.toString("base64");
 
   let assignmentContext = "";
   let questionSheetBlock: any = null;
@@ -1867,7 +1948,33 @@ ${keptNote}` : keptNote;
     if (updateError) throw new Error(updateError.message);
   } catch (err: any) {
     console.error(`Error checking homework submission ${submissionId}:`, err.message);
+    // Say why on the row itself. Before this, a check that failed left the row looking exactly like one nobody had tried yet:
+    // the reason (the file could not be opened, or the grading account had run out of credit) was visible only in the server log.
+    const msg = String(err?.message || err);
+    try {
+      if (/pdf specified was not valid|maximum of d+ pdf pages|pdf.{0,40}password|could not process (pdf|image)|image does not match/i.test(msg)) {
+        await markUnreadableFile(submissionId, notesFromRow, msg);
+      } else {
+        const short = /credit balance/i.test(msg) ? "The grading account is out of credit. Add credit and the pending homework will be checked automatically."
+          : /rate limit|overloaded|529|timeout|timed out/i.test(msg) ? "The grading service was busy. It will be tried again automatically."
+          : msg.slice(0, 160);
+        await supabase.from("homework_submissions")
+          .update({ admin_notes: JSON.stringify({ ...notesFromRow, lastCheckError: short }) })
+          .eq("id", submissionId).eq("status", "pending");
+      }
+    } catch { /* recording the reason must never hide the original failure */ }
   }
+}
+
+const FILE_PROBLEM_FOR_STUDENT = "We could not open the file you uploaded for this homework, so it has not been checked yet. Please upload it again: choose \"Add photos\" and add a picture of each page, or upload one proper PDF. A zip folder or a renamed file cannot be read.";
+
+// The uploaded file cannot be opened. The row stays pending (the student can upload again, the admin can press Reevaluate), but now
+// it says so to both of them and the automatic sweeps stop retrying it.
+async function markUnreadableFile(submissionId: string, notes: SubmissionNotes, detail: string) {
+  const { checkingSince, ...rest } = notes;
+  await supabase.from("homework_submissions")
+    .update({ ai_feedback: FILE_PROBLEM_FOR_STUDENT, admin_notes: JSON.stringify({ ...rest, checkProblem: "file", checkProblemDetail: detail.slice(0, 200) }) })
+    .eq("id", submissionId).eq("status", "pending");
 }
 
 function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
@@ -1883,14 +1990,15 @@ function mapHomeworkRow(row: any, fileUrl?: string | null): HomeworkSubmission {
     adminNotes: row.admin_notes,
     integrityFlag: row.integrity_flag,
     fileUrl: fileUrl ?? null,
+    checkNote: row.status === "pending" ? (() => { const n = parseAdminNotes(row.admin_notes); return n.checkProblem === "file" ? `The file could not be opened: ${n.checkProblemDetail || "unknown reason"}` : (n.lastCheckError || null); })() : null,
   };
 }
 
 // integrityFlag is an admin-only signal, and adminNotes doubles as internal resubmission-scoping
 // bookkeeping (see upsertHomeworkSubmission) -- neither should ever reach a student-facing response.
-function mapHomeworkRowForStudent(row: any, fileUrl?: string | null): Omit<HomeworkSubmission, "integrityFlag" | "adminNotes"> {
-  const { integrityFlag, adminNotes, ...rest } = mapHomeworkRow(row, fileUrl);
-  return rest;
+function mapHomeworkRowForStudent(row: any, fileUrl?: string | null): Omit<HomeworkSubmission, "integrityFlag" | "adminNotes" | "checkNote"> & { fileProblem: boolean } {
+  const { integrityFlag, adminNotes, checkNote, ...rest } = mapHomeworkRow(row, fileUrl);
+  return { ...rest, fileProblem: row.status === "pending" && parseAdminNotes(row.admin_notes).checkProblem === "file" };
 }
 
 function mapAssignmentRow(row: any, fileUrl?: string | null): HomeworkAssignment {
@@ -9480,6 +9588,16 @@ function buildApp(): express.Express {
       if (justCreated) return res.json({ success: true, submission: mapHomeworkRowForStudent(justCreated) });
       return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
     }
+    {
+      // Not every file sent through the PDF button is a PDF (a zip of photos was accepted and could never be graded). Convert what can be
+      // converted, and refuse the rest now, while the student is still here to fix it.
+      const readable = await toReadablePdf(combined);
+      if ("error" in readable) {
+        await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""));
+        return res.status(400).json({ error: `${readable.error} Please upload a PDF, or choose "Add photos" and add a picture of each page.` });
+      }
+      combined = readable.pdf;
+    }
 
     const filePath = `${auth.email}/${Date.now()}-submission.pdf`;
     const { error: uploadError } = await supabase.storage.from(HOMEWORK_BUCKET).upload(filePath, combined, {
@@ -9713,6 +9831,11 @@ function buildApp(): express.Express {
     }
     if (!combined) {
       return res.status(400).json({ error: "No uploaded file pieces were found for this submission. Please attach a PDF and wait for it to finish uploading before submitting." });
+    }
+    {
+      const readable = await toReadablePdf(combined);
+      if ("error" in readable) return res.status(400).json({ error: `${readable.error} Please upload a PDF, or add photos of the pages instead.` });
+      combined = readable.pdf;
     }
 
     const filePath = `${emailNormalized}/${Date.now()}-submission.pdf`;
@@ -10062,7 +10185,7 @@ function buildApp(): express.Express {
     const { data: existing } = await supabase.from("homework_submissions").select("id").eq("id", submissionId).maybeSingle();
     if (!existing) return res.status(404).json({ error: "Submission not found." });
 
-    await checkHomeworkSubmission(String(submissionId), null);
+    await checkHomeworkSubmission(String(submissionId), null, { force: true });
     const { data: updated } = await supabase.from("homework_submissions").select("*").eq("id", submissionId).maybeSingle();
     if (!updated) return res.status(404).json({ error: "Submission not found after recheck." });
     return res.json({ success: true, submission: mapHomeworkRow(updated) });
@@ -12715,6 +12838,14 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       const justCreated = await findJustCreatedRevisionSubmission(auth.email, String(paperId));
       if (justCreated) return res.json({ success: true, submission: { id: justCreated.id, status: justCreated.status, isLate: justCreated.is_late, submittedAt: justCreated.submitted_at } });
       return res.status(400).json({ error: "No uploaded file pieces were found. Please attach a PDF and wait for it to finish uploading before submitting." });
+    }
+    {
+      const readable = await toReadablePdf(combined);
+      if ("error" in readable) {
+        await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
+        return res.status(400).json({ error: `${readable.error} Please upload a PDF, or add photos of the pages instead.` });
+      }
+      combined = readable.pdf;
     }
     await finalizeRevisionSubmission(auth, String(paperId), combined, res);
     if (res.statusCode < 400) await removeSessionTempFiles(auth.email, String(sessionId).replace(/[^a-zA-Z0-9_-]/g, ""), REVISION_TEMP_PREFIX);
