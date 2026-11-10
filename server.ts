@@ -1899,13 +1899,25 @@ ${keptNote}` : keptNote;
     // verification passes, so a question cleared there is never shown as wrong; the model's own wording is used
     // only where it agrees with that final verdict. It never changes the score.
     let feedbackForStudent: string | null = typeof parsed.feedback === "string" ? parsed.feedback : null;
-    if (!parsed.__wrongHomework && Array.isArray(parsed.studentQuestionReport) && parsed.studentQuestionReport.length > 0) {
+    // The report is an optional field and a long paper sometimes comes back without it (a real 25-question paper, 10/10, got only
+    // "All assigned questions attempted correctly"). When it is missing, the labels are taken from questionByQuestionCheck, which is
+    // required and has one entry per question, and the lines are worded from the final lists below, so no question is left without a line.
+    let reportEntries: any[] | null = Array.isArray(parsed.studentQuestionReport) && parsed.studentQuestionReport.length > 0 ? parsed.studentQuestionReport : null;
+    if (!reportEntries && Array.isArray(parsed.questionByQuestionCheck)) {
+      const derived: any[] = [];
+      for (const raw of parsed.questionByQuestionCheck) {
+        const m = String(raw ?? "").match(/^s*((?:(?:Example|Exercise|Ex.?)s*)?Q?s*d+(?:s*([a-zA-Z0-9]{1,4}))*)s*(?=[:-–—.)s]|$)/i);
+        if (m) derived.push({ question: m[1], verdict: "correct", note: "" });
+      }
+      if (derived.length > 0) reportEntries = derived;
+    }
+    if (!parsed.__wrongHomework && reportEntries && reportEntries.length > 0) {
       const norm = (x: any) => String(x ?? "").toLowerCase().replace(/\s+/g, "");
       const related = (a: string, b: string) => a === b || (!!a && !!b && ((a.startsWith(b) && !/\d/.test(a.charAt(b.length) || "")) || (b.startsWith(a) && !/\d/.test(b.charAt(a.length) || ""))));
       const inList = (label: string, list: any) => Array.isArray(list) && list.some((l: any) => related(norm(l), norm(label)));
       const first = parsed.sheetFirstQuestionNumber;
       const last = parsed.sheetLastQuestionNumber;
-      const entries: any[] = parsed.studentQuestionReport.filter((e: any) => e && String(e.question ?? "").trim());
+      const entries: any[] = reportEntries.filter((e: any) => e && String(e.question ?? "").trim());
       let allowedNums: Set<number> | null = null;
       if (isScopedResubmission && effectivePriorMissingQuestions && effectivePriorMissingQuestions.length > 0) {
         allowedNums = new Set<number>();
