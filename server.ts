@@ -12074,6 +12074,8 @@ A marking-scheme step naming one specific proportion (e.g. TA/AM = OA/OM) is not
 
 Before writing that a student's final numeric answer is wrong because it differs in FORM from the marking scheme's own stated value -- a rounded decimal (e.g. 5.42) versus an exact fraction (e.g. 65/12), or vice versa -- actually compute the true numeric value of both and compare them, the same digit-by-digit discipline already required for every other arithmetic check in this prompt. A real, confirmed case had a step's own feedback state both that a student's "AT=5.42cm" was wrong AND that "the correct [value is] 65/12" in the very same sentence, even though 65/12 = 5.41666..., which rounds to exactly 5.42 -- the two numbers were identical, and there was no error at all. Never let two representations of the same number be treated as if one contradicts the other.
 
+An answer is very often written on the SAME LINE as a section heading or beside a printed header, especially the first answer of the paper at the very top of page 1 (for example "Section-A  (A1) (b) CSA of cone + CSA of hemisphere", with the printed words "Page No." sitting over the middle of that line). A real, confirmed case had a student write exactly that, and the first question was marked "not attempted -- numbering starts at A2" although her answer (b) was the very first thing on page 1. Read the first lines of the first page, and the first lines of every page, character by character before concluding that any question has no answer; a student's label may be written A1, Q1, (A1), 1 or (i), possibly circled or boxed, and a heading is often followed directly by the first answer.
+
 ${REVISION_SUBSCRIPT_INSTRUCTION}`;
     const prompt = `Here is the paper's own question list and step-wise marking scheme, followed by the student's submitted answers as an attached file. For each question, evaluate every numbered step in order.\n\n${questionsBlock}${resubmissionNote}`;
 
@@ -12193,6 +12195,72 @@ ${REVISION_SUBSCRIPT_INSTRUCTION}`;
       const toolUseBlock = (data?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_revision_grade");
       const parsed = toolUseBlock.input;
       const perQuestion: { questionId: string; stepResults?: { met: boolean; note: string }[] }[] = Array.isArray(parsed.perQuestion) ? parsed.perQuestion : [];
+
+      // SECOND LOOK at every question that was scored zero because no answer was found. "No answer found" zeroes the whole question
+      // at once, and it was wrong for a real student (a 1-mark MCQ written on the heading line at the top of page 1 was reported
+      // as missing, costing her the only mark she lost). So each such claim is checked once more, by a separate call whose only job
+      // is to look for that answer, and whatever it finds replaces the zero. A failure of this call never changes the first result.
+      try {
+        const absent = /not (shown|attempted|found|visible|present|written|appear)|(does|doesn'?t) (not )?appear|no (distinct |separate |visible )?answer|missing|never (wrote|wrote out)|(did not|didn'?t) (write|answer|attempt)|left blank|blank|unattempted|treating as not/i;
+        const suspects: { q: (typeof questions)[number]; pq: { stepResults?: { met: boolean; note: string }[] } }[] = [];
+        for (let qi = 0; qi < questions.length; qi++) {
+          const q = questions[qi];
+          const pq = perQuestion.find((x) => x.questionId === q.id) || perQuestion[qi];
+          const steps = Array.isArray(pq?.stepResults) ? pq.stepResults : [];
+          if (steps.length > 0 && steps.every((st) => !resolveStepMet(st)) && steps.some((st) => absent.test(String(st.note || "")))) suspects.push({ q, pq });
+        }
+        if (suspects.length > 0 && suspects.length <= 12) {
+          const list = suspects.map(({ q, pq }) => `${q.id} (${q.marks} mark${q.marks > 1 ? "s" : ""}): ${q.text}\nStep marking scheme:\n${(q.markingPoints || []).map((mp, i) => `  Step ${i + 1}: ${mp}`).join("\n")}\nThe first check said: ${(pq.stepResults || []).map((st) => st.note).join(" | ").slice(0, 400)}`).join("\n\n");
+          const lookTool = {
+            name: "submit_second_look",
+            description: "Report, for each question listed, whether an answer to it really is on the student's pages, and if so judge it.",
+            input_schema: {
+              type: "object",
+              properties: {
+                results: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      questionId: { type: "string", description: "The question's id exactly as listed." },
+                      whereFound: { type: "string", description: "Which page and which line holds this question's answer, and EXACTLY what is written there (quote it). If you really find nothing after reading the first lines of every page and every margin, write: nothing found." },
+                      found: { type: "boolean", description: "true only if an answer to this question is actually written on the pages, in any place, including the same line as a heading." },
+                      stepResults: { type: "array", description: "Only when found is true: one entry per marking-scheme step, in order, judged as in the main grading instructions.", items: { type: "object", properties: { note: { type: "string" }, met: { type: "boolean" } }, required: ["note", "met"] } },
+                    },
+                    required: ["questionId", "whereFound", "found"],
+                  },
+                },
+              },
+              required: ["results"],
+            },
+          };
+          const lookText = `${prompt}\n\nSECOND LOOK. A first check reported that NO answer could be found for each of the questions below. Do not trust that. For EACH one, read the first five lines of EVERY page, the margins, and the lines that carry a heading such as "Section-A", then look for an answer to that question: the student's label may be A1, Q1, (A1), 1 or just the option written right after a heading, and an MCQ answer may be only a letter or only the text of the option. Quote what you find. If you find an answer, judge every step of its marking scheme and report them; if you really find nothing, say so.\n\n${list}`;
+          const resp = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "x-api-key": process.env.ANTHROPIC_API_KEY as string, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+            body: JSON.stringify({
+              model: CLAUDE_MODEL,
+              system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+              max_tokens: 6000,
+              tools: [lookTool],
+              tool_choice: { type: "tool", name: "submit_second_look" },
+              messages: [{ role: "user", content: [contentBlock, { type: "text", text: lookText }] }],
+            }),
+          });
+          const look: any = await resp.json();
+          const block = (look?.content || []).find((b: any) => b.type === "tool_use" && b.name === "submit_second_look");
+          for (const r of Array.isArray(block?.input?.results) ? block.input.results : []) {
+            const hit = suspects.find((x) => x.q.id === r.questionId);
+            const need = hit ? (hit.q.markingPoints || []).length : 0;
+            if (hit && r.found === true && Array.isArray(r.stepResults) && need > 0 && r.stepResults.length === need && r.stepResults.every((st: any) => typeof st?.met === "boolean" && st?.note)) {
+              hit.pq.stepResults = r.stepResults;
+              console.log(`Revision ${submissionId}: second look found an answer to ${hit.q.id}: ${String(r.whereFound).slice(0, 120)}`);
+            }
+          }
+        }
+      } catch (lookErr: any) {
+        console.warn("Second look for unanswered questions failed, keeping the first result:", lookErr?.message);
+      }
       let totalScore = 0;
       // Every question gets its own line, always -- not just the ones with lost marks. Students
       // repeatedly told the admin they couldn't tell why marks were deducted because full-marks
