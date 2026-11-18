@@ -12,6 +12,10 @@ import { ACID_A } from "../data/acidNotesA";
 import { ACID_B } from "../data/acidNotesB";
 import { ACID_C } from "../data/acidNotesC";
 import { ACID_D } from "../data/acidNotesD";
+import { MNM_A } from "../data/mnmNotesA";
+import { MNM_B } from "../data/mnmNotesB";
+import { MNM_C } from "../data/mnmNotesC";
+import { MNM_D } from "../data/mnmNotesD";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -20,12 +24,14 @@ import type { CBlock } from "../data/carbonNotesTypes";
 const CHAPTERS = {
   carbon: { topics: [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D], title: "Carbon and its Compounds", mapId: "ch_mindmap", pdfUrl: "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf" as string | undefined, pdfName: "Class-10-Carbon-Compounds-Notes.pdf" },
   acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
+  metals: { topics: [...MNM_A, ...MNM_B, ...MNM_C, ...MNM_D], title: "Metals and Non-metals", mapId: "mnm_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
 };
 
 const ICONS: Record<string, React.ElementType> = {
   Carbon: Atom, Bonding: Atom, Allotropes: Atom, Hydrocarbons: FlaskConical, "Series and naming": ListChecks, "Classes of compounds": Beaker,
   "Properties and reactions": Flame, "Important compounds": Droplets, Revision: Brain, "Competition Zone": Trophy,
   Indicators: Beaker, "Acids and bases": FlaskConical, "Reactions of acids": Flame, "Reactions of bases": Flame, "Acids and bases in water": Droplets, "pH scale": Atom, "pH in life": Droplets, Salts: ListChecks, "Useful salts": Beaker,
+  "Physical properties": Atom, "Chemical properties of metals": Flame, "Reactivity series": ListChecks, "Non-metals": Atom, "Ionic bonding": FlaskConical, Metallurgy: Beaker, Corrosion: Droplets,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
@@ -119,7 +125,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);

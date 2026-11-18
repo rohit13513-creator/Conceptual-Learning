@@ -1,3 +1,4 @@
+import { MNM_DIAGRAMS } from "./mnmDiagrams";
 import { ACID_DIAGRAMS } from "./acidDiagrams";
 import { Scene } from "../components/sceneKit";
 import { LEWIS } from "../components/chemLewis";
@@ -173,3 +174,6 @@ add("cmp_c2h6o", () => scheme([[D("m_ethanol")], [D("m_dimethylether")]], "Funct
 
 // Class X Acids, Bases and Salts diagrams
 Object.assign(DIAGRAMS, ACID_DIAGRAMS);
+
+// Class X Metals and Non-metals diagrams
+Object.assign(DIAGRAMS, MNM_DIAGRAMS);
