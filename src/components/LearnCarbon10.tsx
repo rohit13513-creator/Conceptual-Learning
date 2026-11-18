@@ -8,17 +8,24 @@ import { CARBON_A } from "../data/carbonNotesA";
 import { CARBON_B } from "../data/carbonNotesB";
 import { CARBON_C } from "../data/carbonNotesC";
 import { CARBON_D } from "../data/carbonNotesD";
+import { ACID_A } from "../data/acidNotesA";
+import { ACID_B } from "../data/acidNotesB";
+import { ACID_C } from "../data/acidNotesC";
+import { ACID_D } from "../data/acidNotesD";
 import type { CBlock } from "../data/carbonNotesTypes";
 
-// Class X Chemistry: "Carbon and its Compounds". Simple words, point by point, with clear diagrams.
+// Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
+// Both chapters use the same screen; the chapter prop chooses the topics, the title, the mind map and the PDF (if there is one).
 
-const TOPICS = [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D];
-const NOTES_PDF_URL = "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf";
-const NOTES_PDF_NAME = "Class-10-Carbon-Compounds-Notes.pdf";
+const CHAPTERS = {
+  carbon: { topics: [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D], title: "Carbon and its Compounds", mapId: "ch_mindmap", pdfUrl: "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf" as string | undefined, pdfName: "Class-10-Carbon-Compounds-Notes.pdf" },
+  acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
+};
 
 const ICONS: Record<string, React.ElementType> = {
   Carbon: Atom, Bonding: Atom, Allotropes: Atom, Hydrocarbons: FlaskConical, "Series and naming": ListChecks, "Classes of compounds": Beaker,
   "Properties and reactions": Flame, "Important compounds": Droplets, Revision: Brain, "Competition Zone": Trophy,
+  Indicators: Beaker, "Acids and bases": FlaskConical, "Reactions of acids": Flame, "Reactions of bases": Flame, "Acids and bases in water": Droplets, "pH scale": Atom, "pH in life": Droplets, Salts: ListChecks, "Useful salts": Beaker,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
@@ -54,7 +61,7 @@ const Dia: React.FC<{ id: string; max?: number }> = ({ id, max = 480 }) => {
   return scene ? <SceneFigure scene={scene} max={max} /> : null;
 };
 
-const Block: React.FC<{ b: CBlock; light: boolean }> = ({ b, light }) => {
+const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, light, mapId }) => {
   switch (b.t) {
     case "p": return <p className="text-sm font-semibold leading-relaxed">{rich(b.s)}</p>;
     case "h": return <div className="flex items-center gap-2 text-[12.5px] font-black uppercase tracking-wider text-emerald-300 font-mono"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /><span>{rich(b.s)}</span></div>;
@@ -63,7 +70,7 @@ const Block: React.FC<{ b: CBlock; light: boolean }> = ({ b, light }) => {
     case "table": return <Table head={b.head} rows={b.rows} light={light} />;
     case "dia": return <div className="flex justify-center"><Dia id={b.id} /></div>;
     case "dias": return <div className="flex flex-wrap justify-center gap-4">{b.ids.map((id) => <Dia key={id} id={id} max={b.ids.length > 2 ? 300 : 400} />)}</div>;
-    case "mindmap": return <div className="overflow-x-auto"><div className="min-w-[760px]"><Dia id="ch_mindmap" max={1000} /></div></div>;
+    case "mindmap": return <div className="overflow-x-auto"><div className="min-w-[760px]"><Dia id={mapId} max={1000} /></div></div>;
     case "key": return (
       <div className="bg-emerald-950/25 border border-emerald-500/25 p-4 rounded-xl space-y-1.5 font-semibold">
         <h5 className="font-black text-emerald-300 text-[12.5px] uppercase tracking-wider flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> {b.title}</h5>
@@ -112,7 +119,9 @@ const Block: React.FC<{ b: CBlock; light: boolean }> = ({ b, light }) => {
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" }) {
+  const CH = CHAPTERS[chapter];
+  const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
   const idx = Math.max(0, TOPICS.findIndex((t) => t.id === activeId));
   const topic = TOPICS[idx];
@@ -127,14 +136,14 @@ export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes }: 
           <select value={activeId} onChange={(e) => go(e.target.value)} className={`flex-1 min-w-0 rounded-lg border px-2 py-2 text-sm font-bold ${isLightMode ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-100"}`}>
             {TOPICS.map((t, i) => <option key={t.id} value={t.id}>{i + 1}. {t.title}</option>)}
           </select>
-          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} compact />
+          {CH.pdfUrl && <DownloadNotesLink href={CH.pdfUrl} fileName={CH.pdfName} isLightMode={isLightMode} compact />}
         </div>
       </div>
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2"><FlaskConical className="w-5 h-5 text-emerald-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>Carbon and its Compounds</h3></div>
-          <DownloadNotesLink href={NOTES_PDF_URL} fileName={NOTES_PDF_NAME} isLightMode={isLightMode} />
+          <div className="flex items-center gap-2"><FlaskConical className="w-5 h-5 text-emerald-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{CH.title}</h3></div>
+          {CH.pdfUrl && <DownloadNotesLink href={CH.pdfUrl} fileName={CH.pdfName} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">
           {TOPICS.map((t, i) => (
@@ -163,7 +172,7 @@ export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes }: 
           </div>
 
           <div className="space-y-6" key={topic.id}>
-            {topic.blocks.map((blk, i) => <Block key={i} b={blk} light={isLightMode} />)}
+            {topic.blocks.map((blk, i) => <Block key={i} b={blk} light={isLightMode} mapId={CH.mapId} />)}
           </div>
 
           <div className={`flex flex-wrap items-center justify-between gap-3 border-t pt-5 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>

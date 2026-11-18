@@ -1,0 +1,210 @@
+import type { CTopic } from "./carbonNotesTypes";
+
+// Topics 11 to 15: pH in everyday life, salts, chemicals from common salt, baking soda and washing soda, water of crystallisation.
+
+export const ACID_C: CTopic[] = [
+  {
+    id: "a11", category: "pH in life", title: "pH in Everyday Life", heading: "Importance of pH in Everyday Life",
+    sub: "Our body, rain, soil, digestion, teeth and stings.",
+    blocks: [
+      { t: "dia", id: "abs_phlife" },
+      { t: "h", s: "Plants and animals are pH sensitive" },
+      { t: "ul", items: [
+        "Our body works within a pH range of **7.0 to 7.8**. Living organisms can survive only in a narrow range of pH change.",
+        "When the pH of rain water is **less than 5.6**, it is called **acid rain**. When acid rain flows into rivers, it lowers the pH of the river water, and the survival of aquatic life becomes difficult.",
+        "The atmosphere of **Venus** is made of thick white and yellowish clouds of sulphuric acid, so life as we know it is not likely there.",
+      ] },
+      { t: "h", s: "pH of soil" },
+      { t: "act", title: "Activity 2.12: pH of soil", steps: [
+        "Put about 2 g of soil in a test tube and add 5 mL of water. Shake.",
+        "Filter the contents and collect the filtrate.",
+        "Check the pH of the filtrate with universal indicator paper.",
+        "Note which plants grow in the place where the soil came from.",
+      ], see: ["Different soils give different pH values."], why: ["Plants need a **specific pH range** for healthy growth. If the soil is too acidic, a farmer treats it with **quick lime (CaO), slaked lime (Ca(OH)2) or chalk (CaCO3)**, which are bases and neutralise the extra acid."] },
+      { t: "h", s: "pH in our digestive system" },
+      { t: "ul", items: [
+        "Our stomach produces **hydrochloric acid**. It helps in digestion without harming the stomach.",
+        "During **indigestion** the stomach produces too much acid. This causes pain and irritation.",
+        "To get relief, people use **antacids**, which are bases that neutralise the excess acid. **Magnesium hydroxide (milk of magnesia)** is a mild base often used for this. Baking soda also works.",
+      ] },
+      { t: "eq", lines: ["Mg(OH)2 + 2HCl → MgCl2 + 2H2O"] },
+      { t: "h", s: "Tooth decay" },
+      { t: "ul", items: [
+        "Tooth decay starts when the pH of the mouth falls **below 5.5**.",
+        "Tooth enamel is made of **calcium hydroxyapatite** (a crystalline form of calcium phosphate). It is the **hardest substance in the body**. It does not dissolve in water, but it is **corroded when the pH in the mouth is below 5.5**.",
+        "Bacteria in the mouth produce acids by breaking down sugar and food particles left after eating.",
+        "The best way to prevent this is to **clean the mouth after eating**. Toothpastes are generally **basic**, so they neutralise the extra acid.",
+      ] },
+      { t: "h", s: "Chemical warfare by animals and plants" },
+      { t: "ul", items: [
+        "A **bee sting** leaves an acid that causes pain and irritation. A mild base like **baking soda** on the stung area gives relief.",
+        "The stinging hair of **nettle** leaves injects **methanoic acid**, which causes burning pain. A traditional remedy is rubbing the area with a leaf of the **dock plant**, which often grows beside the nettle. The dock leaf is basic, so it neutralises the acid.",
+      ] },
+      { t: "qa", title: "Check yourself", items: [
+        ["Fresh milk has pH 6. How does the pH change as it turns into curd?", "It becomes lower (more acidic), because acid is formed when milk turns to curd."],
+        ["A milkman adds a little baking soda to fresh milk. Why does this milk take a long time to set as curd?", "Baking soda makes the milk slightly alkaline, and the acid formed has to neutralise it first."],
+        ["Why do we brush our teeth after eating?", "To remove food that bacteria turn into acid. The basic toothpaste neutralises extra acid and prevents decay below pH 5.5."],
+      ] },
+    ],
+  },
+  {
+    id: "a12", category: "Salts", title: "Salts and their pH", heading: "More about Salts: Families and pH",
+    sub: "Salt families, acidic, basic and neutral salts.",
+    blocks: [
+      { t: "p", s: "Whenever an acid reacts with a base, a metal, a metal oxide or a carbonate, a **salt** is formed. A salt is made of the **positive ion of a base** and the **negative ion of an acid**." },
+      { t: "h", s: "Family of salts" },
+      { t: "act", title: "Activity 2.13: Write formulae and group the salts", steps: [
+        "Write the formulae of potassium sulphate, sodium sulphate, calcium sulphate, magnesium sulphate, copper sulphate, sodium chloride, sodium nitrate, sodium carbonate and ammonium chloride.",
+        "Find the acid and the base from which each salt may be obtained.",
+        "Group the salts that have the same positive ion or the same negative ion.",
+      ], see: ["The result is shown in the table below."], why: ["**Salts having the same positive or the same negative ion belong to one family.** NaCl and Na2SO4 belong to the family of sodium salts. NaCl and KCl belong to the family of chloride salts."] },
+      { t: "table", head: ["Salt", "Formula", "Acid", "Base"], rows: [
+        ["Potassium sulphate", "K2SO4", "H2SO4", "KOH"],
+        ["Sodium sulphate", "Na2SO4", "H2SO4", "NaOH"],
+        ["Calcium sulphate", "CaSO4", "H2SO4", "Ca(OH)2"],
+        ["Magnesium sulphate", "MgSO4", "H2SO4", "Mg(OH)2"],
+        ["Copper sulphate", "CuSO4", "H2SO4", "Cu(OH)2"],
+        ["Sodium chloride", "NaCl", "HCl", "NaOH"],
+        ["Sodium nitrate", "NaNO3", "HNO3", "NaOH"],
+        ["Sodium carbonate", "Na2CO3", "H2CO3", "NaOH"],
+        ["Ammonium chloride", "NH4Cl", "HCl", "NH4OH"],
+      ] },
+      { t: "p", s: "In this list there are five **sulphate** salts (K, Na, Ca, Mg, Cu), four **sodium** salts, and two **chloride** salts (NaCl and NH4Cl)." },
+      { t: "h", s: "pH of salts" },
+      { t: "act", title: "Activity 2.14: Are salt solutions acidic, basic or neutral?", steps: [
+        "Collect sodium chloride, potassium nitrate, aluminium chloride, zinc sulphate, copper sulphate, sodium acetate, sodium carbonate and sodium hydrogencarbonate.",
+        "Check their solubility in water (use distilled water only).",
+        "Test each solution with litmus and find its pH with pH paper.",
+        "Identify the acid and the base from which each salt is made (Table 2.4).",
+      ], see: ["Some solutions are neutral (pH 7), some are acidic (pH less than 7) and some are basic (pH more than 7)."], why: ["It depends on how strong the acid and the base are that made the salt."] },
+      { t: "dia", id: "abs_saltph" },
+      { t: "table", head: ["Salt", "pH", "Acid used", "Base used"], rows: [
+        ["Sodium chloride", "7 (neutral)", "HCl (strong)", "NaOH (strong)"],
+        ["Potassium nitrate", "7 (neutral)", "HNO3 (strong)", "KOH (strong)"],
+        ["Aluminium chloride", "less than 7", "HCl (strong)", "Al(OH)3 (weak)"],
+        ["Zinc sulphate", "less than 7", "H2SO4 (strong)", "Zn(OH)2 (weak)"],
+        ["Copper sulphate", "less than 7", "H2SO4 (strong)", "Cu(OH)2 (weak)"],
+        ["Sodium acetate", "more than 7", "CH3COOH (weak)", "NaOH (strong)"],
+        ["Sodium carbonate", "more than 7", "H2CO3 (weak)", "NaOH (strong)"],
+        ["Sodium hydrogencarbonate", "more than 7", "H2CO3 (weak)", "NaOH (strong)"],
+      ] },
+      { t: "key", title: "Rule", s: "Salts of a **strong acid and a strong base** are **neutral** (pH 7). Salts of a **strong acid and a weak base** are **acidic** (pH less than 7). Salts of a **strong base and a weak acid** are **basic** (pH more than 7)." },
+      { t: "qa", title: "Check yourself", items: [
+        ["Is the solution of sodium carbonate acidic, basic or neutral? Why?", "Basic. It is made from a strong base (NaOH) and a weak acid (H2CO3)."],
+        ["Name two salts that belong to the family of chlorides.", "NaCl and KCl (or NH4Cl)."],
+      ] },
+    ],
+  },
+  {
+    id: "a13", category: "Useful salts", title: "Chemicals from Common Salt", heading: "Chemicals from Common Salt",
+    sub: "Rock salt, the chlor-alkali process and bleaching powder.",
+    blocks: [
+      { t: "p", s: "The salt formed from **hydrochloric acid and sodium hydroxide** is **sodium chloride**, the salt you use in food. It is a **neutral salt**. Sea water contains many salts, and sodium chloride is separated from them. Large brown crystals of salt are found as deposits in several parts of the world. This is **rock salt**. It is brown because of impurities. Beds of rock salt were formed when seas of bygone ages dried up. It is mined like coal." },
+      { t: "note", title: "Salt and our freedom struggle", s: "Mahatma Gandhi’s **Dandi March** made common salt an important symbol of our struggle for freedom." },
+      { t: "dia", id: "abs_salthub" },
+      { t: "p", s: "Common salt is a raw material for many things of daily use: sodium hydroxide, baking soda, washing soda, bleaching powder and many more." },
+      { t: "h", s: "Sodium hydroxide: the chlor-alkali process" },
+      { t: "p", s: "When electricity is passed through an aqueous solution of sodium chloride (called **brine**), it breaks down to form **sodium hydroxide**. The process is called the **chlor-alkali process** because of the products: **chlor** for chlorine and **alkali** for sodium hydroxide." },
+      { t: "eq", lines: ["2NaCl(aq) + 2H2O(l) → 2NaOH(aq) + Cl2(g) + H2(g)"] },
+      { t: "dia", id: "abs_chloralkali" },
+      { t: "ul", items: [
+        "**Chlorine gas** is given off at the **anode** (positive electrode) and **hydrogen gas** at the **cathode** (negative electrode).",
+        "**Sodium hydroxide solution** forms near the cathode.",
+        "All three products are useful. Hydrogen is used as a fuel and for making ammonia and margarine; chlorine for water treatment, PVC, disinfectants and bleaching powder; sodium hydroxide for soaps, paper and artificial fibres; hydrochloric acid for cleaning steel and making medicines.",
+      ] },
+      { t: "h", s: "Bleaching powder" },
+      { t: "p", s: "The chlorine produced in the chlor-alkali process is used to make bleaching powder. It is made by the action of **chlorine on dry slaked lime, Ca(OH)2**. It is represented as **Ca(ClO)2**, though its actual composition is quite complex." },
+      { t: "eq", lines: ["2Ca(OH)2 + 2Cl2 → Ca(ClO)2 + CaCl2 + 2H2O"] },
+      { t: "ul", items: [
+        "Bleaching powder is used for **bleaching cotton and linen** in the textile industry, wood pulp in paper factories and washed clothes in laundry.",
+        "It is used as an **oxidising agent** in many chemical industries.",
+        "It is used to make **drinking water free from germs**.",
+      ] },
+      { t: "qa", title: "Check yourself", items: [
+        ["What is the common name of Ca(ClO)2?", "Bleaching powder."],
+        ["Name the substance which on treatment with chlorine gives bleaching powder.", "Dry slaked lime, Ca(OH)2."],
+        ["Why is the process called the chlor-alkali process?", "Its products are chlorine (chlor) and sodium hydroxide, an alkali."],
+      ] },
+    ],
+  },
+  {
+    id: "a14", category: "Useful salts", title: "Baking Soda and Washing Soda", heading: "Baking Soda and Washing Soda",
+    sub: "Two useful salts made from common salt.",
+    blocks: [
+      { t: "h", s: "Baking soda" },
+      { t: "p", s: "Baking soda is commonly used in the kitchen for making crispy pakoras and sometimes for faster cooking. Its chemical name is **sodium hydrogencarbonate, NaHCO3**. It is made using sodium chloride as one of the raw materials." },
+      { t: "eq", lines: ["NaCl + H2O + CO2 + NH3 → NH4Cl + NaHCO3"] },
+      { t: "ul", items: [
+        "It is a **mild, non-corrosive basic salt**, so it can be used to neutralise an acid.",
+        "When heated during cooking it breaks down:",
+      ] },
+      { t: "eq", lines: ["2NaHCO3 →(heat) Na2CO3 + H2O + CO2"] },
+      { t: "h", s: "Uses of baking soda" },
+      { t: "ul", items: [
+        "**Baking powder** is a mixture of baking soda and **tartaric acid** (a weak edible acid). On heating or mixing with water, carbon dioxide is produced. It makes bread or cake **rise**, so they become soft and spongy.",
+        "It is an ingredient in **antacids**. Being alkaline, it neutralises excess acid in the stomach.",
+        "It is used in **soda-acid fire extinguishers**.",
+      ] },
+      { t: "eq", lines: ["NaHCO3 + H⁺ → CO2 + H2O + sodium salt of the acid"] },
+      { t: "act", title: "Group activity: A soda-acid fire extinguisher", steps: [
+        "Take 20 mL of sodium hydrogencarbonate solution in a wash-bottle.",
+        "Hang an ignition tube holding dilute sulphuric acid inside it.",
+        "Close the mouth of the wash-bottle and tilt it so that the acid mixes with the solution.",
+        "Direct the discharge from the nozzle on a burning candle.",
+      ], see: ["A stream of froth and gas comes out of the nozzle and **puts out the flame**."], why: ["The acid reacts with NaHCO3 and gives **carbon dioxide**, which does not support burning."] },
+      { t: "dia", id: "abs_fire" },
+      { t: "h", s: "Washing soda" },
+      { t: "p", s: "Another chemical obtained from sodium chloride is **washing soda, Na2CO3.10H2O**. Heating baking soda gives sodium carbonate. **Recrystallisation of sodium carbonate** gives washing soda. It is also a **basic salt**." },
+      { t: "eq", lines: ["Na2CO3 + 10H2O → Na2CO3.10H2O"] },
+      { t: "ul", items: [
+        "Sodium carbonate (washing soda) is used in the **glass, soap and paper** industries.",
+        "It is used in the manufacture of sodium compounds such as **borax**.",
+        "It is used as a **cleaning agent** for domestic purposes.",
+        "It is used for **removing permanent hardness of water**.",
+      ] },
+      { t: "note", title: "Is Na2CO3.10H2O wet?", s: "No. The 10H2O means that every formula unit of the salt holds **10 water molecules in the crystal** (water of crystallisation). The next topic explains this." },
+      { t: "qa", title: "Check yourself", items: [
+        ["Name the sodium compound used for softening hard water.", "Washing soda (sodium carbonate)."],
+        ["What happens if a solution of sodium hydrogencarbonate is heated? Give the equation.", "It gives sodium carbonate, water and carbon dioxide: 2NaHCO3 → Na2CO3 + H2O + CO2."],
+        ["Give two uses of baking soda.", "In baking powder to make cakes rise, and as an antacid."],
+      ] },
+    ],
+  },
+  {
+    id: "a15", category: "Useful salts", title: "Water of Crystallisation and Plaster of Paris", heading: "Are the Crystals of Salts really Dry?",
+    sub: "Copper sulphate, gypsum and Plaster of Paris.",
+    blocks: [
+      { t: "act", title: "Activity 2.15: Heat copper sulphate crystals", steps: [
+        "Heat a few crystals of copper sulphate in a dry boiling tube.",
+        "Note the colour after heating and look for water droplets in the tube.",
+        "Add two or three drops of water to the heated sample.",
+      ], see: [
+        "The blue crystals turn **white**, and **water droplets** appear in the tube.",
+        "On adding water, the **blue colour comes back**.",
+      ], why: [
+        "Copper sulphate crystals seem dry but contain **water of crystallisation**. Heating removes it.",
+      ] },
+      { t: "dia", id: "abs_cuso4" },
+      { t: "key", title: "Water of crystallisation", s: "The **fixed number of water molecules present in one formula unit** of a salt. Five water molecules are present in one formula unit of copper sulphate: **CuSO4.5H2O**. So the crystals of Na2CO3.10H2O are **not wet**." },
+      { t: "ul", items: ["**Gypsum** is another salt with water of crystallisation. It has **two** water molecules: **CaSO4.2H2O**."] },
+      { t: "h", s: "Plaster of Paris" },
+      { t: "ul", items: [
+        "On heating gypsum at **373 K**, it loses water and becomes **calcium sulphate hemihydrate, CaSO4.½H2O**. This is **Plaster of Paris**.",
+        "It is a white powder. On mixing with water it changes back to gypsum, giving a **hard solid mass**.",
+        "Only **half a water molecule** is shown because **two formula units of CaSO4 share one molecule of water**.",
+      ] },
+      { t: "eq", lines: ["CaSO4.2H2O →(373 K) CaSO4.½H2O + 1½H2O", "CaSO4.½H2O + 1½H2O → CaSO4.2H2O"] },
+      { t: "dia", id: "abs_gypsum" },
+      { t: "ul", items: [
+        "Doctors use Plaster of Paris to support **fractured bones** in the right position.",
+        "It is used for making **toys, materials for decoration** and for making **surfaces smooth**.",
+        "It must be stored in a **moisture-proof container**, because moisture changes it into hard gypsum and it becomes useless.",
+      ] },
+      { t: "note", title: "Why is it called Plaster of Paris?", s: "The book asks you to find out. The name is because the gypsum from which it was first made was found in large amounts near **Paris**." },
+      { t: "qa", title: "Check yourself", items: [
+        ["Write the equation for Plaster of Paris with water.", "CaSO4.½H2O + 1½H2O → CaSO4.2H2O"],
+        ["Why should Plaster of Paris be stored in a moisture-proof container?", "Moisture changes it into hard gypsum, so it becomes useless."],
+      ] },
+    ],
+  },
+];

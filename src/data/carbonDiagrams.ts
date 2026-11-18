@@ -1,3 +1,4 @@
+import { ACID_DIAGRAMS } from "./acidDiagrams";
 import { Scene } from "../components/sceneKit";
 import { LEWIS } from "../components/chemLewis";
 import { mol, alkane, cyc, scheme, skeleton, C_, O_, H_, ChainAtom } from "../components/chemMol";
@@ -169,3 +170,6 @@ add("cmp_c3h8o", () => scheme([[D("m_propan1ol")], [D("m_propan2ol")], [D("m_met
 add("cmp_c3h6o", () => scheme([[D("m_propanal")], [D("m_propanone")]], "Functional isomers: C₃H₆O"));
 add("cmp_c4h8", () => scheme([[D("m_but1ene")], [D("m_but2ene")], [D("m_2mpropene")]], "Alkene isomers of C₄H₈"));
 add("cmp_c2h6o", () => scheme([[D("m_ethanol")], [D("m_dimethylether")]], "Functional isomers: C₂H₆O"));
+
+// Class X Acids, Bases and Salts diagrams
+Object.assign(DIAGRAMS, ACID_DIAGRAMS);
