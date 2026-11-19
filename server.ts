@@ -16,6 +16,8 @@ import { VERIFY_SYSTEM, VERIFY_TOOL, buildClaimText, decideVerification } from "
 import { signMarksReviewToken, verifyMarksReviewToken } from "./marksReviewToken.js";
 import { COUNTRIES, statesOf, citiesOf } from "./places.js";
 import { MOCK_SERIES, MOCK_TESTS } from "./mockTests.js";
+import { findMockRow, normName, percentOf, topThree } from "./mockResults.js";
+import type { MockResults } from "./mockResults.js";
 import { GOOGLE_REVIEW_URL } from "./feedbackConfig.js";
 import { simulateStandardReaction } from "./reactionEngine.js";
 
@@ -9013,21 +9015,63 @@ function buildApp(): express.Express {
     return [...bySubject.values()].map((e) => ({ subject: e.subject, examName: e.examName, academicYear: e.academicYear, percentage: e.percentage, verified: e.verificationStatus === "verified" }));
   }
 
+  // The published results of the mock tests are one private file in the "downloads" storage bucket (names and marks of students are not
+  // kept in the code). Read at most once a minute; a missing or unreadable file simply means no result is shown yet.
+  let mockResultsCache: { at: number; data: MockResults } | null = null;
+  async function loadMockResults(): Promise<MockResults> {
+    if (mockResultsCache && Date.now() - mockResultsCache.at < 60_000) return mockResultsCache.data;
+    let data: MockResults = {};
+    try {
+      const { data: blob } = await supabase.storage.from("downloads").download("mock-results.json");
+      if (blob) data = JSON.parse(await blob.text());
+    } catch (e: any) {
+      console.warn("Could not read the mock test results:", e?.message);
+    }
+    mockResultsCache = { at: Date.now(), data };
+    return data;
+  }
+
   // The Class X Mock Test Series shown on the home page. Only students of that class (and the teacher) get the list;
   // the PDFs themselves are opened through /mocktest/... (protectedFiles.ts, kind "m"), which checks the login again.
   app.get("/api/mock-tests", async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const { data: row } = await supabase.from("users").select("student_class, student_type, role").eq("email", auth.email).maybeSingle();
+    const { data: row } = await supabase.from("users").select("name, student_class, student_type, role").eq("email", auth.email).maybeSingle();
     if (!row) return res.status(404).json({ error: "Account not found." });
     const isAdmin = row.role === "admin";
     if (!isAdmin && row.student_class !== MOCK_SERIES.classLabel) return res.json({ series: null, tests: [], canDownload: false });
+    // The published results. A student gets the top three and only his or her own row; the teacher gets every row and the names of the
+    // Class X students who are not in the result (they did not attempt the test).
+    const MOCK_RESULTS = await loadMockResults();
+    let classNames: string[] | null = null;
+    if (isAdmin && Object.keys(MOCK_RESULTS).length > 0) {
+      const { data: cls } = await supabase.from("users").select("name").eq("student_class", MOCK_SERIES.classLabel).eq("role", "student").eq("status", "approved");
+      classNames = (cls || []).map((u: any) => String(u.name || "").trim()).filter(Boolean);
+    }
+    const resultFor = (testId: string, maxMarks: number) => {
+      const r = MOCK_RESULTS[testId];
+      if (!r) return null;
+      const finals = r.rows.map((x) => x.finalMarks);
+      const average = finals.reduce((a, b) => a + b, 0) / finals.length;
+      const highest = Math.max(...finals);
+      const mine = isAdmin ? null : findMockRow(r, row.name);
+      const one = (x: (typeof r.rows)[number]) => ({ rank: x.rank, name: x.name, correct: x.correct, wrong: x.wrong, notAttempted: x.notAttempted, marks: x.marks, penalty: x.penalty, finalMarks: x.finalMarks, percent: percentOf(x.finalMarks, maxMarks), remark: x.remark });
+      return {
+        maxMarks, appeared: r.rows.length, average: Math.round(average * 100) / 100, averagePercent: percentOf(average, maxMarks),
+        highest: { marks: highest, names: r.rows.filter((x) => x.finalMarks === highest).map((x) => x.name) },
+        topThree: topThree(r),
+        me: isAdmin ? null : mine ? { attempted: true, ...one(mine) } : { attempted: false },
+        all: isAdmin ? r.rows.map(one) : null,
+        notAttempted: isAdmin && classNames ? classNames.filter((n) => !r.rows.some((x) => x.names.includes(normName(n)))).sort((a, b) => a.localeCompare(b)) : null,
+      };
+    };
     return res.json({
       series: { title: MOCK_SERIES.title, summary: MOCK_SERIES.summary, totalTests: MOCK_SERIES.totalTests },
       canDownload: isAdmin || row.student_type !== "online",
       tests: MOCK_TESTS.filter((t) => t.classLabel === MOCK_SERIES.classLabel).map((t) => ({
         id: t.id, number: t.number, title: t.title, subject: t.subject, date: t.date, durationMinutes: t.durationMinutes,
         maxMarks: t.maxMarks, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile,
+        result: resultFor(t.id, t.maxMarks),
       })),
     });
   });

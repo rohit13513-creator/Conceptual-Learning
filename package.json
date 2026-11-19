@@ -7,7 +7,8 @@
     "dev": "tsx server.ts",
     "test:reactions": "tsx scripts/test-reaction-engine.mts",
     "test:uploads": "tsx scripts/test-upload-readable.mts",
-    "build": "tsx scripts/test-reaction-engine.mts && tsx scripts/test-upload-readable.mts && vite build && node scripts/protect-build.mjs && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "test:mock": "tsx scripts/test-mock-results.mts",
+    "build": "tsx scripts/test-reaction-engine.mts && tsx scripts/test-upload-readable.mts && tsx scripts/test-mock-results.mts && vite build && node scripts/protect-build.mjs && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
