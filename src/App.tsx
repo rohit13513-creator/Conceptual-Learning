@@ -3104,7 +3104,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const [qbSubject, setQbSubject] = useState<'physics' | 'chemistry' | 'biology' | 'maths' | 'science' | 'foundations'>('physics');
   // Class X Biology now has two chapters -- this tracks which one is active whenever qbSubject === 'biology'.
   const [physicsChapter9, setPhysicsChapter9] = useState<'motion' | 'forces' | 'energy' | 'sound'>('motion');
-  const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination' | 'reproduction' | 'heredity'>('life-processes');
+  const [bioChapter10, setBioChapter10] = useState<'life-processes' | 'control-coordination' | 'reproduction' | 'heredity' | 'environment'>('life-processes');
   const [chemChapter10, setChemChapter10] = useState<'reactions' | 'carbon' | 'acids' | 'metals'>('reactions');
   // Class X Physics has two chapters (Light, Electricity) -- tracked whenever preparingFor === '10th' && qbSubject === 'physics'.
   const [physicsChapter10, setPhysicsChapter10] = useState<'light' | 'electricity'>('light');
@@ -3178,7 +3178,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   const [qbankMcqRevealed, setQbankMcqRevealed] = useState<Set<string>>(new Set());
 
   // Class X Acids, Bases and Salts and Metals and Non-metals have four-mark long questions; every other chapter has five-mark ones.
-  const longMarks = preparingFor === '10th' && qbSubject === 'chemistry' && (chemChapter10 === 'acids' || chemChapter10 === 'metals') ? 4 : 5;
+  const longMarks = (preparingFor === '10th' && qbSubject === 'chemistry' && (chemChapter10 === 'acids' || chemChapter10 === 'metals')) || (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'environment') ? 4 : 5;
 
   // The question banks for a class are downloaded the first time one of the three screens that show
   // them is opened (not at log-in). Until then the lists are empty and those screens show a loading note.
@@ -5940,7 +5940,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
 
       {activeView === 'bioNotes10' && (
         <div className="flex-1 flex flex-col overflow-hidden h-full">
-          <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
+          <div className={`shrink-0 flex items-center flex-wrap gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
             <span className={`text-[11px] font-black uppercase tracking-widest font-mono mr-1 ${isLightMode ? 'text-slate-500' : 'text-slate-500'}`}>Chapter:</span>
             <button
               onClick={() => setBioChapter10('life-processes')}
@@ -5982,8 +5982,20 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             >
               Heredity
             </button>
+            <button
+              onClick={() => setBioChapter10('environment')}
+              className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                bioChapter10 === 'environment'
+                  ? isLightMode ? 'bg-green-600 text-white' : 'bg-green-500 text-slate-950'
+                  : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Our Environment
+            </button>
           </div>
-          {bioChapter10 === 'heredity' ? (
+          {bioChapter10 === 'environment' ? (
+            <LearnCarbon10 key="environment" chapter="environment" isLightMode={isLightMode} onCompleteNotes={() => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); }} onBack={() => changeView('hub')} />
+          ) : bioChapter10 === 'heredity' ? (
             <LearnHeredity10
               isLightMode={isLightMode}
               onCompleteNotes={() => { setPreparingFor('10th'); setQbSubject('biology'); changeView('ncert'); }}
@@ -6308,7 +6320,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 </h2>
                 <p className="text-sm font-semibold text-slate-300">
                   {preparingFor === '10th' && qbSubject === 'biology'
-                    ? `Search & study official ${bioChapter10 === 'heredity' ? 'Heredity' : bioChapter10 === 'reproduction' ? 'How do Organisms Reproduce?' : bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
+                    ? `Search & study official ${bioChapter10 === 'environment' ? 'Our Environment' : bioChapter10 === 'heredity' ? 'Heredity' : bioChapter10 === 'reproduction' ? 'How do Organisms Reproduce?' : bioChapter10 === 'control-coordination' ? 'Control & Coordination' : 'Life Processes'} textbook questions with exact step-by-step solutions.`
                     : <>Search & study official {preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 'Class 8' : preparingFor === '8th' ? 'Class VIII' : preparingFor === '9th' ? 'Class IX' : 'Class X'} {preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Squares & Cubes' : 'Quadrilaterals') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'The Invisible Living World Beyond Our Naked Eye' : scienceChapter8 === 'health' ? 'Health: The Ultimate Treasure' : scienceChapter8 === 'matter' ? 'Particulate Nature of Matter' : scienceChapter8 === 'elements-compounds' ? 'Nature of Matter: Elements, Compounds, and Mixtures' : 'Exploring the Investigative World of Science') : preparingFor === '9th' && qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Sound Waves' : physicsChapter9 === 'energy' ? 'Work, Energy and Simple Machines' : physicsChapter9 === 'forces' ? 'Forces' : 'Describing Motion Around Us') : preparingFor === '9th' && qbSubject === 'maths' ? (mathsChapter9 === 'quadrilaterals' ? 'Quadrilaterals' : mathsChapter9 === 'algorithms' ? 'The World of Algorithms' : mathsChapter9 === 'linear' ? 'Two Variables, One Line' : mathsChapter9 === 'propositions' ? 'Propositions and their Converses' : 'Circles') : preparingFor === '9th' && qbSubject === 'foundations' ? 'How Science Works' : preparingFor === '9th' && bioChapter9 === 'diversity' ? 'Patterns in Life: Diversity and Classification' : preparingFor === '9th' && bioChapter9 === 'tissues' ? 'Tissues in Action' : preparingFor === '9th' ? 'Cell' : preparingFor === '10th' && qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? 'Carbon and its Compounds' : chemChapter10 === 'acids' ? 'Acids, Bases and Salts' : chemChapter10 === 'metals' ? 'Metals and Non-metals' : 'Chemical Reactions and Equations') : preparingFor === '10th' && physicsChapter10 === 'electricity' ? 'Electricity' : 'Light'} textbook questions with exact step-by-step solutions.</>}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1.5">
@@ -6364,7 +6376,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             )}
 
             {preparingFor === '10th' && qbSubject === 'biology' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button
                   onClick={() => setBioChapter10('life-processes')}
@@ -6389,6 +6401,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'heredity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Heredity
+                </button>
+                <button
+                  onClick={() => setBioChapter10('environment')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'environment' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Our Environment
                 </button>
               </div>
             )}
@@ -6808,7 +6826,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             )}
 
             {preparingFor === '10th' && qbSubject === 'biology' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button
                   onClick={() => setBioChapter10('life-processes')}
@@ -6833,6 +6851,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'heredity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Heredity
+                </button>
+                <button
+                  onClick={() => setBioChapter10('environment')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'environment' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Our Environment
                 </button>
               </div>
             )}
@@ -7631,7 +7655,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             )}
 
             {preparingFor === '10th' && qbSubject === 'biology' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button
                   onClick={() => setBioChapter10('life-processes')}
@@ -7656,6 +7680,12 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                   className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'heredity' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
                 >
                   Heredity
+                </button>
+                <button
+                  onClick={() => setBioChapter10('environment')}
+                  className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${bioChapter10 === 'environment' ? 'bg-green-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                >
+                  Our Environment
                 </button>
               </div>
             )}
@@ -7732,7 +7762,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
                 initialGrade={preparingFor === '8th' ? '8th' : preparingFor === '9th' ? '9th' : preparingFor === '10th' ? '10th' : 'jee'}
                 customQuestions={selfAssessmentQuestions}
                 subjectTitle={preparingFor === '8th' && qbSubject === 'maths' ? 'Maths Self-Assessment' : preparingFor === '8th' && qbSubject === 'science' ? 'Science Self-Assessment' : preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity' ? 'Physics Self-Assessment' : preparingFor === '10th' && qbSubject === 'chemistry' ? 'Chemistry Self-Assessment' : preparingFor === '10th' && qbSubject === 'biology' ? 'Biology Self-Assessment' : preparingFor === '9th' ? (qbSubject === 'physics' ? 'Physics Self-Assessment' : qbSubject === 'foundations' ? 'Science Self-Assessment' : qbSubject === 'maths' ? 'Maths Self-Assessment' : 'Biology Self-Assessment') : undefined}
-                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity' ? 'Ready to test your knowledge of Electricity? (100 questions, 60 minutes)' : preparingFor === '10th' && qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? 'Ready to test your knowledge of Carbon and its Compounds? (80 questions, 50 minutes)' : chemChapter10 === 'acids' ? 'Ready to test your knowledge of Acids, Bases and Salts? (60 questions, 45 minutes)' : chemChapter10 === 'metals' ? 'Ready to test your knowledge of Metals and Non-metals? (60 questions, 45 minutes)' : 'Ready to test your knowledge of Chemical Reactions and Equations?') : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? 'Ready to test your knowledge of Heredity? (80 questions, 50 minutes)' : bioChapter10 === 'reproduction' ? 'Ready to test your knowledge of How do Organisms Reproduce? (80 questions, 50 minutes)' : bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Ready to test your knowledge of Sound? (100 questions, 60 minutes)' : physicsChapter9 === 'energy' ? 'Ready to test your knowledge of Work, Energy and Simple Machines? (80 questions, 50 minutes)' : physicsChapter9 === 'forces' ? 'Ready to test your knowledge of Forces? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Motion?') : qbSubject === 'foundations' ? 'Ready to test your knowledge of How Science Works? (80 questions, 50 minutes)' : qbSubject === 'maths' ? (mathsChapter9 === 'quadrilaterals' ? 'Ready to test your knowledge of Quadrilaterals? (80 questions, 60 minutes)' : mathsChapter9 === 'algorithms' ? 'Ready to test your knowledge of The World of Algorithms? (60 questions, 60 minutes)' : mathsChapter9 === 'linear' ? 'Ready to test your knowledge of Two Variables, One Line? (50 questions, 40 minutes)' : mathsChapter9 === 'propositions' ? 'Ready to test your knowledge of Propositions and their Converses? (50 questions, 25 minutes)' : 'Ready to test your knowledge of Circles? (100 questions, 60 minutes)') : bioChapter9 === 'diversity' ? 'Ready to test your knowledge of Diversity and Classification? (80 questions, 45 minutes)' : bioChapter9 === 'tissues' ? 'Ready to test your knowledge of Tissues in Action? (80 questions, 50 minutes)' : 'Ready to test your knowledge of the Cell?') : undefined}
+                subjectSubtitle={preparingFor === '8th' && qbSubject === 'maths' ? (mathsChapter8 === 'square-and-cube' ? 'Ready to test your knowledge of Squares & Cubes?' : 'Ready to test your knowledge of Quadrilaterals?') : preparingFor === '8th' && qbSubject === 'science' ? (scienceChapter8 === 'invisible-living-world' ? 'Ready to test your knowledge of the Invisible Living World?' : scienceChapter8 === 'health' ? 'Ready to test your knowledge of Health: The Ultimate Treasure?' : scienceChapter8 === 'matter' ? 'Ready to test your knowledge of the Particulate Nature of Matter?' : scienceChapter8 === 'elements-compounds' ? 'Ready to test your knowledge of Elements, Compounds, and Mixtures?' : 'Ready to test your understanding of scientific inquiry?') : preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity' ? 'Ready to test your knowledge of Electricity? (100 questions, 60 minutes)' : preparingFor === '10th' && qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? 'Ready to test your knowledge of Carbon and its Compounds? (80 questions, 50 minutes)' : chemChapter10 === 'acids' ? 'Ready to test your knowledge of Acids, Bases and Salts? (60 questions, 45 minutes)' : chemChapter10 === 'metals' ? 'Ready to test your knowledge of Metals and Non-metals? (60 questions, 45 minutes)' : 'Ready to test your knowledge of Chemical Reactions and Equations?') : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'environment' ? 'Ready to test your knowledge of Our Environment? (60 questions, 30 minutes)' : bioChapter10 === 'heredity' ? 'Ready to test your knowledge of Heredity? (80 questions, 50 minutes)' : bioChapter10 === 'reproduction' ? 'Ready to test your knowledge of How do Organisms Reproduce? (80 questions, 50 minutes)' : bioChapter10 === 'control-coordination' ? 'Ready to test your knowledge of Control & Coordination?' : 'Ready to test your knowledge of Life Processes?') : preparingFor === '9th' ? (qbSubject === 'physics' ? (physicsChapter9 === 'sound' ? 'Ready to test your knowledge of Sound? (100 questions, 60 minutes)' : physicsChapter9 === 'energy' ? 'Ready to test your knowledge of Work, Energy and Simple Machines? (80 questions, 50 minutes)' : physicsChapter9 === 'forces' ? 'Ready to test your knowledge of Forces? (80 questions, 50 minutes)' : 'Ready to test your knowledge of Motion?') : qbSubject === 'foundations' ? 'Ready to test your knowledge of How Science Works? (80 questions, 50 minutes)' : qbSubject === 'maths' ? (mathsChapter9 === 'quadrilaterals' ? 'Ready to test your knowledge of Quadrilaterals? (80 questions, 60 minutes)' : mathsChapter9 === 'algorithms' ? 'Ready to test your knowledge of The World of Algorithms? (60 questions, 60 minutes)' : mathsChapter9 === 'linear' ? 'Ready to test your knowledge of Two Variables, One Line? (50 questions, 40 minutes)' : mathsChapter9 === 'propositions' ? 'Ready to test your knowledge of Propositions and their Converses? (50 questions, 25 minutes)' : 'Ready to test your knowledge of Circles? (100 questions, 60 minutes)') : bioChapter9 === 'diversity' ? 'Ready to test your knowledge of Diversity and Classification? (80 questions, 45 minutes)' : bioChapter9 === 'tissues' ? 'Ready to test your knowledge of Tissues in Action? (80 questions, 50 minutes)' : 'Ready to test your knowledge of the Cell?') : undefined}
                 durationSeconds={preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world' ? 900 : preparingFor === '8th' && qbSubject === 'science' && (scienceChapter8 === 'health' || scienceChapter8 === 'matter' || scienceChapter8 === 'elements-compounds') ? 1800 : preparingFor === '8th' && (qbSubject === 'maths' || qbSubject === 'science') ? 2400 : preparingFor === '10th' && qbSubject === 'biology' ? (bioChapter10 === 'reproduction' || bioChapter10 === 'heredity' ? 3000 : 1800) : preparingFor === '9th' && qbSubject === 'physics' && physicsChapter9 === 'sound' ? 3600 : preparingFor === '9th' && qbSubject === 'physics' && (physicsChapter9 === 'forces' || physicsChapter9 === 'energy') ? 3000 : preparingFor === '9th' && qbSubject === 'maths' ? (mathsChapter9 === 'quadrilaterals' ? 3600 : mathsChapter9 === 'algorithms' ? 3600 : mathsChapter9 === 'linear' ? 2400 : mathsChapter9 === 'propositions' ? 1500 : 3600) : preparingFor === '9th' && qbSubject === 'foundations' ? 3000 : preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'tissues' ? 3000 : preparingFor === '9th' && qbSubject === 'biology' && bioChapter9 === 'diversity' ? 2700 : preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon' ? 3000 : preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity' ? 3600 : chemChapter10 === 'acids' || chemChapter10 === 'metals' ? 2700 : undefined}
                 isLightMode={isLightMode}
               />

@@ -34,6 +34,12 @@ import { MNM10_VERY_SHORT, MNM10_SHORT } from './mnm10_short';
 import { MNM10_LONG, MNM10_COMPETENCY } from './mnm10_long';
 import { MNM10_NCERT_SOLVED } from './mnm10_ncert';
 import { MNM10_SELF_ASSESSMENT } from './mnm10_self';
+import { ENV10_MCQS } from './env10_mcq';
+import { ENV10_ASSERTIONS } from './env10_ar';
+import { ENV10_VERY_SHORT, ENV10_SHORT } from './env10_short';
+import { ENV10_LONG, ENV10_COMPETENCY } from './env10_long';
+import { ENV10_NCERT_SOLVED } from './env10_ncert';
+import { ENV10_SELF_ASSESSMENT } from './env10_self';
 import { ELEC10_MCQS } from './elec10_mcq';
 import { ELEC10_ASSERTIONS } from './elec10_ar';
 import { ELEC10_VERY_SHORT, ELEC10_SHORT } from './elec10_short';
@@ -53,6 +59,16 @@ export function getBank(p: BankParams): Bank {
           long: ELEC10_LONG,
           assertion: ELEC10_ASSERTIONS,
           competency: ELEC10_COMPETENCY,
+    };
+  } else if (preparingFor === '10th' && qbSubject === 'biology' && bioChapter10 === 'environment') {
+    return {
+          ncert: ENV10_NCERT_SOLVED,
+          mcqs: ENV10_MCQS,
+          veryshort: ENV10_VERY_SHORT,
+          short: ENV10_SHORT,
+          long: ENV10_LONG,
+          assertion: ENV10_ASSERTIONS,
+          competency: ENV10_COMPETENCY,
     };
   } else if (preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon') {
     return {
@@ -150,5 +166,5 @@ export function getBank(p: BankParams): Bank {
 export function getSelf(p: BankParams): any[] {
   const { qbSubject, bioChapter10, chemChapter10, physicsChapter10 } = p;
   if (qbSubject === 'physics' && physicsChapter10 === 'electricity') return ELEC10_SELF_ASSESSMENT;
-  return (qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? CARBON10_SELF_ASSESSMENT : chemChapter10 === 'acids' ? ACID10_SELF_ASSESSMENT : chemChapter10 === 'metals' ? MNM10_SELF_ASSESSMENT : CHEMISTRY10_SELF_ASSESSMENT) : qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT);
+  return (qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? CARBON10_SELF_ASSESSMENT : chemChapter10 === 'acids' ? ACID10_SELF_ASSESSMENT : chemChapter10 === 'metals' ? MNM10_SELF_ASSESSMENT : CHEMISTRY10_SELF_ASSESSMENT) : qbSubject === 'biology' ? (bioChapter10 === 'environment' ? ENV10_SELF_ASSESSMENT : bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT);
 }

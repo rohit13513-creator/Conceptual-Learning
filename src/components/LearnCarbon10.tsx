@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame, Trophy, Zap } from "lucide-react";
+import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame, Trophy, Zap, Leaf, Sun, Recycle, Network } from "lucide-react";
 import { DownloadNotesLink } from "./DownloadNotesLink";
 import { SceneFigure } from "./SceneFigure";
 import { parseMarkup, fm } from "./sceneKit";
@@ -20,6 +20,8 @@ import { ELEC_A } from "../data/elecNotesA";
 import { ELEC_B } from "../data/elecNotesB";
 import { ELEC_C } from "../data/elecNotesC";
 import { ELEC_D } from "../data/elecNotesD";
+import { ENV_A } from "../data/envNotesA";
+import { ENV_B } from "../data/envNotesB";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -29,6 +31,7 @@ const CHAPTERS = {
   carbon: { topics: [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D], title: "Carbon and its Compounds", mapId: "ch_mindmap", pdfUrl: "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf" as string | undefined, pdfName: "Class-10-Carbon-Compounds-Notes.pdf" },
   acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: "/download/downloads/Class-10-Acids-Bases-Salts-Notes.pdf" as string | undefined, pdfName: "Class-10-Acids-Bases-Salts-Notes.pdf" },
   metals: { topics: [...MNM_A, ...MNM_B, ...MNM_C, ...MNM_D], title: "Metals and Non-metals", mapId: "mnm_mindmap", pdfUrl: "/download/downloads/Class-10-Metals-Non-metals-Notes.pdf" as string | undefined, pdfName: "Class-10-Metals-Non-metals-Notes.pdf" },
+  environment: { topics: [...ENV_A, ...ENV_B], title: "Our Environment", mapId: "ev_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
 };
 
@@ -38,6 +41,7 @@ const ICONS: Record<string, React.ElementType> = {
   Indicators: Beaker, "Acids and bases": FlaskConical, "Reactions of acids": Flame, "Reactions of bases": Flame, "Acids and bases in water": Droplets, "pH scale": Atom, "pH in life": Droplets, Salts: ListChecks, "Useful salts": Beaker,
   "Physical properties": Atom, "Chemical properties of metals": Flame, "Reactivity series": ListChecks, "Non-metals": Atom, "Ionic bonding": FlaskConical, Metallurgy: Beaker, Corrosion: Droplets,
   "Current and circuit": Zap, "Potential difference": Zap, Circuits: ListChecks, "Ohm's law": Atom, Resistance: Atom, Series: ListChecks, Parallel: ListChecks, "Heating effect": Flame, "Electric power": Zap, Activities: Beaker,
+  Ecosystem: Leaf, Organisms: Leaf, "Food chain": ListChecks, "Energy flow": Sun, "Food web": Network, Biomagnification: Droplets, "Ozone layer": Sun, Garbage: Recycle,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
@@ -131,7 +135,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
