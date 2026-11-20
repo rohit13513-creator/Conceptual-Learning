@@ -5845,7 +5845,7 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
         <div className="flex-1 flex flex-col overflow-hidden h-full">
           <div className={`shrink-0 flex items-center gap-2 px-4 py-2 border-b transition-colors duration-300 ${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0d1424] border-slate-800'}`}>
             <span className="text-[11px] font-black uppercase tracking-widest font-mono mr-1 text-slate-500">Chapter:</span>
-            {(['reactions', 'carbon', 'acids', 'metals'] as const).map((ch) => (
+            {(['reactions', 'acids', 'metals', 'carbon'] as const).map((ch) => (
               <button
                 key={ch}
                 onClick={() => setChemChapter10(ch)}
@@ -6304,9 +6304,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button onClick={() => setChemChapter10('reactions')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'reactions' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Chemical Reactions</button>
-                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
                 <button onClick={() => setChemChapter10('acids')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'acids' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Acids, Bases & Salts</button>
                 <button onClick={() => setChemChapter10('metals')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'metals' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Metals & Non-metals</button>
+                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
               </div>
             )}
 
@@ -6740,9 +6740,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button onClick={() => setChemChapter10('reactions')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'reactions' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Chemical Reactions</button>
-                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
                 <button onClick={() => setChemChapter10('acids')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'acids' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Acids, Bases & Salts</button>
                 <button onClick={() => setChemChapter10('metals')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'metals' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Metals & Non-metals</button>
+                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
               </div>
             )}
 
@@ -7555,9 +7555,9 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-black uppercase tracking-widest font-mono text-slate-500">Chapter:</span>
                 <button onClick={() => setChemChapter10('reactions')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'reactions' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Chemical Reactions</button>
-                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
                 <button onClick={() => setChemChapter10('acids')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'acids' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Acids, Bases & Salts</button>
                 <button onClick={() => setChemChapter10('metals')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'metals' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Metals & Non-metals</button>
+                <button onClick={() => setChemChapter10('carbon')} className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${chemChapter10 === 'carbon' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Carbon & its Compounds</button>
               </div>
             )}
 
