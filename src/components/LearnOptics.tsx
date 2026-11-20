@@ -4206,27 +4206,6 @@ export function LearnOptics({ onLoadSimulator, preparingFor = '10th', onComplete
         ` }} />
         <div className="max-w-4xl mx-auto w-full space-y-8 pb-12 animate-fade-in">
 
-          {/* Special Class 10 PDF Export Banner */}
-          {preparingFor === '10th' && (
-            <div className={`bg-gradient-to-r border rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs ${isLightMode ? 'from-cyan-50 via-blue-50 to-cyan-50 border-cyan-300' : 'from-cyan-950/40 via-[#0a182d]/40 to-blue-950/40 border-cyan-500/20'}`}>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-cyan-400/10 flex items-center justify-center text-cyan-400 shrink-0">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div className="space-y-0.5">
-                  <h4 className="font-extrabold text-[#22d3ee] tracking-tight">Class X: optics notes</h4>
-                </div>
-              </div>
-              <PdfOnly><button
-                onClick={handleDownloadNotes}
-                className="shrink-0 flex items-center gap-1.5 py-2 px-4 bg-cyan-500 hover:bg-cyan-400 text-[#0d1424] font-black uppercase tracking-wider text-[11px] rounded-xl transition cursor-pointer hover:shadow-lg hover:shadow-cyan-400/5 active:scale-95"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Download Class 10 Notes (Handwritten & PDF)
-              </button></PdfOnly>
-            </div>
-          )}
-
           {/* ────── TOPIC 1: LIGHT & ELECTROMAGNETIC SPECTRUM ────── */}
           {activeTopic === 'light-em-spectrum' && (
             <div className="space-y-6 animate-fade-in" id="topic-light-em-spectrum">

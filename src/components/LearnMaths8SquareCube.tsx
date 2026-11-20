@@ -219,18 +219,6 @@ export function LearnMaths8SquareCube({ isLightMode = false, onCompleteNotes, on
 
         <div className="max-w-4xl mx-auto w-full space-y-8 pb-12 animate-fade-in">
 
-          {/* Header banner */}
-          <div className={`bg-gradient-to-r border rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-sm ${isLightMode ? "from-cyan-50 via-sky-50 to-cyan-50 border-cyan-300" : "from-cyan-950/40 via-[#0a1a28]/40 to-sky-950/40 border-cyan-500/20"}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-cyan-400/10 flex items-center justify-center text-cyan-400 shrink-0">
-                <Hash className="w-5 h-5" />
-              </div>
-              <div className="space-y-0.5">
-                <h4 className="font-extrabold text-cyan-400 tracking-tight">Chapter: A Square and a Cube</h4>
-              </div>
-            </div>
-          </div>
-
           {activeTopic === "introduction" && (
             <div className="space-y-6 animate-fade-in">
               <div className={`space-y-1.5 border-b pb-4 ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>

@@ -261,25 +261,6 @@ export function LearnChemistry({ isLightMode = false, onCompleteNotes, onGoToSel
 
         <div className="max-w-4xl mx-auto w-full space-y-8 pb-12 animate-fade-in">
 
-          {/* Header banner */}
-          <div className={`bg-gradient-to-r border rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs ${isLightMode ? "from-emerald-50 via-teal-50 to-emerald-50 border-emerald-300" : "from-emerald-950/40 via-[#0a2820]/40 to-teal-950/40 border-emerald-500/20"}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-400/10 flex items-center justify-center text-emerald-400 shrink-0">
-                <FlaskConical className="w-5 h-5" />
-              </div>
-              <div className="space-y-0.5">
-                <h4 className="font-extrabold text-emerald-400 tracking-tight">Class X: chemical reactions notes</h4>
-              </div>
-            </div>
-            <PdfOnly><button
-              onClick={handleDownloadNotes}
-              className="shrink-0 flex items-center gap-1.5 py-2 px-4 bg-emerald-500 hover:bg-emerald-400 text-[#0d1424] font-black uppercase tracking-wider text-[11px] rounded-xl transition cursor-pointer hover:shadow-lg hover:shadow-emerald-400/5 active:scale-95"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Download Chemistry Notes (PDF)
-            </button></PdfOnly>
-          </div>
-
           {activeTopic === "what-is-a-reaction" && (
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">

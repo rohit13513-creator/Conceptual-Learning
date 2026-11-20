@@ -264,18 +264,6 @@ export function LearnBiology({ isLightMode = false, onCompleteNotes, onGoToSelfA
 
         <div className="max-w-4xl mx-auto w-full space-y-8 pb-12 animate-fade-in">
 
-          {/* Header banner */}
-          <div className={`bg-gradient-to-r border rounded-2xl p-4.5 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-sm ${isLightMode ? "from-green-50 via-emerald-50 to-green-50 border-green-300" : "from-green-950/40 via-[#0a2018]/40 to-emerald-950/40 border-green-500/20"}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-green-400/10 flex items-center justify-center text-green-400 shrink-0">
-                <Dna className="w-5 h-5" />
-              </div>
-              <div className="space-y-0.5">
-                <h4 className="font-extrabold text-green-400 tracking-tight">Class IX: Cells, Notes</h4>
-              </div>
-            </div>
-          </div>
-
           {activeTopic === "intro-to-cells" && (
             <div className="space-y-6 animate-fade-in">
               <div className="space-y-1.5 border-b border-slate-800 pb-4">
