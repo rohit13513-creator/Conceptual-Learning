@@ -59,6 +59,7 @@ export interface CompetencyQuestion {
   caseDescription: string;
   subQuestions: {
     question: string;
+    marks?: number; // marks of this part (a four-mark case study is 1 + 1 + 2); shown as 2 when left out
     options?: string[];
     correctIndex?: number;
     answer: string;

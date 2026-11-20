@@ -1,5 +1,8 @@
 import { MNM_DIAGRAMS } from "./mnmDiagrams";
 import { ACID_DIAGRAMS } from "./acidDiagrams";
+import { ELEC_DIAGRAMS } from "./elecDiagrams";
+import { ELEC_DIAGRAMS_2 } from "./elecDiagrams2";
+import { ELEC_DIAGRAMS_3 } from "./elecDiagrams3";
 import { Scene } from "../components/sceneKit";
 import { LEWIS } from "../components/chemLewis";
 import { mol, alkane, cyc, scheme, skeleton, C_, O_, H_, ChainAtom } from "../components/chemMol";
@@ -177,3 +180,6 @@ Object.assign(DIAGRAMS, ACID_DIAGRAMS);
 
 // Class X Metals and Non-metals diagrams
 Object.assign(DIAGRAMS, MNM_DIAGRAMS);
+
+// Class X Physics, Electricity diagrams (circuits and graphs)
+Object.assign(DIAGRAMS, ELEC_DIAGRAMS, ELEC_DIAGRAMS_2, ELEC_DIAGRAMS_3);

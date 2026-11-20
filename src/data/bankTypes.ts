@@ -3,6 +3,7 @@ export interface BankParams {
   preparingFor: string;
   qbSubject: string;
   physicsChapter9: string;
+  physicsChapter10: string;
   bioChapter9: string;
   bioChapter10: string;
   chemChapter10: string;

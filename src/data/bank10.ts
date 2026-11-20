@@ -34,10 +34,27 @@ import { MNM10_VERY_SHORT, MNM10_SHORT } from './mnm10_short';
 import { MNM10_LONG, MNM10_COMPETENCY } from './mnm10_long';
 import { MNM10_NCERT_SOLVED } from './mnm10_ncert';
 import { MNM10_SELF_ASSESSMENT } from './mnm10_self';
+import { ELEC10_MCQS } from './elec10_mcq';
+import { ELEC10_ASSERTIONS } from './elec10_ar';
+import { ELEC10_VERY_SHORT, ELEC10_SHORT } from './elec10_short';
+import { ELEC10_LONG } from './elec10_long';
+import { ELEC10_COMPETENCY } from './elec10_case';
+import { ELEC10_NCERT_SOLVED } from './elec10_ncert';
+import { ELEC10_SELF_ASSESSMENT } from './elec10_self';
 
 export function getBank(p: BankParams): Bank {
-  const { preparingFor, qbSubject, bioChapter10, chemChapter10 } = p;
-  if (preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon') {
+  const { preparingFor, qbSubject, bioChapter10, chemChapter10, physicsChapter10 } = p;
+  if (preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity') {
+    return {
+          ncert: ELEC10_NCERT_SOLVED,
+          mcqs: ELEC10_MCQS,
+          veryshort: ELEC10_VERY_SHORT,
+          short: ELEC10_SHORT,
+          long: ELEC10_LONG,
+          assertion: ELEC10_ASSERTIONS,
+          competency: ELEC10_COMPETENCY,
+    };
+  } else if (preparingFor === '10th' && qbSubject === 'chemistry' && chemChapter10 === 'carbon') {
     return {
           ncert: CARBON10_NCERT_SOLVED,
           mcqs: [...CARBON10_MCQ_A, ...CARBON10_MCQ_B],
@@ -131,6 +148,7 @@ export function getBank(p: BankParams): Bank {
 }
 
 export function getSelf(p: BankParams): any[] {
-  const { qbSubject, bioChapter10, chemChapter10 } = p;
+  const { qbSubject, bioChapter10, chemChapter10, physicsChapter10 } = p;
+  if (qbSubject === 'physics' && physicsChapter10 === 'electricity') return ELEC10_SELF_ASSESSMENT;
   return (qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? CARBON10_SELF_ASSESSMENT : chemChapter10 === 'acids' ? ACID10_SELF_ASSESSMENT : chemChapter10 === 'metals' ? MNM10_SELF_ASSESSMENT : CHEMISTRY10_SELF_ASSESSMENT) : qbSubject === 'biology' ? (bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT);
 }
