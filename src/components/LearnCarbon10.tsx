@@ -23,7 +23,7 @@ import type { CBlock } from "../data/carbonNotesTypes";
 
 const CHAPTERS = {
   carbon: { topics: [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D], title: "Carbon and its Compounds", mapId: "ch_mindmap", pdfUrl: "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf" as string | undefined, pdfName: "Class-10-Carbon-Compounds-Notes.pdf" },
-  acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
+  acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: "/download/downloads/Class-10-Acids-Bases-Salts-Notes.pdf" as string | undefined, pdfName: "Class-10-Acids-Bases-Salts-Notes.pdf" },
   metals: { topics: [...MNM_A, ...MNM_B, ...MNM_C, ...MNM_D], title: "Metals and Non-metals", mapId: "mnm_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
 };
 
