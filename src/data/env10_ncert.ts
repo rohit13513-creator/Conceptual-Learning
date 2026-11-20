@@ -11,7 +11,7 @@ const Q = (questionNumber: string, question: string, given: Record<string, strin
   derivationSteps: derivationSteps.map(u), finalAnswer: u(finalAnswer), conceptualTip: conceptualTip ? u(conceptualTip) : undefined, diagram,
 });
 
-export const ENV10_NCERT_SOLVED: NCERTSolvedQuestion[] = [
+const ALL_SOLVED: NCERTSolvedQuestion[] = [
   // ── text questions on ecosystem and aquarium ──
   Q("Activity 13.1 (a)", "Can we leave the aquarium as such after we set it up? Why does it have to be cleaned once in a while? Do we have to clean ponds or lakes in the same manner? Why or why not?",
     { "System": "aquarium (human-made ecosystem)", "Compare with": "ponds and lakes" }, "Role of decomposers and size of the ecosystem",
@@ -157,4 +157,11 @@ export const ENV10_NCERT_SOLVED: NCERTSolvedQuestion[] = [
     { "Asked": "e-waste and recycling of plastics" }, "Safe disposal",
     ["Electronic items contain harmful materials such as lead, mercury and cadmium, which are poisonous and non-biodegradable.", "If they are thrown away, they pollute the soil and water and enter the food chain.", "Plastics are recycled by collecting, sorting, washing, melting and remoulding them into new items. Recycling saves the raw materials but uses energy and may release fumes, so it too has some impact."],
     "Electronic items hold poisonous metals that pollute the environment. Plastic recycling reduces waste but has some impact on the environment.", ""),
+];
+
+// The textbook questions and activities come first, in the order of the chapter; Exercises 1 to 9 follow together in their own order.
+const exNo = (q: NCERTSolvedQuestion) => { const m = q.questionNumber.match(/^Exercise (\d+)$/); return m ? Number(m[1]) : 0; };
+export const ENV10_NCERT_SOLVED: NCERTSolvedQuestion[] = [
+  ...ALL_SOLVED.filter((q) => !exNo(q)),
+  ...ALL_SOLVED.filter((q) => exNo(q)).sort((x, y) => exNo(x) - exNo(y)),
 ];
