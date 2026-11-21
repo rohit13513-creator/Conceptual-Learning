@@ -25,6 +25,9 @@ import { ENV_B } from "../data/envNotesB";
 import { MAG_A } from "../data/magNotesA";
 import { MAG_B } from "../data/magNotesB";
 import { MAG_C } from "../data/magNotesC";
+import { HARM_A } from "../data/harmNotesA";
+import { HARM_B } from "../data/harmNotesB";
+import { HARM_C } from "../data/harmNotesC";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -37,6 +40,7 @@ const CHAPTERS = {
   environment: { topics: [...ENV_A, ...ENV_B], title: "Our Environment", mapId: "ev_mindmap", pdfUrl: "/download/downloads/Class-10-Our-Environment-Notes.pdf" as string | undefined, pdfName: "Class-10-Our-Environment-Notes.pdf" },
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
+  harmony: { topics: [...HARM_A, ...HARM_B, ...HARM_C], title: "How Nature Works in Harmony", mapId: "hm_mindmap", pdfUrl: "/download/downloads/Class-8-Science-How-Nature-Works-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-How-Nature-Works-Notes.pdf" },
 };
 
 const ICONS: Record<string, React.ElementType> = {
@@ -46,6 +50,7 @@ const ICONS: Record<string, React.ElementType> = {
   "Physical properties": Atom, "Chemical properties of metals": Flame, "Reactivity series": ListChecks, "Non-metals": Atom, "Ionic bonding": FlaskConical, Metallurgy: Beaker, Corrosion: Droplets,
   "Current and circuit": Zap, "Potential difference": Zap, Circuits: ListChecks, "Ohm's law": Atom, Resistance: Atom, Series: ListChecks, Parallel: ListChecks, "Heating effect": Flame, "Electric power": Zap, Activities: Beaker,
   Oersted: Zap, Magnets: Atom, "Straight wire": Zap, "Circular loop": Atom, Solenoid: Atom, "Force on a conductor": Zap, "Induced current": Zap, "AC and DC": Zap, "Domestic circuits": Zap,
+  "Nature as one system": Leaf, Habitat: Leaf, "Levels of life": Network, "Every organism matters": Network, Interactions: Network, "Producers and consumers": Sun, "Food chains": ListChecks, Decomposers: Recycle, "Migratory birds": Leaf, Balance: Droplets, "Living together": Network, "Gifts of ecosystems": Leaf, Farming: Leaf,
   Ecosystem: Leaf, Organisms: Leaf, "Food chain": ListChecks, "Energy flow": Sun, "Food web": Network, Biomagnification: Droplets, "Ozone layer": Sun, Garbage: Recycle,
 };
 
@@ -140,7 +145,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);

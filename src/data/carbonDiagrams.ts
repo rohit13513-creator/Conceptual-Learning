@@ -5,6 +5,8 @@ import { ELEC_DIAGRAMS_2 } from "./elecDiagrams2";
 import { ELEC_DIAGRAMS_3 } from "./elecDiagrams3";
 import { ENV_DIAGRAMS } from "./envDiagrams";
 import { MAG_DIAGRAMS } from "./magDiagrams";
+import { HARM_DIAGRAMS_1 } from "./harmDiagrams";
+import { HARM_DIAGRAMS_2 } from "./harmDiagrams2";
 import { Scene } from "../components/sceneKit";
 import { LEWIS } from "../components/chemLewis";
 import { mol, alkane, cyc, scheme, skeleton, C_, O_, H_, ChainAtom } from "../components/chemMol";
@@ -189,3 +191,4 @@ Object.assign(DIAGRAMS, ELEC_DIAGRAMS, ELEC_DIAGRAMS_2, ELEC_DIAGRAMS_3);
 // Class X Science, Our Environment diagrams
 Object.assign(DIAGRAMS, ENV_DIAGRAMS);
 Object.assign(DIAGRAMS, MAG_DIAGRAMS);
+Object.assign(DIAGRAMS, HARM_DIAGRAMS_1, HARM_DIAGRAMS_2);
