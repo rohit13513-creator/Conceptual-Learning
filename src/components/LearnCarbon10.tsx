@@ -34,7 +34,7 @@ const CHAPTERS = {
   carbon: { topics: [...CARBON_A, ...CARBON_B, ...CARBON_C, ...CARBON_D], title: "Carbon and its Compounds", mapId: "ch_mindmap", pdfUrl: "/download/downloads/Class-10-Carbon-Compounds-Notes.pdf" as string | undefined, pdfName: "Class-10-Carbon-Compounds-Notes.pdf" },
   acids: { topics: [...ACID_A, ...ACID_B, ...ACID_C, ...ACID_D], title: "Acids, Bases and Salts", mapId: "abs_mindmap", pdfUrl: "/download/downloads/Class-10-Acids-Bases-Salts-Notes.pdf" as string | undefined, pdfName: "Class-10-Acids-Bases-Salts-Notes.pdf" },
   metals: { topics: [...MNM_A, ...MNM_B, ...MNM_C, ...MNM_D], title: "Metals and Non-metals", mapId: "mnm_mindmap", pdfUrl: "/download/downloads/Class-10-Metals-Non-metals-Notes.pdf" as string | undefined, pdfName: "Class-10-Metals-Non-metals-Notes.pdf" },
-  environment: { topics: [...ENV_A, ...ENV_B], title: "Our Environment", mapId: "ev_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
+  environment: { topics: [...ENV_A, ...ENV_B], title: "Our Environment", mapId: "ev_mindmap", pdfUrl: "/download/downloads/Class-10-Our-Environment-Notes.pdf" as string | undefined, pdfName: "Class-10-Our-Environment-Notes.pdf" },
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
 };
