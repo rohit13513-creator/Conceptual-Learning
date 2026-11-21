@@ -47,10 +47,27 @@ import { ELEC10_LONG } from './elec10_long';
 import { ELEC10_COMPETENCY } from './elec10_case';
 import { ELEC10_NCERT_SOLVED } from './elec10_ncert';
 import { ELEC10_SELF_ASSESSMENT } from './elec10_self';
+import { MAG10_MCQS } from './mag10_mcq';
+import { MAG10_ASSERTIONS } from './mag10_ar';
+import { MAG10_VERY_SHORT, MAG10_SHORT } from './mag10_short';
+import { MAG10_LONG } from './mag10_long';
+import { MAG10_COMPETENCY } from './mag10_case';
+import { MAG10_NCERT_SOLVED } from './mag10_ncert';
+import { MAG10_SELF_ASSESSMENT } from './mag10_self';
 
 export function getBank(p: BankParams): Bank {
   const { preparingFor, qbSubject, bioChapter10, chemChapter10, physicsChapter10 } = p;
-  if (preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity') {
+  if (preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'magnetic') {
+    return {
+          ncert: MAG10_NCERT_SOLVED,
+          mcqs: MAG10_MCQS,
+          veryshort: MAG10_VERY_SHORT,
+          short: MAG10_SHORT,
+          long: MAG10_LONG,
+          assertion: MAG10_ASSERTIONS,
+          competency: MAG10_COMPETENCY,
+    };
+  } else if (preparingFor === '10th' && qbSubject === 'physics' && physicsChapter10 === 'electricity') {
     return {
           ncert: ELEC10_NCERT_SOLVED,
           mcqs: ELEC10_MCQS,
@@ -165,6 +182,7 @@ export function getBank(p: BankParams): Bank {
 
 export function getSelf(p: BankParams): any[] {
   const { qbSubject, bioChapter10, chemChapter10, physicsChapter10 } = p;
+  if (qbSubject === 'physics' && physicsChapter10 === 'magnetic') return MAG10_SELF_ASSESSMENT;
   if (qbSubject === 'physics' && physicsChapter10 === 'electricity') return ELEC10_SELF_ASSESSMENT;
   return (qbSubject === 'chemistry' ? (chemChapter10 === 'carbon' ? CARBON10_SELF_ASSESSMENT : chemChapter10 === 'acids' ? ACID10_SELF_ASSESSMENT : chemChapter10 === 'metals' ? MNM10_SELF_ASSESSMENT : CHEMISTRY10_SELF_ASSESSMENT) : qbSubject === 'biology' ? (bioChapter10 === 'environment' ? ENV10_SELF_ASSESSMENT : bioChapter10 === 'heredity' ? HEREDITY10_SELF_ASSESSMENT : bioChapter10 === 'reproduction' ? REPRO10_SELF_ASSESSMENT : bioChapter10 === 'control-coordination' ? CC10_SELF_ASSESSMENT : BIOLOGY10_SELF_ASSESSMENT) : CLASSX_SELF_ASSESSMENT);
 }
