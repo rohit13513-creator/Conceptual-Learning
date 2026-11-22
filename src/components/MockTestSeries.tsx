@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardCheck, BookOpenCheck, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck, BookOpenCheck, ChevronDown, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // The Class X Mock Test Series on the home page: each test with its question paper and answer key, and the result
 // once it is published. The list comes from /api/mock-tests (only Class X students and the teacher receive it); the
@@ -34,6 +34,7 @@ const prettyDate =(iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateStri
 
 export function MockTestSeries({ token, isLightMode }: { token: string; isLightMode: boolean }) {
   const [data, setData] = useState<MockTestsResponse | null>(null);
+  const [openResults, setOpenResults] = useState<Record<string, boolean>>({}); // which tests have their result dropdown open
 
   useEffect(() => {
     let cancelled = false;
@@ -168,7 +169,7 @@ export function MockTestSeries({ token, isLightMode }: { token: string; isLightM
       </div>
 
       <div className="mt-4 space-y-4">
-        {data.tests.map((t) => {
+        {[...data.tests].sort((a, b) => b.number - a.number).map((t) => {
           const upcoming = t.date > today;
           return (
             <div key={t.id} className={`rounded-xl border p-4 space-y-3 ${light ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
@@ -197,7 +198,16 @@ export function MockTestSeries({ token, isLightMode }: { token: string; isLightM
                 <p className={`text-xs font-semibold ${muted}`}>The question paper will be available here on the day of the test.</p>
               )}
 
-              {t.result ? resultBlock(t.result) : (
+              {t.result ? (
+                <div className="space-y-3">
+                  <button type="button" aria-expanded={!!openResults[t.id]} onClick={() => setOpenResults((o) => ({ ...o, [t.id]: !o[t.id] }))}
+                    className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition ${light ? 'bg-amber-100 text-amber-900 hover:bg-amber-200' : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'}`}>
+                    <span className="inline-flex items-center gap-2"><Trophy className="w-4 h-4" /> {openResults[t.id] ? 'Hide result' : 'Check result'}</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${openResults[t.id] ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openResults[t.id] && resultBlock(t.result)}
+                </div>
+              ) : (
                 <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs font-bold ${light ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-amber-500/10 text-amber-300 border border-amber-500/25'}`}>
                   <Hourglass className="w-4 h-4 shrink-0 mt-px" />
                   <span>{upcoming ? 'The result will be displayed here after the test.' : 'Result will be displayed soon.'}</span>
