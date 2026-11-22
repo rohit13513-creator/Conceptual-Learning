@@ -8,11 +8,12 @@ export interface MockTest {
   title: string;
   subject: string;
   date: string;
-  durationMinutes: number;
-  maxMarks: number;
+  durationMinutes?: number; // left out for a test whose paper is not announced yet
+  maxMarks?: number; // left out for a test whose paper is not announced yet (a result needs it)
   note?: string; // one line shown on the card, e.g. the marking rule
   paperFile?: string; // file name in the private "downloads" storage folder
   keyFile?: string;
+  solutionsFile?: string; // the worked solutions of the paper
 }
 
 export const MOCK_SERIES = {
@@ -35,6 +36,28 @@ export const MOCK_TESTS: MockTest[] = [
     note: "+1 for a correct answer, -0.25 for a wrong answer, 0 if not attempted. A correct answer written with the option letter or the statement missing loses 1 mark (at most 5 marks).",
     paperFile: "mock-x-bio-1-paper.pdf",
     keyFile: "mock-x-bio-1-key.pdf",
+  },
+  {
+    id: "x-maths-1",
+    classLabel: "X",
+    number: 2,
+    title: "Maths Mock Test",
+    subject: "Mathematics (Standard)",
+    date: "2026-11-22",
+    durationMinutes: 150,
+    maxMarks: 80,
+    note: "Board pattern paper of 38 questions in five sections. Calculator is not allowed.",
+    paperFile: "mock-x-maths-1-paper.pdf",
+    keyFile: "mock-x-maths-1-key.pdf",
+    solutionsFile: "mock-x-maths-1-solutions.pdf",
+  },
+  {
+    id: "x-test-3",
+    classLabel: "X",
+    number: 3,
+    title: "Mock Test 3",
+    subject: "Subject and syllabus will be announced",
+    date: "2026-11-29",
   },
 ];
 

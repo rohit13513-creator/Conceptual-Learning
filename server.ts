@@ -9069,9 +9069,9 @@ function buildApp(): express.Express {
       series: { title: MOCK_SERIES.title, summary: MOCK_SERIES.summary, totalTests: MOCK_SERIES.totalTests },
       canDownload: isAdmin || row.student_type !== "online",
       tests: MOCK_TESTS.filter((t) => t.classLabel === MOCK_SERIES.classLabel).map((t) => ({
-        id: t.id, number: t.number, title: t.title, subject: t.subject, date: t.date, durationMinutes: t.durationMinutes,
-        maxMarks: t.maxMarks, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile,
-        result: resultFor(t.id, t.maxMarks),
+        id: t.id, number: t.number, title: t.title, subject: t.subject, date: t.date, durationMinutes: t.durationMinutes ?? null,
+        maxMarks: t.maxMarks ?? null, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile, hasSolutions: !!t.solutionsFile,
+        result: t.maxMarks ? resultFor(t.id, t.maxMarks) : null,
       })),
     });
   });

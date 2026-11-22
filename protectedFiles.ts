@@ -123,12 +123,12 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
   }
 
   if (kind === "m") {
-    // Mock Test Series: p = "<test id>/<paper|key>" to open, or "<test id>/<paper|key>/download" to save a copy.
+    // Mock Test Series: p = "<test id>/<paper|key|solutions>" to open, or "<test id>/<paper|key|solutions>/download" to save a copy.
     const [testId, which, action, ...rest] = rel.split("/");
     const test = findMockTest(testId || "");
-    if (rest.length || !test || (which !== "paper" && which !== "key") || (action !== undefined && action !== "download")) return send(res, 400, "Bad request");
+    if (rest.length || !test || (which !== "paper" && which !== "key" && which !== "solutions") || (action !== undefined && action !== "download")) return send(res, 400, "Bad request");
     if (user.role !== "admin" && user.studentClass !== test.classLabel) return send(res, 403, "This test is not part of your class.");
-    const fileName = which === "paper" ? test.paperFile : test.keyFile;
+    const fileName = which === "paper" ? test.paperFile : which === "key" ? test.keyFile : test.solutionsFile;
     if (!fileName || !SAFE_PDF.test(fileName)) return send(res, 404, "Not available yet.");
     // Opening is for every student of the class (they need the paper to take the test); a saved copy follows the
     // same rule as every other PDF: classroom (offline) students and the teacher only.
@@ -136,7 +136,7 @@ export async function handleProtected(req: IncomingMessage, res: ServerResponse,
     if (wantsDownload && !(user.role === "admin" || user.studentType !== "online")) return send(res, 403, "PDF downloads are available to offline (classroom) students only.");
     const signed = await deps.signStorage("downloads", fileName, 120);
     if (!signed) return send(res, 404, "Not found");
-    const niceName = `Class-${test.classLabel}-Mock-Test-${test.number}-${which === "paper" ? "Question-Paper" : "Answer-Key"}.pdf`;
+    const niceName = `Class-${test.classLabel}-Mock-Test-${test.number}-${which === "paper" ? "Question-Paper" : which === "key" ? "Answer-Key" : "Solutions"}.pdf`;
     res.statusCode = 302;
     res.setHeader("Location", signed + (wantsDownload ? (signed.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(niceName) : ""));
     res.setHeader("Cache-Control", "no-store");

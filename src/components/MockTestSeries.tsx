@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardCheck, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck, BookOpenCheck, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // The Class X Mock Test Series on the home page: each test with its question paper and answer key, and the result
 // once it is published. The list comes from /api/mock-tests (only Class X students and the teacher receive it); the
@@ -21,7 +21,7 @@ interface MockResultInfo {
 }
 interface MockTestInfo {
   id: string; number: number; title: string; subject: string; date: string;
-  durationMinutes: number; maxMarks: number; note: string | null; hasPaper: boolean; hasKey: boolean;
+  durationMinutes: number | null; maxMarks: number | null; note: string | null; hasPaper: boolean; hasKey: boolean; hasSolutions: boolean;
   result: MockResultInfo | null;
 }
 const num = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
@@ -29,7 +29,8 @@ const joinNames = (names: string[]) => (names.length <= 1 ? names.join('') : nam
 interface MockTestsResponse { series: { title: string; summary: string; totalTests: number } | null; tests: MockTestInfo[]; canDownload: boolean }
 
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-const prettyDate = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+const prettyDuration = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} hour${m === 60 ? '' : 's'}` : m > 60 ? `${Math.floor(m / 60)} hour${m < 120 ? '' : 's'} ${m % 60} minutes` : `${m} minutes`);
+const prettyDate =(iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 export function MockTestSeries({ token, isLightMode }: { token: string; isLightMode: boolean }) {
   const [data, setData] = useState<MockTestsResponse | null>(null);
@@ -52,7 +53,7 @@ export function MockTestSeries({ token, isLightMode }: { token: string; isLightM
   const viewBtn = 'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition bg-[#22d3ee] text-slate-950 hover:bg-cyan-300';
   const saveBtn = `inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition ${light ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`;
 
-  const fileRow = (test: MockTestInfo, which: 'paper' | 'key', label: string, Icon: React.ElementType) => (
+  const fileRow = (test: MockTestInfo, which: 'paper' | 'key' | 'solutions', label: string, Icon: React.ElementType) => (
     <div className="flex flex-wrap items-center gap-2">
       <span className={`inline-flex items-center gap-1.5 text-xs font-bold w-full sm:w-36 ${heading}`}><Icon className="w-4 h-4 text-cyan-400" /> {label}</span>
       <a href={`/mocktest/${test.id}/${which}`} target="_blank" rel="noopener noreferrer" className={viewBtn}><Eye className="w-3.5 h-3.5" /> View PDF</a>
@@ -181,15 +182,16 @@ export function MockTestSeries({ token, isLightMode }: { token: string; isLightM
               </div>
               <div className="flex flex-wrap gap-2">
                 <span className={chip}><CalendarDays className="w-3.5 h-3.5 text-cyan-400" /> {upcoming ? 'On ' : 'Held on '}{prettyDate(t.date)}</span>
-                <span className={chip}><Clock className="w-3.5 h-3.5 text-cyan-400" /> {t.durationMinutes} minutes</span>
-                <span className={chip}><FileText className="w-3.5 h-3.5 text-cyan-400" /> {t.maxMarks} marks</span>
+                {t.durationMinutes != null && <span className={chip}><Clock className="w-3.5 h-3.5 text-cyan-400" /> {prettyDuration(t.durationMinutes)}</span>}
+                {t.maxMarks != null && <span className={chip}><FileText className="w-3.5 h-3.5 text-cyan-400" /> {t.maxMarks} marks</span>}
               </div>
               {t.note && <p className={`text-xs font-semibold ${muted}`}>{t.note}</p>}
 
-              {t.hasPaper || t.hasKey ? (
+              {t.hasPaper || t.hasKey || t.hasSolutions ? (
                 <div className="space-y-2.5">
                   {t.hasPaper && fileRow(t, 'paper', 'Question paper', FileText)}
                   {t.hasKey && fileRow(t, 'key', 'Answer key', KeyRound)}
+                  {t.hasSolutions && fileRow(t, 'solutions', 'Solutions', BookOpenCheck)}
                 </div>
               ) : (
                 <p className={`text-xs font-semibold ${muted}`}>The question paper will be available here on the day of the test.</p>

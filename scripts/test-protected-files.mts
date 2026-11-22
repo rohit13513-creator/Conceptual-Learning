@@ -105,7 +105,14 @@ await check("mock test saved copy, ONLINE student is refused", "m", "x-bio-1/pap
 await check("mock test, student of another class is refused", "m", "x-bio-1/paper", { cookie: tok("ix@x.com") }, 403);
 await check("mock test, admin", "m", "x-bio-1/key/download", { cookie: tok("admin@x.com", "admin") }, 302);
 await check("mock test, pending account", "m", "x-bio-1/paper", { cookie: tok("pending@x.com") }, 403);
-await check("mock test, unknown test", "m", "x-zzz-9/paper", { cookie: tok("offline@x.com") }, 400);
+await check("mock test solutions, ONLINE Class X student: opens", "m", "x-maths-1/solutions", { cookie: tok("online@x.com") }, 302, (r) => { const l = r.headers.get("location") || ""; return l.includes("/object/sign/downloads/mock-x-maths-1-solutions.pdf") && !l.includes("download=") ? null : "bad location " + l; });
+await check("mock test solutions saved copy, offline student", "m", "x-maths-1/solutions/download", { cookie: tok("offline@x.com") }, 302, (r) => ((r.headers.get("location") || "").includes("download=Class-X-Mock-Test-2-Solutions.pdf") ? null : "no download name: " + r.headers.get("location")));
+await check("mock test solutions saved copy, ONLINE student is refused", "m", "x-maths-1/solutions/download", { cookie: tok("online@x.com") }, 403);
+await check("mock test solutions, no login", "m", "x-maths-1/solutions", {}, 401);
+await check("mock test solutions, student of another class is refused", "m", "x-maths-1/solutions", { cookie: tok("ix@x.com") }, 403);
+await check("mock test with no files yet (test 3) is 'not available'", "m", "x-test-3/paper", { cookie: tok("offline@x.com") }, 404);
+await check("mock test, solutions of a test that has none", "m", "x-bio-1/solutions", { cookie: tok("offline@x.com") }, 404);
+await check("mock test, unknown test","m", "x-zzz-9/paper", { cookie: tok("offline@x.com") }, 400);
 await check("mock test, wrong file kind", "m", "x-bio-1/secret", { cookie: tok("offline@x.com") }, 400);
 await check("mock test, path traversal", "m", "../x-bio-1/paper", { cookie: tok("offline@x.com") }, 400);
 await check("mock test, extra path part", "m", "x-bio-1/paper/download/more", { cookie: tok("offline@x.com") }, 400);
