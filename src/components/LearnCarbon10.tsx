@@ -28,6 +28,9 @@ import { MAG_C } from "../data/magNotesC";
 import { HARM_A } from "../data/harmNotesA";
 import { HARM_B } from "../data/harmNotesB";
 import { HARM_C } from "../data/harmNotesC";
+import { SOL_A } from "../data/solNotesA";
+import { SOL_B } from "../data/solNotesB";
+import { SOL_C } from "../data/solNotesC";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -41,6 +44,7 @@ const CHAPTERS = {
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
   harmony: { topics: [...HARM_A, ...HARM_B, ...HARM_C], title: "How Nature Works in Harmony", mapId: "hm_mindmap", pdfUrl: "/download/downloads/Class-8-Science-How-Nature-Works-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-How-Nature-Works-Notes.pdf" },
+  solutions: { topics: [...SOL_A, ...SOL_B, ...SOL_C], title: "Solutes, Solvents, and Solutions", mapId: "sl_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" },
 };
 
 const ICONS: Record<string, React.ElementType> = {
@@ -51,6 +55,7 @@ const ICONS: Record<string, React.ElementType> = {
   "Current and circuit": Zap, "Potential difference": Zap, Circuits: ListChecks, "Ohm's law": Atom, Resistance: Atom, Series: ListChecks, Parallel: ListChecks, "Heating effect": Flame, "Electric power": Zap, Activities: Beaker,
   Oersted: Zap, Magnets: Atom, "Straight wire": Zap, "Circular loop": Atom, Solenoid: Atom, "Force on a conductor": Zap, "Induced current": Zap, "AC and DC": Zap, "Domestic circuits": Zap,
   "Nature as one system": Leaf, Habitat: Leaf, "Levels of life": Network, "Every organism matters": Network, Interactions: Network, "Producers and consumers": Sun, "Food chains": ListChecks, Decomposers: Recycle, "Migratory birds": Leaf, Balance: Droplets, "Living together": Network, "Gifts of ecosystems": Leaf, Farming: Leaf,
+  Mixtures: Beaker, "Solute and solvent": Beaker, Saturation: Beaker, Solubility: Beaker, Gases: Droplets, "Water as solvent": Droplets, "Floating and sinking": Droplets, Density: Atom, "Density and floating": Atom, "Measuring mass": ListChecks, "Measuring volume": ListChecks, "Volume of solids": ListChecks, "Temperature and density": Flame, "Pressure and the Earth": Atom,
   Ecosystem: Leaf, Organisms: Leaf, "Food chain": ListChecks, "Energy flow": Sun, "Food web": Network, Biomagnification: Droplets, "Ozone layer": Sun, Garbage: Recycle,
 };
 
@@ -145,7 +150,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
