@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardCheck, BookOpenCheck, ChevronDown, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck, Award, BookOpenCheck, ChevronDown, Download, Eye, Clock, CalendarDays, Hourglass, FileText, KeyRound, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // The Class X Mock Test Series on the home page: each test with its question paper and answer key, and the result
 // once it is published. The list comes from /api/mock-tests (only Class X students and the teacher receive it); the
@@ -22,6 +22,7 @@ interface MockResultInfo {
 interface MockTestInfo {
   id: string; number: number; title: string; subject: string; date: string;
   durationMinutes: number | null; maxMarks: number | null; note: string | null; hasPaper: boolean; hasKey: boolean; hasSolutions: boolean;
+  award: { headline: string; conditions: string[] } | null;
   result: MockResultInfo | null;
 }
 const num = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
@@ -187,6 +188,14 @@ export function MockTestSeries({ token, isLightMode }: { token: string; isLightM
                 {t.maxMarks != null && <span className={chip}><FileText className="w-3.5 h-3.5 text-cyan-400" /> {t.maxMarks} marks</span>}
               </div>
               {t.note && <p className={`text-xs font-semibold ${muted}`}>{t.note}</p>}
+              {t.award && (
+                <div className={`rounded-xl border px-3.5 py-3 ${light ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/30'}`}>
+                  <p className={`flex items-start gap-2 text-sm font-black ${light ? 'text-amber-900' : 'text-amber-300'}`}><Award className="w-5 h-5 shrink-0" /> {t.award.headline}</p>
+                  <ol className={`mt-2 ml-7 list-decimal space-y-1 text-xs font-bold ${light ? 'text-amber-900' : 'text-amber-200'}`}>
+                    {t.award.conditions.map((c) => <li key={c}>{c}</li>)}
+                  </ol>
+                </div>
+              )}
 
               {t.hasPaper || t.hasKey || t.hasSolutions ? (
                 <div className="space-y-2.5">

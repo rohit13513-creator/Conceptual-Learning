@@ -14,6 +14,7 @@ export interface MockTest {
   paperFile?: string; // file name in the private "downloads" storage folder
   keyFile?: string;
   solutionsFile?: string; // the worked solutions of the paper
+  award?: { headline: string; conditions: string[] }; // a prize announced for the test, shown on its card with its conditions
 }
 
 export const MOCK_SERIES = {
@@ -50,6 +51,14 @@ export const MOCK_TESTS: MockTest[] = [
     paperFile: "mock-x-maths-1-paper.pdf",
     keyFile: "mock-x-maths-1-key.pdf",
     solutionsFile: "mock-x-maths-1-solutions.pdf",
+    award: {
+      headline: "Cash award for the student who ranks first in this test, on these conditions:",
+      conditions: [
+        "The student must have the highest marks in the test.",
+        "The marks must be 72 or more out of 80.",
+        "The academic profile in the Profile section must be complete.",
+      ],
+    },
   },
   {
     id: "x-test-3",
@@ -58,6 +67,7 @@ export const MOCK_TESTS: MockTest[] = [
     title: "Chemistry Mock Test",
     subject: "Chemistry: complete syllabus (all 4 chapters)",
     date: "2026-11-29",
+    maxMarks: 40,
   },
 ];
 

@@ -9070,7 +9070,7 @@ function buildApp(): express.Express {
       canDownload: isAdmin || row.student_type !== "online",
       tests: MOCK_TESTS.filter((t) => t.classLabel === MOCK_SERIES.classLabel).map((t) => ({
         id: t.id, number: t.number, title: t.title, subject: t.subject, date: t.date, durationMinutes: t.durationMinutes ?? null,
-        maxMarks: t.maxMarks ?? null, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile, hasSolutions: !!t.solutionsFile,
+        maxMarks: t.maxMarks ?? null, note: t.note || null, hasPaper: !!t.paperFile, hasKey: !!t.keyFile, hasSolutions: !!t.solutionsFile, award: t.award || null,
         result: t.maxMarks ? resultFor(t.id, t.maxMarks) : null,
       })),
     });
