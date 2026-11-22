@@ -55,8 +55,8 @@ export const MOCK_TESTS: MockTest[] = [
     id: "x-test-3",
     classLabel: "X",
     number: 3,
-    title: "Mock Test 3",
-    subject: "Subject and syllabus will be announced",
+    title: "Chemistry Mock Test",
+    subject: "Chemistry: complete syllabus (all 4 chapters)",
     date: "2026-11-29",
   },
 ];
