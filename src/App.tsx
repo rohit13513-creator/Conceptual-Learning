@@ -3114,7 +3114,10 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
   // Class 9 Maths has two chapters (Circles, Propositions and their Converses) -- tracked whenever preparingFor === '9th' && qbSubject === 'maths'.
   const [mathsChapter9, setMathsChapter9] = useState<'circles' | 'propositions' | 'linear' | 'algorithms' | 'quadrilaterals'>('circles');
   // Class 8 Science now has five chapters -- this tracks which one is active whenever qbSubject === 'science'.
-  const [scienceChapter8, setScienceChapter8] = useState<'investigative-world' | 'invisible-living-world' | 'health' | 'matter' | 'elements-compounds' | 'harmony' | 'solutions'>('investigative-world');
+  const [scienceChapter8, setScienceChapter8] = useState<'investigative-world' | 'invisible-living-world' | 'health' | 'matter' | 'elements-compounds' | 'harmony' | 'solutions' | 'emheat'>('investigative-world');
+  // "Electricity: Magnetic and Heating Effects" has notes only so far (no question bank, solved NCERT or self assessment yet), so leaving the
+  // notes screen puts the chapter selection back on the first chapter; otherwise those screens would show another chapter's questions.
+  useEffect(() => { if (scienceChapter8 === 'emheat' && activeView !== 'scienceNotes8') setScienceChapter8('investigative-world'); }, [activeView, scienceChapter8]);
 
   // "Start Studying" subject picker: which class the picker is showing subjects for. Locked
   // students always see their own registered class; exempt (admin/test) accounts pick one first.
@@ -6222,8 +6225,20 @@ export default function App({ initialAuthTab }: { initialAuthTab?: 'login' | 're
             >
               Solutes, Solvents & Solutions
             </button>
+            <button
+              onClick={() => setScienceChapter8('emheat')}
+              className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                scienceChapter8 === 'emheat'
+                  ? isLightMode ? 'bg-cyan-600 text-white' : 'bg-cyan-500 text-slate-950'
+                  : isLightMode ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Electricity: Magnetic & Heating Effects
+            </button>
           </div>
-          {scienceChapter8 === 'solutions' ? (
+          {scienceChapter8 === 'emheat' ? (
+            <LearnCarbon10 key="emheat" chapter="emheat" isLightMode={isLightMode} onBack={() => changeView('hub')} />
+          ) : scienceChapter8 === 'solutions' ? (
             <LearnCarbon10 key="solutions" chapter="solutions" isLightMode={isLightMode} onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }} onBack={() => changeView('hub')} />
           ) : scienceChapter8 === 'harmony' ? (
             <LearnCarbon10 key="harmony" chapter="harmony" isLightMode={isLightMode} onCompleteNotes={() => { setPreparingFor('8th'); setQbSubject('science'); changeView('ncert'); }} onBack={() => changeView('hub')} />
