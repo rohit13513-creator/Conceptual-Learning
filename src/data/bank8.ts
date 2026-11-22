@@ -10,6 +10,13 @@ import { SCIENCE8_SOLVED_QUESTIONS, SCIENCE8_MCQS, SCIENCE8_VERY_SHORT, SCIENCE8
 import { SCIENCE8IW_SOLVED_QUESTIONS, SCIENCE8IW_MCQS, SCIENCE8IW_VERY_SHORT, SCIENCE8IW_SHORT, SCIENCE8IW_LONG, SCIENCE8IW_COMPETENCY, SCIENCE8IW_SELF_ASSESSMENT } from './science8InvisibleWorld';
 import { SCIENCE8H_SOLVED_QUESTIONS, SCIENCE8H_MCQS, SCIENCE8H_VERY_SHORT, SCIENCE8H_SHORT, SCIENCE8H_LONG, SCIENCE8H_COMPETENCY, SCIENCE8H_SELF_ASSESSMENT } from './science8Health';
 import { SCIENCE8M_SOLVED_QUESTIONS, SCIENCE8M_MCQS, SCIENCE8M_VERY_SHORT, SCIENCE8M_SHORT, SCIENCE8M_LONG, SCIENCE8M_COMPETENCY, SCIENCE8M_SELF_ASSESSMENT } from './science8Matter';
+import { FO8_MCQS } from './fo8_mcq';
+import { FO8_ASSERTIONS } from './fo8_ar';
+import { FO8_VERY_SHORT, FO8_SHORT } from './fo8_short';
+import { FO8_LONG } from './fo8_long';
+import { FO8_COMPETENCY } from './fo8_case';
+import { FO8_NCERT_SOLVED } from './fo8_ncert';
+import { FO8_SELF_ASSESSMENT } from './fo8_self';
 import { SOL8_MCQS } from './sol8_mcq';
 import { SOL8_ASSERTIONS } from './sol8_ar';
 import { SOL8_VERY_SHORT, SOL8_SHORT } from './sol8_short';
@@ -47,6 +54,16 @@ export function getBank(p: BankParams): Bank {
           long: MATHS8_LONG,
           assertion: MATHS8_ASSERTION_REASON,
           competency: MATHS8_COMPETENCY,
+    };
+  } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'forces') {
+    return {
+          ncert: FO8_NCERT_SOLVED,
+          mcqs: FO8_MCQS,
+          veryshort: FO8_VERY_SHORT,
+          short: FO8_SHORT,
+          long: FO8_LONG,
+          assertion: FO8_ASSERTIONS,
+          competency: FO8_COMPETENCY,
     };
   } else if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'solutions') {
     return {
@@ -135,6 +152,7 @@ export function getSelf(p: BankParams): any[] {
   const { preparingFor, qbSubject, mathsChapter8, scienceChapter8 } = p;
   if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'square-and-cube') return MATHS8SC_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'maths') return MATHS8_SELF_ASSESSMENT;
+  if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'forces') return FO8_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'solutions') return SOL8_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'harmony') return HARM8_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'science' && scienceChapter8 === 'invisible-living-world') return SCIENCE8IW_SELF_ASSESSMENT;

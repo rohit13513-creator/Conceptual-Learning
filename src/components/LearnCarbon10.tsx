@@ -34,6 +34,9 @@ import { SOL_C } from "../data/solNotesC";
 import { EM_A } from "../data/emNotesA";
 import { EM_B } from "../data/emNotesB";
 import { EM_C } from "../data/emNotesC";
+import { FO_A } from "../data/foNotesA";
+import { FO_B } from "../data/foNotesB";
+import { FO_C } from "../data/foNotesC";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -47,6 +50,7 @@ const CHAPTERS = {
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
   harmony: { topics: [...HARM_A, ...HARM_B, ...HARM_C], title: "How Nature Works in Harmony", mapId: "hm_mindmap", pdfUrl: "/download/downloads/Class-8-Science-How-Nature-Works-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-How-Nature-Works-Notes.pdf" },
+  forces: { topics: [...FO_A, ...FO_B, ...FO_C], title: "Exploring Forces", mapId: "fo_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Exploring-Forces-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Exploring-Forces-Notes.pdf" },
   emheat: { topics: [...EM_A, ...EM_B, ...EM_C], title: "Electricity: Magnetic and Heating Effects", mapId: "em_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Electricity-Magnetic-Heating-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Electricity-Magnetic-Heating-Notes.pdf" },
   solutions: { topics: [...SOL_A, ...SOL_B, ...SOL_C], title: "Solutes, Solvents, and Solutions", mapId: "sl_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" },
 };
@@ -62,6 +66,7 @@ const ICONS: Record<string, React.ElementType> = {
   Mixtures: Beaker, "Solute and solvent": Beaker, Saturation: Beaker, Solubility: Beaker, Gases: Droplets, "Water as solvent": Droplets, "Floating and sinking": Droplets, Density: Atom, "Density and floating": Atom, "Measuring mass": ListChecks, "Measuring volume": ListChecks, "Volume of solids": ListChecks, "Temperature and density": Flame, "Pressure and the Earth": Atom,
   Ecosystem: Leaf, Organisms: Leaf, "Food chain": ListChecks, "Energy flow": Sun, "Food web": Network, Biomagnification: Droplets, "Ozone layer": Sun, Garbage: Recycle,
   Introduction: Zap, "Magnetic effect": Zap, Electromagnet: Atom, Poles: Atom, Strength: Zap, "Earth and magnets": Atom, "Lifting magnet": Zap, Factors: Flame, Appliances: Flame, Safety: ShieldCheck, Cells: Zap, "Lemon cell": Beaker, "Dry cell": Zap, Batteries: Recycle, "Competition Corner": Trophy,
+  Interaction: Network, "Types of forces": ListChecks, "Muscular force": Zap, "Magnetic force": Atom, "Electrostatic force": Zap, Gravity: Atom, Weight: Atom, Floating: Droplets, Examples: ListChecks, Force: Zap,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
@@ -155,7 +160,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" | "forces" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
