@@ -10,6 +10,13 @@ import { SCIENCE8_SOLVED_QUESTIONS, SCIENCE8_MCQS, SCIENCE8_VERY_SHORT, SCIENCE8
 import { SCIENCE8IW_SOLVED_QUESTIONS, SCIENCE8IW_MCQS, SCIENCE8IW_VERY_SHORT, SCIENCE8IW_SHORT, SCIENCE8IW_LONG, SCIENCE8IW_COMPETENCY, SCIENCE8IW_SELF_ASSESSMENT } from './science8InvisibleWorld';
 import { SCIENCE8H_SOLVED_QUESTIONS, SCIENCE8H_MCQS, SCIENCE8H_VERY_SHORT, SCIENCE8H_SHORT, SCIENCE8H_LONG, SCIENCE8H_COMPETENCY, SCIENCE8H_SELF_ASSESSMENT } from './science8Health';
 import { SCIENCE8M_SOLVED_QUESTIONS, SCIENCE8M_MCQS, SCIENCE8M_VERY_SHORT, SCIENCE8M_SHORT, SCIENCE8M_LONG, SCIENCE8M_COMPETENCY, SCIENCE8M_SELF_ASSESSMENT } from './science8Matter';
+import { BP8_MCQS } from './bp8_mcq';
+import { BP8_ASSERTIONS } from './bp8_ar';
+import { BP8_VERY_SHORT, BP8_SHORT } from './bp8_short';
+import { BP8_LONG } from './bp8_long';
+import { BP8_COMPETENCY } from './bp8_case';
+import { BP8_NCERT_SOLVED } from './bp8_ncert';
+import { BP8_SELF_ASSESSMENT } from './bp8_self';
 import { FD8_MCQS } from './fd8_mcq';
 import { FD8_ASSERTIONS } from './fd8_ar';
 import { FD8_VERY_SHORT, FD8_SHORT } from './fd8_short';
@@ -42,7 +49,17 @@ import { SCIENCE8EC_SOLVED_QUESTIONS, SCIENCE8EC_MCQS, SCIENCE8EC_VERY_SHORT, SC
 
 export function getBank(p: BankParams): Bank {
   const { preparingFor, qbSubject, mathsChapter8, scienceChapter8 } = p;
-  if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'fractions') {
+  if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'baudhayana') {
+    return {
+          ncert: BP8_NCERT_SOLVED,
+          mcqs: BP8_MCQS,
+          veryshort: BP8_VERY_SHORT,
+          short: BP8_SHORT,
+          long: BP8_LONG,
+          assertion: BP8_ASSERTIONS,
+          competency: BP8_COMPETENCY,
+    };
+  } else if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'fractions') {
     return {
           ncert: FD8_NCERT_SOLVED,
           mcqs: FD8_MCQS,
@@ -167,6 +184,7 @@ export function getBank(p: BankParams): Bank {
 
 export function getSelf(p: BankParams): any[] {
   const { preparingFor, qbSubject, mathsChapter8, scienceChapter8 } = p;
+  if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'baudhayana') return BP8_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'fractions') return FD8_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'maths' && mathsChapter8 === 'square-and-cube') return MATHS8SC_SELF_ASSESSMENT;
   if (preparingFor === '8th' && qbSubject === 'maths') return MATHS8_SELF_ASSESSMENT;
