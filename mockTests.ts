@@ -67,6 +67,7 @@ export const MOCK_TESTS: MockTest[] = [
     title: "Chemistry Mock Test",
     subject: "Chemistry: complete syllabus (all 4 chapters)",
     date: "2026-11-29",
+    durationMinutes: 60,
     maxMarks: 40,
   },
 ];
