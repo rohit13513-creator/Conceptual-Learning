@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame, Trophy, Zap, Leaf, Sun, Recycle, Network } from "lucide-react";
+import { FlaskConical, ChevronLeft, ChevronRight, Lightbulb, HelpCircle, ListChecks, ShieldCheck, Beaker, MessageCircleQuestion, Atom, Brain, Droplets, Flame, Trophy, Zap, Leaf, Sun, Recycle, Network, Sigma } from "lucide-react";
 import { DownloadNotesLink } from "./DownloadNotesLink";
 import { SceneFigure } from "./SceneFigure";
 import { parseMarkup, fm } from "./sceneKit";
@@ -37,6 +37,9 @@ import { EM_C } from "../data/emNotesC";
 import { FO_A } from "../data/foNotesA";
 import { FO_B } from "../data/foNotesB";
 import { FO_C } from "../data/foNotesC";
+import { FD_A } from "../data/fdNotesA";
+import { FD_B } from "../data/fdNotesB";
+import { FD_C } from "../data/fdNotesC";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -50,6 +53,7 @@ const CHAPTERS = {
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
   harmony: { topics: [...HARM_A, ...HARM_B, ...HARM_C], title: "How Nature Works in Harmony", mapId: "hm_mindmap", pdfUrl: "/download/downloads/Class-8-Science-How-Nature-Works-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-How-Nature-Works-Notes.pdf" },
+  fractions: { topics: [...FD_A, ...FD_B, ...FD_C], title: "Fractions in Disguise", mapId: "fd_mindmap", pdfUrl: undefined as string | undefined, pdfName: "" },
   forces: { topics: [...FO_A, ...FO_B, ...FO_C], title: "Exploring Forces", mapId: "fo_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Exploring-Forces-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Exploring-Forces-Notes.pdf" },
   emheat: { topics: [...EM_A, ...EM_B, ...EM_C], title: "Electricity: Magnetic and Heating Effects", mapId: "em_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Electricity-Magnetic-Heating-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Electricity-Magnetic-Heating-Notes.pdf" },
   solutions: { topics: [...SOL_A, ...SOL_B, ...SOL_C], title: "Solutes, Solvents, and Solutions", mapId: "sl_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Solutes-Solvents-Solutions-Notes.pdf" },
@@ -67,13 +71,26 @@ const ICONS: Record<string, React.ElementType> = {
   Ecosystem: Leaf, Organisms: Leaf, "Food chain": ListChecks, "Energy flow": Sun, "Food web": Network, Biomagnification: Droplets, "Ozone layer": Sun, Garbage: Recycle,
   Introduction: Zap, "Magnetic effect": Zap, Electromagnet: Atom, Poles: Atom, Strength: Zap, "Earth and magnets": Atom, "Lifting magnet": Zap, Factors: Flame, Appliances: Flame, Safety: ShieldCheck, Cells: Zap, "Lemon cell": Beaker, "Dry cell": Zap, Batteries: Recycle, "Competition Corner": Trophy,
   Interaction: Network, "Types of forces": ListChecks, "Muscular force": Zap, "Magnetic force": Atom, "Electrostatic force": Zap, Gravity: Atom, Weight: Atom, Floating: Droplets, Examples: ListChecks, Force: Zap,
+  "Per cent": ListChecks, Fractions: ListChecks, Comparing: ListChecks, "Of a quantity": ListChecks, "Mental maths": Brain, Ratios: ListChecks, "Finding the whole": ListChecks, "More than 100": ListChecks, "Increase and decrease": ListChecks, "Profit and loss": ListChecks, Discount: ListChecks, "Money matters": ListChecks, Interest: ListChecks, Decline: ListChecks, "Tricky percentages": Brain,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
 function chem(s: string, key: string): React.ReactNode {
   return parseMarkup(fm(s)).map((g, i) => (g.kind === "sub" ? <sub key={key + i}>{g.s}</sub> : g.kind === "sup" ? <sup key={key + i}>{g.s}</sup> : <React.Fragment key={key + i}>{g.s}</React.Fragment>));
 }
+// [a|b] is a stacked fraction (the maths chapters use it); everything else goes through the bold and formula handling
 function rich(s: string): React.ReactNode {
+  const bits = s.split(/(\[[^\[\]|]+\|[^\[\]|]+\])/);
+  if (bits.length === 1) return plainRich(s);
+  let bold = false;
+  return bits.map((bit, k) => {
+    const m = /^\[([^\[\]|]+)\|([^\[\]|]+)\]$/.exec(bit);
+    if (m) { const f = <span className="inline-flex flex-col items-center align-middle mx-0.5 leading-none text-[0.88em]"><span className="border-b border-current px-1 pb-0.5">{chem(m[1], "n" + k)}</span><span className="px-1 pt-0.5">{chem(m[2], "d" + k)}</span></span>; return bold ? <b key={k}>{f}</b> : <React.Fragment key={k}>{f}</React.Fragment>; }
+    const parts = bit.split("**");
+    return <React.Fragment key={k}>{parts.map((p, i) => { if (i > 0) bold = !bold; return bold ? <b key={i}>{chem(p, "fb" + i)}</b> : <React.Fragment key={i}>{chem(p, "ft" + i)}</React.Fragment>; })}</React.Fragment>;
+  });
+}
+function plainRich(s: string): React.ReactNode {
   return s.split("**").map((part, i) => (i % 2 === 1 ? <b key={i}>{chem(part, "b" + i)}</b> : <React.Fragment key={i}>{chem(part, "t" + i)}</React.Fragment>));
 }
 
@@ -146,6 +163,14 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
         </div>
       </div>
     );
+    case "ex": return (
+      <div className="bg-emerald-950/25 border border-emerald-500/25 p-4 rounded-xl space-y-2.5">
+        <div className="flex items-center gap-2"><Lightbulb className="w-4 h-4 text-emerald-400" /><h4 className="text-sm font-black uppercase tracking-wider text-emerald-300">{b.title}</h4></div>
+        <p className="text-[14.5px] font-bold leading-relaxed">{rich(b.q)}</p>
+        <ol className="list-decimal pl-5 text-[14px] font-semibold leading-loose space-y-1">{b.steps.map((st, i) => <li key={i}>{rich(st)}</li>)}</ol>
+        <p className="text-sm font-black rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2">Answer: {rich(b.ans)}</p>
+      </div>
+    );
     case "qa": return (
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3">
         <div className="flex items-center gap-2"><MessageCircleQuestion className="w-5 h-5 text-emerald-400" /><h4 className="text-sm font-black uppercase tracking-wider">{b.title || "Check yourself"}</h4></div>
@@ -160,7 +185,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" | "forces" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" | "forces" | "fractions" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
@@ -183,7 +208,7 @@ export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, ch
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2"><FlaskConical className="w-5 h-5 text-emerald-500" /><h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{CH.title}</h3></div>
+          <div className="flex items-center gap-2">{chapter === "fractions" ? <Sigma className="w-5 h-5 text-emerald-500" /> : <FlaskConical className="w-5 h-5 text-emerald-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{CH.title}</h3></div>
           {CH.pdfUrl && <DownloadNotesLink href={CH.pdfUrl} fileName={CH.pdfName} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">
