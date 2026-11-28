@@ -43,6 +43,11 @@ import { FD_C } from "../data/fdNotesC";
 import { BP_A } from "../data/bpNotesA";
 import { BP_B } from "../data/bpNotesB";
 import { BP_C } from "../data/bpNotesC";
+import { AREA_A } from "../data/areaNotesA";
+import { AREA_B } from "../data/areaNotesB";
+import { AREA_C } from "../data/areaNotesC";
+import { AREA_D } from "../data/areaNotesD";
+import { AREA_E } from "../data/areaNotesE";
 import type { CBlock } from "../data/carbonNotesTypes";
 
 // Class X Chemistry notes: "Carbon and its Compounds" and "Acids, Bases and Salts". Simple words, point by point, with clear diagrams.
@@ -56,6 +61,7 @@ const CHAPTERS = {
   electricity: { topics: [...ELEC_A, ...ELEC_B, ...ELEC_C, ...ELEC_D], title: "Electricity", mapId: "el_mindmap", pdfUrl: "/download/downloads/Class-10-Electricity-Notes.pdf" as string | undefined, pdfName: "Class-10-Electricity-Notes.pdf" },
   magnetic: { topics: [...MAG_A, ...MAG_B, ...MAG_C], title: "Magnetic Effects of Electric Current", mapId: "mg_mindmap", pdfUrl: "/download/downloads/Class-10-Magnetic-Effects-Notes.pdf" as string | undefined, pdfName: "Class-10-Magnetic-Effects-Notes.pdf" },
   harmony: { topics: [...HARM_A, ...HARM_B, ...HARM_C], title: "How Nature Works in Harmony", mapId: "hm_mindmap", pdfUrl: "/download/downloads/Class-8-Science-How-Nature-Works-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-How-Nature-Works-Notes.pdf" },
+  area8: { topics: [...AREA_A, ...AREA_B, ...AREA_C, ...AREA_D, ...AREA_E], title: "Area", mapId: "area_mindmap", pdfUrl: undefined as string | undefined, pdfName: "Class-8-Maths-Area-Notes.pdf" },
   baudhayana: { topics: [...BP_A, ...BP_B, ...BP_C], title: "Baudhāyana-Pythagoras Theorem", mapId: "bp_mindmap", pdfUrl: "/download/downloads/Class-8-Maths-Baudhayana-Pythagoras-Notes.pdf" as string | undefined, pdfName: "Class-8-Maths-Baudhayana-Pythagoras-Notes.pdf" },
   fractions: { topics: [...FD_A, ...FD_B, ...FD_C], title: "Fractions in Disguise", mapId: "fd_mindmap", pdfUrl: "/download/downloads/Class-8-Maths-Fractions-in-Disguise-Notes.pdf" as string | undefined, pdfName: "Class-8-Maths-Fractions-in-Disguise-Notes.pdf" },
   forces: { topics: [...FO_A, ...FO_B, ...FO_C], title: "Exploring Forces", mapId: "fo_mindmap", pdfUrl: "/download/downloads/Class-8-Science-Exploring-Forces-Notes.pdf" as string | undefined, pdfName: "Class-8-Science-Exploring-Forces-Notes.pdf" },
@@ -77,6 +83,7 @@ const ICONS: Record<string, React.ElementType> = {
   Interaction: Network, "Types of forces": ListChecks, "Muscular force": Zap, "Magnetic force": Atom, "Electrostatic force": Zap, Gravity: Atom, Weight: Atom, Floating: Droplets, Examples: ListChecks, Force: Zap,
   "Per cent": ListChecks, Fractions: ListChecks, Comparing: ListChecks, "Of a quantity": ListChecks, "Mental maths": Brain, Ratios: ListChecks, "Finding the whole": ListChecks, "More than 100": ListChecks, "Increase and decrease": ListChecks, "Profit and loss": ListChecks, Discount: ListChecks, "Money matters": ListChecks, Interest: ListChecks, Decline: ListChecks, "Tricky percentages": Brain,
   Squares: ListChecks, Isosceles: ListChecks, "Root two": ListChecks, Combining: ListChecks, Proofs: ShieldCheck, Theorem: ShieldCheck, Applications: ListChecks, "Right angle": ListChecks, Triples: ListChecks, History: Brain,
+  Rectangles: ListChecks, Paths: ListChecks, Triangles: ListChecks, "Shape changing": Brain, Polygons: ListChecks, Parallelogram: ListChecks, Rhombus: ListChecks, Trapezium: ListChecks, "Real life": ListChecks,
 };
 
 // formulas get subscripts automatically; **bold** makes bold text; _{..} and ^{..} give subscripts and superscripts
@@ -190,7 +197,7 @@ const Block: React.FC<{ b: CBlock; light: boolean; mapId: string }> = ({ b, ligh
   }
 };
 
-export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" | "forces" | "fractions" | "baudhayana" }) {
+export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, chapter = "carbon" }: { isLightMode?: boolean; onBack?: () => void; onCompleteNotes?: () => void; chapter?: "carbon" | "acids" | "metals" | "electricity" | "environment" | "magnetic" | "harmony" | "solutions" | "emheat" | "forces" | "fractions" | "baudhayana" | "area8" }) {
   const CH = CHAPTERS[chapter];
   const TOPICS = CH.topics;
   const [activeId, setActiveId] = useState<string>(TOPICS[0].id);
@@ -213,7 +220,7 @@ export function LearnCarbon10({ isLightMode = false, onBack, onCompleteNotes, ch
 
       <aside className={`hidden md:flex md:w-80 shrink-0 flex-col overflow-y-auto select-none ${isLightMode ? "bg-white border-r border-slate-200" : "bg-[#0d1424] border-r border-[#1e293b]"}`}>
         <div className={`p-4 border-b ${isLightMode ? "border-slate-200" : "border-slate-800"}`}>
-          <div className="flex items-center gap-2">{chapter === "fractions" || chapter === "baudhayana" ? <Sigma className="w-5 h-5 text-emerald-500" /> : <FlaskConical className="w-5 h-5 text-emerald-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{CH.title}</h3></div>
+          <div className="flex items-center gap-2">{chapter === "fractions" || chapter === "baudhayana" || chapter === "area8" ? <Sigma className="w-5 h-5 text-emerald-500" /> : <FlaskConical className="w-5 h-5 text-emerald-500" />}<h3 className={`text-base font-black tracking-wider uppercase ${isLightMode ? "text-slate-800" : "text-slate-100"}`}>{CH.title}</h3></div>
           {CH.pdfUrl && <DownloadNotesLink href={CH.pdfUrl} fileName={CH.pdfName} isLightMode={isLightMode} />}
         </div>
         <nav className="flex-1 p-2 space-y-1">

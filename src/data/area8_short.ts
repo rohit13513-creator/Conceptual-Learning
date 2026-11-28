@@ -1,0 +1,82 @@
+import type { ShortQuestion } from "../types-custom";
+import { u } from "./area8Util";
+
+// Class VIII Maths, Area: 40 two-mark questions and 20 three-mark questions, in order of difficulty (easiest first).
+// A two-mark answer has two steps of one mark each; a three-mark answer has three steps (1 + 1 + 1), as in CBSE marking.
+
+let a = 0;
+const v = (question: string, answer: string, keyPoints: string[], diagram?: string): ShortQuestion => ({ id: ++a, question: u(question), answer: u(answer), keyPoints: keyPoints.map(u), diagram });
+let b = 0;
+const s = (question: string, answer: string, keyPoints: string[], diagram?: string): ShortQuestion => ({ id: ++b, question: u(question), answer: u(answer), keyPoints: keyPoints.map(u), diagram });
+
+export const AREA8_VERY_SHORT: ShortQuestion[] = [
+  // ── level 1 ──
+  v("What is meant by the area of a region? In what units is it measured?", "Area is the amount of flat surface enclosed inside a closed figure. It is measured in square units such as cm^2 or m^2.", ["Meaning of area", "Square units"]),
+  v("A rectangle is 7 cm long and 4 cm wide. Find its area and the area of each triangle formed by a diagonal.", "Area = 7 × 4 = 28 cm^2. Each triangle = 28 ÷ 2 = 14 cm^2.", ["Area 28 cm^2", "Each triangle 14 cm^2"], "area_diagonal"),
+  v("Find the side of a square whose area is 144 m^2.", "side × side = 144, and 12 × 12 = 144, so the side is 12 m.", ["side × side = 144", "Side 12 m"]),
+  v("A rectangle has area 91 cm^2 and length 13 cm. Find its width and perimeter.", "Width = 91 ÷ 13 = 7 cm. Perimeter = 2 × (13 + 7) = 40 cm.", ["Width 7 cm", "Perimeter 40 cm"]),
+  v("Give an example to show that a figure with a larger perimeter can have a smaller area.", "A 9 cm by 1 cm strip has perimeter 20 cm and area 9 cm^2. A square of side 4 cm has perimeter 16 cm and area 16 cm^2.", ["Two correct figures", "Perimeters and areas compared"], "area_perimeter"),
+  v("Find the area of a triangle with base 12 cm and height 7 cm.", "Area = 1/2 × 12 × 7 = 42 cm^2.", ["Formula", "42 cm^2"]),
+  v("The legs of a right triangle are 15 cm and 8 cm. Find its area.", "One leg is the base and the other the height. Area = 1/2 × 15 × 8 = 60 cm^2.", ["Legs as base and height", "60 cm^2"]),
+  v("Find the area of a parallelogram with base 14 cm and height 6.5 cm.", "Area = 14 × 6.5 = 91 cm^2.", ["Formula base × height", "91 cm^2"]),
+  v("Find the area of a rhombus whose diagonals are 18 cm and 12 cm.", "Area = 1/2 × 18 × 12 = 108 cm^2.", ["Formula", "108 cm^2"]),
+  v("Find the area of a trapezium with parallel sides 9 cm and 15 cm and height 8 cm.", "Area = 1/2 × 8 × (9 + 15) = 96 cm^2.", ["Substitution", "96 cm^2"]),
+  v("What is a median of a triangle? How does it divide the area?", "A median joins a vertex to the midpoint of the opposite side. It divides the triangle into two triangles of equal area.", ["Meaning of median", "Two equal areas"], "area_median"),
+  v("Express 7.4 in in centimetres and 11.43 cm in inches.", "7.4 × 2.54 = 18.796 cm. 11.43 ÷ 2.54 = 4.5 in.", ["18.796 cm", "4.5 in"]),
+  v("Convert 10 in^2 to cm^2.", "1 in^2 = 6.4516 cm^2, so 10 in^2 = 10 × 6.4516 = 64.516 cm^2.", ["1 in^2 = 6.4516 cm^2", "64.516 cm^2"], "area_inch"),
+  v("Define dissection. Name one shape that can be dissected into a rectangle.", "Dissection is cutting a figure into pieces and rearranging them into a different figure of equal area. A parallelogram can be dissected into a rectangle.", ["Meaning of dissection", "One correct shape"], "area_pgram"),
+  // ── level 2 ──
+  v("A rectangular park 30 m by 20 m is surrounded by an outer rectangle 40 m by 28 m. Find the area of the path.", "Outer = 40 × 28 = 1120 m^2, park = 30 × 20 = 600 m^2. Path = 1120 − 600 = 520 m^2.", ["Both areas", "Path 520 m^2"], "area_path"),
+  v("A square lawn of side 15 m has a path 1 m wide all around outside it. Find the area of the path.", "Outer side = 17 m. Path = 17 × 17 − 15 × 15 = 289 − 225 = 64 m^2.", ["Outer side 17 m", "64 m^2"]),
+  v("When every side of a square is doubled, what happens to its area? Explain with side 5 cm.", "Area changes from 5 × 5 = 25 cm^2 to 10 × 10 = 100 cm^2, which is 4 times.", ["Both areas", "4 times"], "area_double"),
+  v("An L-shaped tube of width 1 has outer arms 8 and 6. Find its area.", "The corner square is counted twice. Area = 8 + 6 − 1 = 13 square units.", ["Corner counted twice", "13 square units"], "area_ltube"),
+  v("The area of a triangle is 54 cm^2 and its height is 9 cm. Find the base.", "1/2 × b × 9 = 54, so b = 54 × 2 ÷ 9 = 12 cm.", ["Equation", "b = 12 cm"]),
+  v("In △ABC, BC = 10 cm, the altitude to BC is 6 cm and AC = 12 cm. Find the altitude to AC.", "Area = 1/2 × 10 × 6 = 30 cm^2. Altitude = 30 × 2 ÷ 12 = 5 cm.", ["Area 30 cm^2", "Altitude 5 cm"]),
+  v("Why is △XDC half of rectangle ABCD, when X lies on AB?", "The perpendicular from X to DC splits the rectangle into two rectangles, and the triangle takes half of each. So it is half of the whole.", ["Two small rectangles", "Half of each, so half"], "area_half"),
+  v("A quadrilateral has a diagonal 24 cm and the perpendiculars on it are 7 cm and 8 cm. Find its area.", "Area = 1/2 × 24 × (7 + 8) = 180 cm^2.", ["Formula", "180 cm^2"], "area_quad"),
+  v("A parallelogram has sides 15 cm and 10 cm. The height on the 15 cm side is 6 cm. Find the height on the 10 cm side.", "Area = 15 × 6 = 90 cm^2. Height = 90 ÷ 10 = 9 cm.", ["Area 90 cm^2", "Height 9 cm"]),
+  v("The area of a rhombus is 120 cm^2 and one diagonal is 16 cm. Find the other diagonal.", "1/2 × 16 × d = 120, so d = 120 × 2 ÷ 16 = 15 cm.", ["Equation", "d = 15 cm"]),
+  v("A trapezium has area 144 cm^2 and parallel sides 10 cm and 14 cm. Find its height.", "1/2 × h × (10 + 14) = 144, so 12h = 144 and h = 12 cm.", ["Equation", "h = 12 cm"]),
+  v("How many square tiles of side 20 cm are needed to cover a floor 4 m by 3 m?", "Floor = 400 × 300 = 120000 cm^2. Tiles = 120000 ÷ 400 = 300.", ["Areas in cm^2", "300 tiles"]),
+  v("A tabletop is 5 ft long and 3 ft wide. Find its area in ft^2 and in in^2.", "Area = 5 × 3 = 15 ft^2. In square inches: 15 × 144 = 2160 in^2.", ["15 ft^2", "2160 in^2"]),
+  v("M and N are the midpoints of XY and XZ. If the area of △XYZ is 64 cm^2, find the area of △XMN.", "△XNY = 64 ÷ 2 = 32 cm^2 and △XMN = 32 ÷ 2 = 16 cm^2.", ["△XNY = 32 cm^2", "△XMN = 16 cm^2"], "area_midtri"),
+  // ── level 3 ──
+  v("△SUB is isosceles with SU = SB and SE perpendicular to UB. If UB = 14 cm and SE = 9 cm, find the area of △SEB.", "E is the midpoint, so EB = 7 cm. Area = 1/2 × 7 × 9 = 31.5 cm^2.", ["EB = 7 cm", "31.5 cm^2"], "area_isosceles"),
+  v("A diagonal of a rectangle is drawn and then both diagonals. If the rectangle has area 96 cm^2, find the area of one of the four triangles and explain.", "The diagonals bisect each other, so the 4 triangles have equal areas. Each = 96 ÷ 4 = 24 cm^2.", ["Equal areas with reason", "24 cm^2"], "area_diagonals"),
+  v("A point inside a rectangle of area 70 cm^2 is joined to the corners. Find the total area of the top and bottom triangles.", "Their heights add up to the width, so together they are half the rectangle: 35 cm^2.", ["Heights add to the width", "35 cm^2"], "area_blue"),
+  v("The midpoints of the sides of a quadrilateral of area 150 cm^2 are joined. Find the area of the new figure and the total area of the four corner triangles.", "The new quadrilateral is half: 75 cm^2. The corner triangles make the other half: 75 cm^2.", ["Inner area 75 cm^2", "Corners 75 cm^2"], "area_midquad"),
+  v("The area of a square is the same as that of a rhombus with diagonals 32 cm and 16 cm. Find the side of the square.", "Rhombus area = 1/2 × 32 × 16 = 256 cm^2. Side = 16 cm, as 16 × 16 = 256.", ["Area 256 cm^2", "Side 16 cm"]),
+  v("The length of a rectangle is increased by 30% and its width decreased by 30%. By what percent does the area change?", "New area = 1.3 × 0.7 = 0.91 of the old. So it decreases by 9%.", ["0.91 of the old area", "9% decrease"]),
+  v("AD is a median of △ABC and E is the midpoint of AD. If the area of △ABC is 88 cm^2, find the area of △BED.", "△ABD = 88 ÷ 2 = 44 cm^2 and △BED = 44 ÷ 2 = 22 cm^2.", ["△ABD = 44 cm^2", "△BED = 22 cm^2"]),
+  v("The base of a triangle is tripled and its height is halved. How does its area change?", "New area = 1/2 × 3b × h/2, which is 3/2 of the old area. It increases by 50%.", ["3/2 of the old area", "50% increase"]),
+  v("A rhombus has side 17 cm and one diagonal 16 cm. Find the other diagonal and the area.", "Half diagonals: 8 and √(289 − 64) = 15. Other diagonal 30 cm; area = 1/2 × 16 × 30 = 240 cm^2.", ["Other diagonal 30 cm", "240 cm^2"]),
+  v("Find the area of the triangle with sides 9 cm, 12 cm and 15 cm.", "Since 81 + 144 = 225, it is right-angled. Area = 1/2 × 9 × 12 = 54 cm^2.", ["Right angle shown", "54 cm^2"]),
+  v("D is a point on side BC of △ABC with BD = 4 cm and DC = 6 cm. If the area of △ABD is 18 cm^2, find the area of △ABC.", "The two triangles have the same height, so their areas are in the ratio 4 : 6. △ADC = 18 × 6 ÷ 4 = 27 cm^2, and △ABC = 18 + 27 = 45 cm^2.", ["△ADC = 27 cm^2", "△ABC = 45 cm^2"]),
+  v("A polygon on a dot grid with dots 1 cm apart has 14 boundary dots and 11 inside dots. Find its area.", "By Pick's theorem, area = 11 + 14 ÷ 2 − 1 = 17 cm^2.", ["Correct substitution", "17 cm^2"], "area_pick"),
+];
+
+export const AREA8_SHORT: ShortQuestion[] = [
+  // ── level 1 ──
+  s("Find the missing side: four rectangles meet at a point. The one of area 21 in^2 is 7 in wide, and the one of area 28 in^2 stands on it 4 in higher. Find the height of the first and the width of the second.", "Height of the 21 in^2 rectangle = 21 ÷ 7 = 3 in. The 28 in^2 rectangle has height 4 + 3 = 7 in. Its width = 28 ÷ 7 = 4 in.", ["Height 3 in: 1 mark", "Height of the second 7 in: 1 mark", "Width 4 in: 1 mark"], "area_missing"),
+  s("Show that the area of a triangle is half of base × height, using a rectangle.", "Draw a rectangle on the base with width equal to the height. The altitude splits it into two rectangles. Each side of the triangle is a diagonal of one of them, so the triangle is half of each and half of the whole.", ["Rectangle drawn: 1 mark", "Altitude makes two rectangles: 1 mark", "Half of each, so half of the whole: 1 mark"], "area_formula"),
+  s("A garden 25 m by 18 m has a path 2 m wide all around it outside. Find the area of the path and the cost of paving it at ₹40 per m^2.", "Outer = 29 × 22 = 638 m^2. Path = 638 − 450 = 188 m^2. Cost = 188 × 40 = ₹7520.", ["Outer area 638 m^2: 1 mark", "Path 188 m^2: 1 mark", "Cost ₹7520: 1 mark"]),
+  s("A rectangular plot 40 m by 30 m has two roads, each 3 m wide, through its middle and parallel to the sides. Find the area of the roads.", "One road = 40 × 3 = 120 m^2, other = 30 × 3 = 90 m^2, common part = 9 m^2. Roads = 120 + 90 − 9 = 201 m^2.", ["Two road areas: 1 mark", "Common part 9 m^2: 1 mark", "201 m^2: 1 mark"], "area_cross"),
+  s("The altitudes of a triangle: BC = 14 cm, the altitude to BC is 12 cm and the altitude to AC is 8 cm. Find AC.", "Area = 1/2 × 14 × 12 = 84 cm^2. Also 1/2 × AC × 8 = 84. So AC = 84 × 2 ÷ 8 = 21 cm.", ["Area 84 cm^2: 1 mark", "Second expression: 1 mark", "AC = 21 cm: 1 mark"]),
+  s("Prove that a median divides a triangle into two triangles of equal area.", "Let AM be a median and AD the altitude to BC. Area ABM = 1/2 × BM × AD and area AMC = 1/2 × MC × AD. Since BM = MC, the areas are equal.", ["Common altitude AD: 1 mark", "Two area expressions: 1 mark", "BM = MC, so equal: 1 mark"], "area_median"),
+  // ── level 2 ──
+  s("Show that the area of a parallelogram is base × height.", "From A draw AX perpendicular to DC and cut off triangle AXD. It fits at the other end as triangle BYC, by RHS congruence. The figure becomes a rectangle with the same base and height, so the area is base × height.", ["Cut along the height: 1 mark", "Congruent triangle fits: 1 mark", "Rectangle, so base × height: 1 mark"], "area_pgram"),
+  s("In parallelogram PQRS, SR = 16 cm and the height on SR is 9 cm. If PS = 12 cm, find the height on PS and the perimeter.", "Area = 16 × 9 = 144 cm^2. Height on PS = 144 ÷ 12 = 12 cm. Perimeter = 2 × (16 + 12) = 56 cm.", ["Area 144 cm^2: 1 mark", "Height 12 cm: 1 mark", "Perimeter 56 cm: 1 mark"]),
+  s("The diagonals of a rhombus are 24 cm and 10 cm. Find its area, side and perimeter.", "Area = 1/2 × 24 × 10 = 120 cm^2. Side^2 = 144 + 25 = 169, side = 13 cm. Perimeter = 4 × 13 = 52 cm.", ["Area 120 cm^2: 1 mark", "Side 13 cm: 1 mark", "Perimeter 52 cm: 1 mark"]),
+  s("The parallel sides of a trapezium are in the ratio 4 : 5, its height is 10 cm and its area is 180 cm^2. Find the parallel sides.", "1/2 × 10 × 9x = 180, so 45x = 180 and x = 4. The sides are 16 cm and 20 cm.", ["Equation: 1 mark", "x = 4: 1 mark", "16 cm and 20 cm: 1 mark"]),
+  s("ABCD is a rectangle with AB = 24 cm and BC = 15 cm. E is the midpoint of AB. Find the areas of △CDE and △ADE.", "△CDE = half the rectangle = 1/2 × 24 × 15 = 180 cm^2. △ADE = 1/2 × 12 × 15 = 90 cm^2. △BCE is also 90 cm^2.", ["△CDE = 180 cm^2: 1 mark", "AE = 12 cm: 1 mark", "△ADE = 90 cm^2: 1 mark"]),
+  s("Give a method to change a triangle into a rectangle of equal area and justify it.", "Take the same base b and half the height h. Rectangle area = b × h/2, which equals 1/2 × b × h. By dissection: cut along the line joining the midpoints and turn the two halves of the top triangle into the lower corners.", ["Base b, width h/2: 1 mark", "Areas equal: 1 mark", "Dissection described: 1 mark"], "area_tri_rect"),
+  s("A square of side 10 cm is divided by joining the midpoints of its sides. Find the area of the inner square and its side.", "Each corner triangle = 1/2 × 5 × 5 = 12.5 cm^2. Inner area = 100 − 4 × 12.5 = 50 cm^2. Side = √50 ≈ 7.07 cm.", ["Corner area 12.5 cm^2: 1 mark", "Inner area 50 cm^2: 1 mark", "Side ≈ 7.07 cm: 1 mark"]),
+  // ── level 3 ──
+  s("ABCD, BCEF and BFGH are identical squares and DH cuts off the red triangle DCH and a blue triangle in ABCD. If red + blue = 180, find the area of one square.", "With side s, red = s^2 and blue = a quarter of s^2. So 5/4 of s^2 = 180. s^2 = 180 × 4 ÷ 5 = 144.", ["Red = s^2: 1 mark", "Blue a quarter of s^2: 1 mark", "s^2 = 144: 1 mark"], "area_squares"),
+  s("A spiral tube of width 1 has straight pieces of outer lengths 12, 12, 12, 9, 9, 6, 6, 3 and 3. Find its area and the length of an equal straight tube.", "Sum = 12 × 3 + 9 × 2 + 6 × 2 + 3 × 2 = 72. There are 8 corners, so area = 72 − 8 = 64 square units. The straight tube is 64 units long.", ["Sum 72: 1 mark", "Subtract 8 corners: 1 mark", "64 square units and 64 units: 1 mark"]),
+  s("Show that triangles on the same base and between the same parallel lines are equal in area. What can be said about their perimeters?", "The height of every such triangle is the distance between the parallels, and the base is common, so 1/2 × base × height is the same. The perimeters differ; the isosceles triangle has the least.", ["Same height: 1 mark", "Same area: 1 mark", "Perimeters differ, isosceles least: 1 mark"], "area_parallels"),
+  s("In trapezium ZYXW with ZY parallel to WX, A is the midpoint of XY and ZA produced meets WX produced at B. Prove that area of ZYXW = area of △ZWB.", "Triangles AYZ and AXB are congruent by ASA (AY = AX, vertically opposite angles, alternate angles). So they have equal areas. Adding the area ZAXW to each gives the result.", ["Three matching parts: 1 mark", "Congruence by ASA: 1 mark", "Add ZAXW: 1 mark"], "area_trap_zwb"),
+  s("The side of a rhombus is 25 cm and one diagonal is 48 cm. Find the area.", "Half of the given diagonal = 24. Half of the other = √(625 − 576) = 7, so the diagonal is 14 cm. Area = 1/2 × 48 × 14 = 336 cm^2.", ["Half diagonals 24 and 7: 1 mark", "Other diagonal 14 cm: 1 mark", "336 cm^2: 1 mark"]),
+  s("A path of uniform width runs around the outside of a rectangular field 30 m by 20 m. If the path has area 336 m^2, find its width by trying whole numbers.", "With width w: (30 + 2w)(20 + 2w) − 600 = 336. For w = 3: 36 × 26 − 600 = 336. So the width is 3 m.", ["Equation: 1 mark", "Trial: 1 mark", "w = 3 m: 1 mark"]),
+  s("In △ABC, D is on BC with BD : DC = 2 : 3 and E is the midpoint of AD. If the area of △ABC is 100 cm^2, find the area of △CDE.", "△ADC = 3/5 × 100 = 60 cm^2. CE is a median of △ADC, so △CDE = 60 ÷ 2 = 30 cm^2.", ["△ADC = 60 cm^2: 1 mark", "CE is a median: 1 mark", "30 cm^2: 1 mark"]),
+];

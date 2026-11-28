@@ -1,0 +1,140 @@
+import type { CTopic } from "./carbonNotesTypes";
+import { ex, more } from "./areaNotesA";
+
+// Class VIII Maths, Area. Topics 15 to 19: any polygon, the parallelogram, the Sulba-Sutra dissections and the rhombus.
+// Same writing rules as areaNotesA.
+
+export const AREA_C: CTopic[] = [
+  {
+    id: "g1", category: "Polygons", title: "Area of Any Polygon", heading: "Break It into Triangles",
+    sub: "Quadrilaterals, shaded regions and fractions of a rectangle.",
+    blocks: [
+      { t: "ul", items: [
+        "A **polygon** is a closed figure made of straight sides.",
+        "Any polygon can be divided into **triangles** by joining vertices.",
+        "**Area of the polygon = sum of the areas of these triangles.**",
+        "A quadrilateral splits into 2 triangles by one diagonal; a pentagon splits into 3 triangles by two diagonals from one vertex.",
+      ] },
+      { t: "dia", id: "area_polygon" },
+      { t: "h", s: "A quadrilateral with a diagonal and two heights" },
+      { t: "eq", lines: ["Area of ABCD = [1|2] × AC × (BM + DN)"] },
+      { t: "dia", id: "area_quad" },
+      ex("Find the area of quadrilateral ABCD if AC = 22 cm, BM = 3 cm and DN = 3 cm, with BM ⊥ AC and DN ⊥ AC.",
+        ["Area (△ABC) = [1|2] × 22 × 3 = 33 cm^{2}", "Area (△ACD) = [1|2] × 22 × 3 = 33 cm^{2}", "Area of ABCD = 33 + 33 = 66 cm^{2}"], "66 cm^{2}"),
+      { t: "dia", id: "area_shaded" },
+      ex("ABCD is a rectangle with AB = 18 cm and BC = 10 cm. E is on AB with AE = 10 cm, and F is on AD with AF = 6 cm. Find the area of the shaded region FECD.",
+        ["Area of rectangle = 18 × 10 = 180 cm^{2}", "Area (△AEF) = [1|2] × 10 × 6 = 30 cm^{2}", "Area (△EBC) = [1|2] × 8 × 10 = 40 cm^{2}", "Shaded area = 180 − 30 − 40 = 110 cm^{2}"], "110 cm^{2}"),
+      { t: "key", title: "Regular hexagon", s: "A regular hexagon splits into **6 equilateral triangles** from its centre. So its area is found by measuring its **side** and the height of one triangle (the distance from the centre to a side)." },
+      { t: "dia", id: "area_blue" },
+      ex("A point P inside a rectangle is joined to all four corners. The top and bottom triangles are blue. What fraction of the rectangle is blue?",
+        ["Let the rectangle be l by w, and the heights of the blue triangles be h_{1} and h_{2}", "h_{1} + h_{2} = w", "Blue area = [1|2] × l × h_{1} + [1|2] × l × h_{2}", "= [1|2] × l × (h_{1} + h_{2}) = [1|2] × l × w"], "[1|2] of the rectangle"),
+      { t: "dia", id: "area_midquad" },
+      ex("Give a method to get a quadrilateral whose area is half that of a given quadrilateral ABCD.",
+        ["Mark the midpoints P, Q, R and S of AB, BC, CD and DA, and join them", "Each corner triangle (like △APS) is a quarter of the triangle made by a diagonal (midpoint result)", "Corners at A and C together make a quarter of the whole; so do the corners at B and D", "The four corner triangles are half of ABCD, so what is left is also half"], "Area (PQRS) = [1|2] of Area (ABCD)"),
+    ],
+  },
+  {
+    id: "g2", category: "Parallelogram", title: "Area of a Parallelogram", heading: "Cut a Triangle and Move It",
+    sub: "Dissection turns it into a rectangle.",
+    blocks: [
+      { t: "ul", items: [
+        "A **parallelogram** is a quadrilateral whose opposite sides are parallel.",
+        "Its **height** is the perpendicular distance between a side (the **base**) and the opposite side.",
+        "**Dissection** means cutting a figure into pieces and rearranging them into a different figure of **equal area**.",
+      ] },
+      { t: "dia", id: "area_pgram" },
+      { t: "p", s: "**Given:** parallelogram ABCD with AX ⊥ CD. **To prove:** Area of ABCD = DC × AX." },
+      { t: "ol", items: [
+        "Cut ABCD along AX into △AXD and the trapezium ABCX.",
+        "∠X = 90° (AX ⊥ CD), so ∠XAB = 90° (AB ∥ XC, co-interior angles add to 180°).",
+        "Extend XC and draw BY ⊥ XC. Then ABYX is a rectangle (all four angles are 90°).",
+        "BY = AX (opposite sides of the rectangle).",
+        "∠BYC = ∠AXD = 90°, and BC = AD (opposite sides of a parallelogram).",
+        "So △BYC ≅ △AXD (RHS), and △AXD fits exactly on △BYC.",
+        "Area of ABCD = area of rectangle ABYX = XY × AX.",
+        "DX = CY (from the congruence). Adding XC to both gives DC = XY.",
+      ] },
+      { t: "eq", lines: ["Area of a parallelogram = base × height"] },
+      { t: "dia", id: "area_pgram_side" },
+      { t: "ul", items: [
+        "**Any side** can be taken as the base, with the height drawn perpendicular to **that** side.",
+        "Cutting along the height CZ to side AD also turns it into a rectangle.",
+        "Parallelograms on the **same base** with the **same height** have **equal areas**.",
+        "Their perimeters differ: the **more slanted** one has the larger perimeter and the **rectangle** has the smallest.",
+      ] },
+      { t: "dia", id: "area_pgram_four" },
+      ex("Figure (i): find the area of a parallelogram with base 7 cm and height 4 cm.", ["Area = base × height", "= 7 × 4 = 28 cm^{2}"], "28 cm^{2}"),
+      ex("Figure (ii): find the area of a parallelogram with base 5 cm and height 3 cm.", ["Area = 5 × 3 = 15 cm^{2}"], "15 cm^{2}"),
+      ex("Figure (iii): the side 5 cm of a parallelogram has a height of 4.8 cm drawn to it. Find the area.", ["Area = 5 × 4.8 = 24 cm^{2}"], "24 cm^{2}"),
+      ex("Figure (iv): the side 2 cm of a parallelogram has a height of 4.4 cm drawn to it. Find the area.", ["Area = 2 × 4.4 = 8.8 cm^{2}"], "8.8 cm^{2}"),
+    ],
+  },
+  {
+    id: "g3", category: "Parallelogram", title: "Heights of a Parallelogram", heading: "Two Bases, Two Heights",
+    sub: "One area gives the other height.",
+    blocks: [
+      { t: "dia", id: "area_qn" },
+      ex("In parallelogram PQRS, SR = 12 cm, QM ⊥ SR with QM = 6 cm, and PS = 7.6 cm. Find QN, the height on PS.",
+        ["Area = SR × QM = 12 × 6 = 72 cm^{2}", "Also, Area = PS × QN = 7.6 × QN", "QN = 72 ÷ 7.6 ≈ 9.47 cm"], "QN ≈ 9.47 cm"),
+      { t: "dia", id: "area_rect_pgram" },
+      ex("A rectangle and a parallelogram both have sides 5 cm and 4 cm. Which has the greater area?",
+        ["Rectangle: area = 5 × 4 = 20 cm^{2}", "Parallelogram on the same base 5 cm: its height h is less than its slant side 4 cm", "Its area = 5 × h, which is less than 5 × 4"], "The rectangle has the greater area"),
+      ex("Give a method to get a rectangle whose area is twice that of a given triangle.",
+        ["Method 1: draw a rectangle on the base of the triangle with width equal to its height; area = base × height, which is 2 triangles", "Method 2: make a copy of the triangle, turn it and join it along one side to get a parallelogram of double area; then cut it into a rectangle"], "Both give a rectangle of twice the area"),
+      more("A parallelogram has area 84 cm^{2} and base 14 cm. Find the height on that base.", ["height = area ÷ base", "= 84 ÷ 14 = 6 cm"], "6 cm"),
+    ],
+  },
+  {
+    id: "g4", category: "Shape changing", title: "Śulba-Sūtra Dissections", heading: "Triangles into Rectangles and Back",
+    sub: "Cut, turn and join.",
+    blocks: [
+      { t: "h", s: "Triangle to rectangle" },
+      { t: "dia", id: "area_tri_rect" },
+      { t: "ol", items: [
+        "Join the **midpoints** of the two slant sides and cut off the small top triangle.",
+        "Cut that small triangle along its height into two right triangles.",
+        "Turn them down into the two gaps at the lower corners.",
+        "The rectangle has **base = base of the triangle** and **height = half the height**.",
+      ] },
+      { t: "h", s: "Isosceles triangle to rectangle, and back" },
+      { t: "dia", id: "area_iso_rect" },
+      { t: "ul", items: [
+        "**Isosceles triangle to rectangle:** cut along the height AD; turn △ADC and join it to △ADB along their slant sides. The rectangle has sides AD and half of BC.",
+        "**Rectangle to isosceles triangle:** cut the rectangle along a diagonal and place the two triangles back to back along equal sides.",
+      ] },
+      ex("Which has the greater area: an equilateral triangle or a square of the same side a? And two such triangles together, or the square?",
+        ["The height of an equilateral triangle is less than its side a, so its area = [1|2] × a × height is less than half of a^{2}", "The square has area a^{2}, so it is more than twice the triangle", "Two triangles together = a × height, which is still less than a × a"], "The square is bigger in both cases"),
+    ],
+  },
+  {
+    id: "g5", category: "Rhombus", title: "Area of a Rhombus", heading: "Half the Product of the Diagonals",
+    sub: "Two proofs.",
+    blocks: [
+      { t: "ul", items: [
+        "A **rhombus** is a parallelogram with all four sides equal.",
+        "Its diagonals are **perpendicular bisectors** of each other.",
+        "Since it is a parallelogram, **area = base × height** also works.",
+      ] },
+      { t: "dia", id: "area_rhombus" },
+      { t: "h", s: "Proof by dissection" },
+      { t: "ol", items: [
+        "BD cuts the rhombus into △ABD and △CBD.",
+        "Both are isosceles, as all sides of a rhombus are equal.",
+        "Each can be cut along its height (AO or CO) and rearranged into a rectangle (the Śulba method).",
+        "Joining the two rectangles gives the rectangle WXYZ with XW = AO + OC = AC and WZ = half of BD.",
+        "Area of ABCD = area of WXYZ = AC × [BD|2].",
+      ] },
+      { t: "h", s: "Another simple proof" },
+      { t: "ol", items: [
+        "Area (△ABD) = [1|2] × BD × AO, since AO ⊥ BD.",
+        "Area (△CBD) = [1|2] × BD × CO, since CO ⊥ BD.",
+        "Adding: Area of ABCD = [1|2] × BD × (AO + CO) = [1|2] × BD × AC.",
+      ] },
+      { t: "eq", lines: ["Area of a rhombus = [1|2] × d_{1} × d_{2}"] },
+      ex("Find the area of a rhombus whose diagonals are 20 cm and 15 cm.", ["Given: d_{1} = 20 cm, d_{2} = 15 cm", "Area = [1|2] × 20 × 15 = 150 cm^{2}"], "150 cm^{2}"),
+      { t: "dia", id: "area_rect_rhombus" },
+      ex("Give a method to change a rectangle into a rhombus of equal area by dissection.",
+        ["Cut the rectangle along its horizontal middle line into two equal rectangles", "Cut each half along a diagonal to get four equal right triangles", "Join the four triangles at their right-angle corners, with the long legs on one line and the short legs on the other"], "A rhombus of the same area; its diagonals are twice the shorter sides of each triangle"),
+    ],
+  },
+];
